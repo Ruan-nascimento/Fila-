@@ -13,9 +13,9 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -48,7 +48,9 @@ type env struct {
 	ring  *keys.Ring
 	logs  *syncBuffer
 	inbox []mail.Message
-	ipSeq int
+	// ipSeq numera os navegadores simulados; atômico porque testes de concorrência criam
+	// navegadores em várias goroutines ao mesmo tempo.
+	ipSeq atomic.Int64
 }
 
 type syncBuffer struct {
@@ -106,8 +108,8 @@ func (e *env) browser() *browser {
 	jar, _ := cookiejar.New(nil)
 	c := e.srv.Client()
 	client := &http.Client{Transport: c.Transport, Jar: jar, Timeout: 30 * time.Second}
-	e.ipSeq++
-	return &browser{e: e, client: client, ip: "203.0.113." + strconv.Itoa(e.ipSeq), origin: origin}
+	n := e.ipSeq.Add(1)
+	return &browser{e: e, client: client, ip: fmt.Sprintf("203.0.%d.%d", n/250, n%250+1), origin: origin}
 }
 
 type resp struct {
