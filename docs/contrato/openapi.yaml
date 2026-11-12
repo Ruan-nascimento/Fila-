@@ -288,7 +288,10 @@ paths:
       operationId: acceptInvite
       tags: [sessao]
       summary: Profissional ativa acesso pelo convite (uso único, 24 h).
-      description: Se o e-mail já possui conta ativa, exige `password` dessa conta; caso contrário cria conta já verificada (o convite prova o e-mail).
+      description: |
+        Se o e-mail já possui conta ativa, exige `password` dessa conta (senha errada → 401 `invalid_credentials`, com limite de tentativas).
+        Caso contrário cria conta já verificada (o convite prova o e-mail); se havia conta pendente de verificação com esse e-mail,
+        ela passa a usar a senha informada. Convite usado, revogado, vencido ou inexistente → 409 `invite_invalid` (mesma mensagem).
       security: []
       x-authz: [{ actor: public, scope: none }]
       x-transitions: [T-IN-02]
@@ -300,6 +303,7 @@ paths:
       responses:
         '204': { description: Vínculo ativo. Fazer login com contexto staff. }
         '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }
         '429': { $ref: '#/components/responses/TooManyRequests' }

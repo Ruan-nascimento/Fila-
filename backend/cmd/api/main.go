@@ -15,7 +15,9 @@ import (
 	"syscall"
 	"time"
 
+	"fila/internal/api"
 	"fila/internal/platform/app"
+	"fila/internal/platform/clock"
 	"fila/internal/platform/database"
 	"fila/internal/platform/httpserver"
 )
@@ -45,10 +47,16 @@ func run(ctx context.Context, environ []string, stdout, stderr io.Writer, listen
 		httpserver.Check{Name: "database", Fn: func(ctx context.Context) error { return database.Ping(ctx, rt.Pool) }},
 		httpserver.Check{Name: "migrations", Fn: rt.Migrator.CheckCurrent},
 	)
-	mux := http.NewServeMux()
-	health.Register(mux)
-	mux.HandleFunc("/", httpserver.NotFound)
-	srv := httpserver.New(cfg.HTTP, httpserver.Chain(mux, log), log)
+	a, err := api.New(api.Deps{Config: cfg, Pool: rt.Pool, Log: log, Clock: clock.System{}},
+		func(mux *http.ServeMux) { health.Register(mux) })
+	if err != nil {
+		log.Error("não foi possível montar a API", "error", err.Error())
+		return app.ExitConfigError
+	}
+	if !cfg.Security.CookieSecure {
+		log.Warn("cookies sem Secure (somente desenvolvimento com http://); em produção FILA_COOKIE_SECURE é obrigatório")
+	}
+	srv := httpserver.New(cfg.HTTP, httpserver.Chain(a.Handler(), log), log)
 
 	ln, err := net.Listen("tcp", cfg.HTTP.Addr)
 	if err != nil {

@@ -80,7 +80,7 @@ A coluna **Referências** cita operações do OpenAPI (`operationId`), eventos, 
 | R-CONTA-09 | Alterar a senha revoga as demais sessões; redefinir por link revoga todas. | `changePassword`, `confirmPasswordReset`, T-SS-03, T-SS-04 |
 | R-CONTA-10 | Excluir conta, alterar acesso da equipe, estornar e corrigir comanda exigem confirmação recente de identidade (10 min). _(estorno/correção: detalhe da etapa 00)_ | `reauthenticate`, `x-reauth` |
 | R-CONTA-11 | Tentativas de login, reautenticação, recuperação e código de visitante são limitadas por conta/alvo **e** por origem, não só por IP. | `login`, `recoverVisitorSession`, `rate_limited` |
-| R-CONTA-12 | Senhas com hash adequado (Argon2id) e parâmetros documentados; tokens de sessão aleatórios de 256 bits guardados em hash. _(parâmetros finais na etapa 02)_ | ADR-0006 |
+| R-CONTA-12 | Senhas com hash adequado (Argon2id) e parâmetros documentados; tokens de sessão aleatórios de 256 bits guardados em hash. Parâmetros: m=19 MiB, t=2, p=1. | ADR-0006, ADR-0017 |
 
 ## 5. Visitante
 

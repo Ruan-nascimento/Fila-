@@ -85,7 +85,26 @@ Invoke-RestMethod http://127.0.0.1:8080/healthz/ready   # {"status":"ok"} = banc
 ```
 
 Para parar, aperte `Ctrl+C` no terminal da API (encerramento gracioso: termina o que está em andamento).
-O worker roda do mesmo jeito: `go -C backend run ./cmd/worker` (nesta etapa ele só inicia e encerra; as tarefas chegam nas próximas etapas).
+
+### 5.1 Rodar o worker (entrega os e-mails)
+
+Em **outro terminal**, na raiz do repositório:
+
+```powershell
+go -C backend run ./cmd/worker
+```
+
+Ainda não há provedor de e-mail: em desenvolvimento cada e-mail (verificação de conta, redefinição de senha, convite) vira um arquivo `.txt` na pasta `backend\.correio\`. Abra o arquivo e copie o link para o navegador. Essa pasta não vai para o Git.
+
+### 5.2 Criar a loja e o dono inicial (uma vez)
+
+O cadastro pelo site nunca dá acesso de dono. A loja e o convite do dono são criados por este comando (com a API parada ou rodando, tanto faz):
+
+```powershell
+go -C backend run ./cmd/fila-admin bootstrap -nome "Barbearia Teste" -slug barbearia-teste -email seu-email@exemplo.com
+```
+
+Com o worker rodando, o convite aparece em `backend\.correio\`. Abra o link, defina nome e senha, e entre escolhendo **Equipe**. O convite vale 24 horas e só funciona uma vez.
 
 ## 6. Rodar o frontend
 

@@ -13,7 +13,7 @@ Regras, decisões e contrato do MVP (etapa 00), usados pelo backend (`backend/`,
 | [contrato/openapi.yaml](contrato/openapi.yaml) | Contrato HTTP (OpenAPI 3.1) — fonte única para backend e frontend |
 | [contrato/convencoes.md](contrato/convencoes.md) | Envelopes, erros (RFC 9457), paginação, IDs, dinheiro em centavos, datas UTC, idempotência, sessões e CSRF |
 | [contrato/eventos-sse.md](contrato/eventos-sse.md) | Eventos SSE: versão, audiência, cursor pós-commit, snapshot e recuperação |
-| [adr/](adr/README.md) | Decisões de arquitetura (ADR-0001…0016) |
+| [adr/](adr/README.md) | Decisões de arquitetura (ADR-0001…0017) |
 | [tools/verificar_contrato.py](tools/verificar_contrato.py) | Verificador de rastreabilidade regra → cenário → transição → operação |
 
 ## Como verificar (a partir da raiz do repositório)

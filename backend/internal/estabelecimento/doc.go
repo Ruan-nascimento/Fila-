@@ -1,6 +1,8 @@
 // Package estabelecimento é o módulo de loja, profissionais, vínculos de equipe e estado das filas (aberta, pausada, fechada).
 //
-// Implementação prevista na etapa 03. Regras: R-FILA-01, R-FILA-06…08, R-PERM-*. Transições: T-ES-*, T-PR-*, T-Q-*
+// Etapa 02: loja (criada pelo operador), profissional mínimo e vínculos de equipe, usados por
+// convites e sessões de equipe. Etapa 03: configuração da loja, cadastro de profissionais e filas.
+// Regras: R-FILA-01, R-FILA-06…08, R-PERM-*. Transições: T-ES-*, T-PR-*, T-Q-*
 // (ver docs/regras.md e docs/matriz-transicoes.md).
 //
 // Fronteiras (ADR-0001): o módulo é dono das suas tabelas; outros módulos usam suas funções

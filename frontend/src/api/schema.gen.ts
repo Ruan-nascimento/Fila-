@@ -222,7 +222,9 @@ export interface paths {
         put?: never;
         /**
          * Profissional ativa acesso pelo convite (uso único, 24 h).
-         * @description Se o e-mail já possui conta ativa, exige `password` dessa conta; caso contrário cria conta já verificada (o convite prova o e-mail).
+         * @description Se o e-mail já possui conta ativa, exige `password` dessa conta (senha errada → 401 `invalid_credentials`, com limite de tentativas).
+         *     Caso contrário cria conta já verificada (o convite prova o e-mail); se havia conta pendente de verificação com esse e-mail,
+         *     ela passa a usar a senha informada. Convite usado, revogado, vencido ou inexistente → 409 `invite_invalid` (mesma mensagem).
          */
         post: operations["acceptInvite"];
         delete?: never;
@@ -2878,6 +2880,7 @@ export interface operations {
                 content?: never;
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
             429: components["responses"]["TooManyRequests"];

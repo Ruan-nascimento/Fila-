@@ -7,6 +7,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -67,5 +69,58 @@ func TestNoPackageImportsExecutables(t *testing.T) {
 				t.Errorf("%s importa %s; executáveis não são bibliotecas", file, p)
 			}
 		}
+	}
+}
+
+// Dono de cada tabela (ADR-0001: cada módulo acessa só as próprias tabelas; os outros usam
+// funções exportadas). A chave é o caminho do pacote sob internal/.
+var tableOwners = map[string][]string{
+	"identidade":           {"account", "account_token", "account_session", "invite", "visitor", "visitor_browser", "visitor_credential"},
+	"estabelecimento":      {"establishment", "professional", "staff_membership"},
+	"auditoria":            {"audit_event"},
+	"platform/ratelimit":   {"rate_limit"},
+	"platform/idempotency": {"idempotency_record"},
+	"platform/mail":        {"mail_outbox"},
+}
+
+// Pacotes que podem tocar tabelas da plataforma para manutenção técnica.
+var maintenanceTables = map[string][]string{
+	"platform/maintenance": {"rate_limit", "idempotency_record", "mail_outbox"},
+}
+
+func TestModulesOnlyQueryOwnTables(t *testing.T) {
+	owner := map[string]string{}
+	for pkg, tables := range tableOwners {
+		for _, tb := range tables {
+			owner[tb] = pkg
+		}
+	}
+	sqlRef := regexp.MustCompile(`(?i)\b(?:FROM|JOIN|INTO|UPDATE)\s+([a-z_]+)\b`)
+	root := filepath.Join("..")
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return err
+		}
+		rel, _ := filepath.Rel(root, filepath.Dir(path))
+		pkg := filepath.ToSlash(rel)
+		if pkg == "contrato" || strings.HasPrefix(pkg, "api") {
+			return nil
+		}
+		src, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		for _, m := range sqlRef.FindAllStringSubmatch(string(src), -1) {
+			tb := strings.ToLower(m[1])
+			own, known := owner[tb]
+			if !known || own == pkg || slices.Contains(maintenanceTables[pkg], tb) {
+				continue
+			}
+			t.Errorf("%s consulta a tabela %s, que pertence a %s; use uma função exportada do módulo dono", path, tb, own)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }
