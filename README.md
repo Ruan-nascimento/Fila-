@@ -1,7 +1,7 @@
 # Fila — MVP web para barbearia
 
 Sistema de fila, atendimento, pagamento e fidelidade para barbearia, construído em etapas (veja [REGRAS.md](REGRAS.md)).
-**Situação atual: etapa 01 (estrutura e ambiente).** Ainda não há telas nem regras de negócio implementadas; a API responde só às rotas de saúde.
+**Situação atual: etapa 02 (identidade, visitantes e acesso).** Já funcionam: conta de cliente com confirmação de e-mail, login de cliente e de equipe, troca e recuperação de senha, convite de profissionais, dono inicial por comando controlado e visitante com código de recuperação. Fila, serviços, comanda e pagamento chegam nas próximas etapas.
 
 | Pasta | O que tem |
 |---|---|
@@ -114,8 +114,21 @@ npm ci
 npm run dev
 ```
 
-Abra http://127.0.0.1:5173. A página mostra "API pronta" quando a API (passo 5) está rodando e o banco está migrado.
+Abra http://127.0.0.1:5173. A página inicial mostra "API pronta" quando a API (passo 5) está rodando e o banco está migrado.
 O Vite repassa `/v1` e `/healthz` para a API, então frontend e API ficam na mesma origem, como em produção.
+
+Telas desta etapa:
+
+| Endereço | Para quê |
+|---|---|
+| `/cadastro` | Criar conta de cliente (o link de confirmação chega por e-mail — em desenvolvimento, na pasta `backend\.correio\`) |
+| `/entrar` | Entrar como **Cliente** ou como **Equipe da barbearia** |
+| `/conta` | Ver a conta, trocar a senha e sair |
+| `/esqueci-senha` | Pedir link para criar senha nova (vale 30 minutos) |
+| `/loja/barbearia-teste` | Página da loja (use o `-slug` do passo 5.2): entrar sem conta com um apelido e receber o **código de recuperação**, ou recuperar a visita com o código |
+| `/verificar-email`, `/redefinir-senha`, `/convite` | Abertos pelos links dos e-mails |
+
+Use sempre o mesmo endereço (`http://127.0.0.1:5173` ou `http://localhost:5173`) durante o uso: cada um tem seus próprios cookies.
 
 ## 7. Rodar os testes
 
@@ -155,6 +168,11 @@ Inclui: verificação da documentação e do contrato, formatação, análise es
 | `não foi possível abrir o endereço HTTP (porta em uso…)` | Outra API já está rodando; feche-a ou mude `FILA_HTTP_ADDR` |
 | `npm error engine Unsupported engine` | Instale Node 26 (ou 24.15+) |
 | `Defina POSTGRES_PASSWORD no arquivo .env` | Falta o passo 2 |
+| `FILA_SECRET_KEY: obrigatória` | Gere a chave (passo 2) e cole no `.env` |
+| `password authentication failed` / `recusou o usuário ou a senha` | A senha dentro de `FILA_DATABASE_URL` não é a mesma do banco; confira também o `fila:` antes dela |
+| Tela "Pedido não confirmado" | A página ficou desatualizada (sessão mudou em outra aba): recarregue a página |
+| Tela "Origem não permitida" | Abra o site por `http://127.0.0.1:5173` ou `http://localhost:5173` (ou ajuste `FILA_ALLOWED_ORIGINS`) |
+| E-mail não aparece em `backend\.correio\` | O worker (passo 5.1) precisa estar rodando |
 
 Códigos de saída dos programas: `0` sucesso, `1` falha durante a execução, `2` configuração ou uso inválido.
 
