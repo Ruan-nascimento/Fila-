@@ -1,0 +1,23 @@
+# Segredos locais: nunca versionar
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Binários e saídas de build
+/bin/
+backend/bin/
+frontend/dist/
+frontend/coverage/
+
+# Dependências
+node_modules/
+
+# Ferramentas e sistema
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.log
+.DS_Store
+Thumbs.db

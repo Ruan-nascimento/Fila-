@@ -1,0 +1,4064 @@
+openapi: 3.1.0
+info:
+  title: Fila — API do MVP web
+  version: 0.1.0
+  summary: Contrato único entre backend (Go) e frontend (React/TypeScript).
+  description: |
+    Contrato da etapa 00. Regras em docs/regras.md, convenções em docs/contrato/convencoes.md,
+    eventos em docs/contrato/eventos-sse.md e transições em docs/matriz-transicoes.md.
+
+    Extensões próprias:
+    - `x-authz`: lista de pares ator/escopo autorizados. Qualquer combinação fora da lista é negada (negação por padrão).
+    - `x-transitions`: transições da matriz (T-…) que a operação pode executar.
+    - `x-events`: tipos de evento SSE gravados na outbox quando a operação muda estado.
+    - `x-reauth`: exige reautenticação recente (10 minutos).
+    - `x-external-pending`: detalhe que depende de documentação/conta do provedor (etapas 08/09).
+
+    Regras gerais: valores em centavos inteiros (BRL); datas RFC 3339 em UTC com sufixo Z;
+    identificadores opacos; corpo desconhecido é rejeitado (`additionalProperties: false`);
+    todo comando mutável fora de /v1/auth, /v1/visitor-sessions e /v1/webhooks exige `Idempotency-Key`.
+  license:
+    name: Proprietário
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: /
+    description: Mesma origem do frontend (proxy reverso). Ver ADR-0006.
+tags:
+  - name: saude
+    description: Liveness e readiness.
+  - name: sessao
+    description: Conta, login, sessões, senha e convites.
+  - name: visitante
+    description: Credencial de visitante e código de recuperação.
+  - name: publico
+    description: Dados públicos da loja, catálogo e filas.
+  - name: cliente
+    description: Visita atual, perfil e histórico do titular.
+  - name: fila
+    description: Participação na fila e operação pela equipe.
+  - name: comanda
+    description: Itens, solicitações, conclusão e interrupção.
+  - name: pagamento
+    description: Pix, recebimentos, conferência, estornos e pendências financeiras.
+  - name: fidelidade
+    description: Programa, pontos, prêmios e reservas.
+  - name: administracao
+    description: Configuração da loja, equipe, catálogo e auditoria.
+  - name: exclusao
+    description: Exclusão de conta e acompanhamento.
+  - name: eventos
+    description: Fluxo SSE de atualizações.
+  - name: provedor
+    description: Notificações do provedor de pagamento.
+
+paths:
+  /healthz/live:
+    get:
+      operationId: getLiveness
+      tags: [saude]
+      summary: Processo vivo (não consulta dependências).
+      security: []
+      x-authz: [{ actor: public, scope: none }]
+      responses:
+        '200': { $ref: '#/components/responses/Health' }
+  /healthz/ready:
+    get:
+      operationId: getReadiness
+      tags: [saude]
+      summary: Pronto para tráfego (banco acessível e migrações aplicadas).
+      security: []
+      x-authz: [{ actor: public, scope: none }]
+      responses:
+        '200': { $ref: '#/components/responses/Health' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
+  # ---------------------------------------------------------------- sessão e conta
+  /v1/session:
+    get:
+      operationId: getSession
+      tags: [sessao]
+      summary: Identidades ativas neste navegador e token CSRF.
+      description: Nunca falha por falta de sessão; devolve campos nulos. Renova o uso (expiração por inatividade).
+      security: [{}, { accountSession: [] }, { visitorSession: [] }]
+      x-authz: [{ actor: public, scope: none }]
+      responses:
+        '200':
+          description: Sessão atual.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/SessionView' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/auth/register:
+    post:
+      operationId: registerAccount
+      tags: [sessao]
+      summary: Cadastro de cliente. Resposta idêntica exista ou não o e-mail.
+      security: []
+      x-authz: [{ actor: public, scope: none }]
+      x-transitions: [T-AC-01]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterAccountRequest' }
+      responses:
+        '202': { $ref: '#/components/responses/AcceptedGeneric' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/auth/email-verification/confirm:
+    post:
+      operationId: verifyEmail
+      tags: [sessao]
+      summary: Confirma e-mail com token de uso único.
+      security: []
+      x-authz: [{ actor: public, scope: none }]
+      x-transitions: [T-AC-02]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TokenRequest' }
+      responses:
+        '204': { description: E-mail verificado; conta ativa. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/auth/email-verification/resend:
+    post:
+      operationId: resendVerification
+      tags: [sessao]
+      summary: Reenvia verificação. Resposta genérica.
+      security: []
+      x-authz: [{ actor: public, scope: none }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmailRequest' }
+      responses:
+        '202': { $ref: '#/components/responses/AcceptedGeneric' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/auth/login:
+    post:
+      operationId: login
+      tags: [sessao]
+      summary: Cria sessão de cliente ou de equipe e define cookie HttpOnly.
+      security: []
+      x-authz: [{ actor: public, scope: none }]
+      x-transitions: [T-SS-01]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Sessão criada. Cabeçalho Set-Cookie com __Host-fila_session.
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/SetSessionCookie' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/SessionView' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/auth/logout:
+    post:
+      operationId: logout
+      tags: [sessao]
+      summary: Revoga a sessão de conta no servidor e apaga o cookie.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: customer, scope: self }, { actor: professional, scope: self }, { actor: owner, scope: self }]
+      x-transitions: [T-SS-02]
+      x-events: [stream.session_ended]
+      responses:
+        '204': { description: Sessão revogada. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/auth/password-reset/request:
+    post:
+      operationId: requestPasswordReset
+      tags: [sessao]
+      summary: Solicita link de redefinição (30 min, uso único). Resposta genérica.
+      security: []
+      x-authz: [{ actor: public, scope: none }]
+      x-transitions: [T-PW-01]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmailRequest' }
+      responses:
+        '202': { $ref: '#/components/responses/AcceptedGeneric' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/auth/password-reset/confirm:
+    post:
+      operationId: confirmPasswordReset
+      tags: [sessao]
+      summary: Define nova senha com token; revoga todas as sessões da conta.
+      security: []
+      x-authz: [{ actor: public, scope: none }]
+      x-transitions: [T-PW-02, T-SS-04]
+      x-events: [stream.session_ended]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PasswordResetConfirmRequest' }
+      responses:
+        '204': { description: Senha alterada; sessões revogadas. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/auth/password/change:
+    post:
+      operationId: changePassword
+      tags: [sessao]
+      summary: Troca a senha; revoga as demais sessões.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: customer, scope: self }, { actor: professional, scope: self }, { actor: owner, scope: self }]
+      x-transitions: [T-SS-03]
+      x-events: [stream.session_ended]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChangePasswordRequest' }
+      responses:
+        '204': { description: Senha alterada. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/auth/reauthenticate:
+    post:
+      operationId: reauthenticate
+      tags: [sessao]
+      summary: Confirma identidade recente (válida por 10 min) para ações sensíveis.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: customer, scope: self }, { actor: professional, scope: self }, { actor: owner, scope: self }]
+      x-transitions: [T-SS-06]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReauthenticateRequest' }
+      responses:
+        '200':
+          description: Reautenticado.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/SessionView' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/auth/invites/accept:
+    post:
+      operationId: acceptInvite
+      tags: [sessao]
+      summary: Profissional ativa acesso pelo convite (uso único, 24 h).
+      description: Se o e-mail já possui conta ativa, exige `password` dessa conta; caso contrário cria conta já verificada (o convite prova o e-mail).
+      security: []
+      x-authz: [{ actor: public, scope: none }]
+      x-transitions: [T-IN-02]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AcceptInviteRequest' }
+      responses:
+        '204': { description: Vínculo ativo. Fazer login com contexto staff. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/me:
+    patch:
+      operationId: updateMyProfile
+      tags: [cliente]
+      summary: Altera o nome exibido da própria conta.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: customer, scope: self }, { actor: professional, scope: self }, { actor: owner, scope: self }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateProfileRequest' }
+      responses:
+        '200':
+          description: Perfil atualizado.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/AccountView' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+
+  # ---------------------------------------------------------------- visitante
+  /v1/establishments/{establishmentId}/visitor-sessions:
+    post:
+      operationId: createVisitorSession
+      tags: [visitante]
+      summary: Cria credencial de visitante nesta loja e devolve o código de recuperação uma única vez.
+      description: |
+        Não é idempotente por chave: repetir cria outra identidade sem visita (a anterior expira).
+        Se o navegador já tem visitante desta loja com visita ativa ou comanda pendente, responde 409.
+      security: [{}, { visitorSession: [] }]
+      x-authz: [{ actor: public, scope: none }]
+      x-transitions: [T-VS-01]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateVisitorSessionRequest' }
+      responses:
+        '201':
+          description: Visitante criado. Set-Cookie com __Host-fila_visitor.
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/SetVisitorCookie' }
+            Cache-Control: { $ref: '#/components/headers/NoStore' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/VisitorSessionCreated' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/visitor-sessions/recover:
+    post:
+      operationId: recoverVisitorSession
+      tags: [visitante]
+      summary: Recupera a visita com o código; troca o código e revoga credenciais anteriores.
+      security: [{}, { visitorSession: [] }]
+      x-authz: [{ actor: public, scope: none }]
+      x-transitions: [T-VS-02]
+      x-events: [stream.session_ended]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RecoverVisitorSessionRequest' }
+      responses:
+        '200':
+          description: Visita recuperada; novo código devolvido uma única vez.
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/SetVisitorCookie' }
+            Cache-Control: { $ref: '#/components/headers/NoStore' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/VisitorSessionCreated' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/visitor-sessions/current/end:
+    post:
+      operationId: endVisitorSession
+      tags: [visitante]
+      summary: Encerra a credencial de visitante deste navegador (não cancela a visita).
+      security: [{ visitorSession: [], csrfToken: [] }]
+      x-authz: [{ actor: visitor, scope: self }]
+      x-transitions: [T-VS-03]
+      x-events: [stream.session_ended]
+      responses:
+        '204': { description: Credencial revogada. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        default: { $ref: '#/components/responses/Unexpected' }
+
+  # ---------------------------------------------------------------- público
+  /v1/public/slugs/{slug}:
+    get:
+      operationId: getPublicEstablishmentBySlug
+      tags: [publico]
+      summary: Dados públicos da loja a partir do link/QR.
+      security: []
+      x-authz: [{ actor: public, scope: none }]
+      parameters:
+        - $ref: '#/components/parameters/Slug'
+      responses:
+        '200':
+          description: Loja.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/PublicEstablishment' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/public/establishments/{establishmentId}/services:
+    get:
+      operationId: listPublicServices
+      tags: [publico]
+      summary: Catálogo ativo (sem dados privados).
+      security: []
+      x-authz: [{ actor: public, scope: none }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      responses:
+        '200':
+          description: Serviços ativos.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/PublicService' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/public/establishments/{establishmentId}/queues:
+    get:
+      operationId: listPublicQueues
+      tags: [publico]
+      summary: Filas públicas (senhas, quantidade, estimativa). Nunca nick, serviços ou valores.
+      security: []
+      x-authz: [{ actor: public, scope: none }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      responses:
+        '200':
+          description: Filas.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, cursor]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/PublicQueue' }
+                  cursor: { $ref: '#/components/schemas/StreamCursor' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
+
+  # ---------------------------------------------------------------- visita (cliente/visitante)
+  /v1/establishments/{establishmentId}/my-visit:
+    get:
+      operationId: getCurrentVisit
+      tags: [cliente]
+      summary: Visita atual (participação + comanda + pagamento) da identidade em uso nesta loja.
+      description: Inclui visita encerrada há menos de 24 h para visitante. `data` é nulo sem visita.
+      security: [{ visitorSession: [] }, { accountSession: [] }]
+      x-authz: [{ actor: visitor, scope: visit_owner }, { actor: customer, scope: visit_owner }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      responses:
+        '200':
+          description: Visita ou nulo.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, cursor]
+                properties:
+                  data:
+                    oneOf:
+                      - $ref: '#/components/schemas/Visit'
+                      - type: 'null'
+                  cursor: { $ref: '#/components/schemas/StreamCursor' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/participations:
+    post:
+      operationId: createParticipation
+      tags: [fila]
+      summary: Entra na fila de um profissional com ≥1 serviço; preço calculado no servidor.
+      security: [{ visitorSession: [], csrfToken: [] }, { accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: visitor, scope: self }, { actor: customer, scope: self }]
+      x-transitions: [T-P-01, T-O-01]
+      x-events: [participation.updated, order.updated, queue.public.updated, queue.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateParticipationRequest' }
+      responses:
+        '201':
+          description: Entrada confirmada pelo servidor.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Visit' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/participations/{participationId}:
+    get:
+      operationId: getParticipation
+      tags: [fila]
+      summary: Participação (dono da visita ou equipe autorizada).
+      security: [{ visitorSession: [] }, { accountSession: [] }]
+      x-authz:
+        - { actor: visitor, scope: visit_owner }
+        - { actor: customer, scope: visit_owner }
+        - { actor: professional, scope: own_queue }
+        - { actor: owner, scope: establishment }
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/ParticipationId'
+      responses:
+        '200':
+          description: Participação.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Participation' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/participations/{participationId}/cancel:
+    post:
+      operationId: cancelParticipation
+      tags: [fila]
+      summary: Desistência (dono da visita) ou cancelamento com motivo (dono da loja). Só aguardando/chamado.
+      security: [{ visitorSession: [], csrfToken: [] }, { accountSession: [], csrfToken: [] }]
+      x-authz:
+        - { actor: visitor, scope: visit_owner }
+        - { actor: customer, scope: visit_owner }
+        - { actor: owner, scope: establishment }
+      x-transitions: [T-P-04, T-P-05, T-O-05, T-CR-04]
+      x-events: [participation.updated, order.updated, queue.public.updated, queue.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/ParticipationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedReasonRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/VisitOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/participations/{participationId}/start:
+    post:
+      operationId: startService
+      tags: [fila]
+      summary: Chamado → em atendimento (permitido com fila pausada ou fechada).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: professional, scope: own_queue }, { actor: owner, scope: establishment }]
+      x-transitions: [T-P-03]
+      x-events: [participation.updated, queue.public.updated, queue.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/ParticipationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/VisitOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/participations/{participationId}/no-show:
+    post:
+      operationId: markNoShow
+      tags: [fila]
+      summary: Chamado → ausente, somente após 10 minutos da chamada (relógio do servidor).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: professional, scope: own_queue }, { actor: owner, scope: establishment }]
+      x-transitions: [T-P-06, T-O-05, T-CR-04]
+      x-events: [participation.updated, order.updated, queue.public.updated, queue.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/ParticipationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/VisitOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/participations/{participationId}/transfer:
+    post:
+      operationId: transferParticipation
+      tags: [fila]
+      summary: Transfere participação aguardando para o fim de outra fila aberta e compatível.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-P-07]
+      x-events: [participation.updated, queue.public.updated, queue.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/ParticipationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TransferRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/VisitOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/participations/{participationId}/complete:
+    post:
+      operationId: completeService
+      tags: [fila]
+      summary: Em atendimento → concluído. Fecha valor, libera cadeira; pagamento continua separado.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: professional, scope: own_queue }, { actor: owner, scope: establishment }]
+      x-transitions: [T-P-08, T-O-04]
+      x-events: [participation.updated, order.updated, payment.updated, queue.public.updated, queue.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/ParticipationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CompleteServiceRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/VisitOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/participations/{participationId}/interrupt:
+    post:
+      operationId: interruptService
+      tags: [fila]
+      summary: Em atendimento → interrompido, com motivo e resultado de cada item; aguarda revisão do dono.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: professional, scope: own_queue }, { actor: owner, scope: establishment }]
+      x-transitions: [T-P-09, T-O-06, T-CR-04]
+      x-events: [participation.updated, order.updated, queue.public.updated, queue.updated, pendencies.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/ParticipationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InterruptServiceRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/VisitOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+
+  # ---------------------------------------------------------------- operação da fila (equipe)
+  /v1/establishments/{establishmentId}/queues:
+    get:
+      operationId: listStaffQueues
+      tags: [fila]
+      summary: Filas com participantes (dono vê todas; profissional só a própria).
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: professional, scope: own_queue }, { actor: owner, scope: establishment }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      responses:
+        '200':
+          description: Filas da equipe.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, cursor]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/StaffQueue' }
+                  cursor: { $ref: '#/components/schemas/StreamCursor' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/queues/{queueId}/call-next:
+    post:
+      operationId: callNext
+      tags: [fila]
+      summary: Chama o próximo aguardando (FIFO do servidor). Exige fila aberta e cadeira livre.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: professional, scope: own_queue }, { actor: owner, scope: establishment }]
+      x-transitions: [T-P-02]
+      x-events: [participation.updated, queue.public.updated, queue.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/QueueId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmptyRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/VisitOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/queues/{queueId}/open:
+    post:
+      operationId: openQueue
+      tags: [fila]
+      summary: Fechada/pausada → aberta.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-Q-01, T-Q-03]
+      x-events: [queue.public.updated, queue.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/QueueId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/StaffQueueOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/queues/{queueId}/pause:
+    post:
+      operationId: pauseQueue
+      tags: [fila]
+      summary: Aberta → pausada.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-Q-02]
+      x-events: [queue.public.updated, queue.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/QueueId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/StaffQueueOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/queues/{queueId}/close:
+    post:
+      operationId: closeQueue
+      tags: [fila]
+      summary: Aberta/pausada → fechada. Exige zero aguardando e zero chamado.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-Q-04]
+      x-events: [queue.public.updated, queue.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/QueueId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/StaffQueueOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/queues/{queueId}/availability-signal:
+    post:
+      operationId: signalAvailability
+      tags: [fila]
+      summary: Profissional sinaliza indisponibilidade ao dono (não muda o estado da fila).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: professional, scope: own_queue }]
+      x-transitions: [T-Q-05]
+      x-events: [queue.updated, pendencies.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/QueueId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AvailabilitySignalRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/StaffQueueOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+
+  # ---------------------------------------------------------------- comanda
+  /v1/establishments/{establishmentId}/orders:
+    get:
+      operationId: listOrders
+      tags: [comanda]
+      summary: Comandas da loja (dono) ou dos atendimentos próprios (profissional).
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: professional, scope: own_attendance }, { actor: owner, scope: establishment }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/OrderStatus' }
+          style: form
+          explode: false
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Página de comandas.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, page]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Order' }
+                  page: { $ref: '#/components/schemas/PageInfo' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/orders/{orderId}:
+    get:
+      operationId: getOrder
+      tags: [comanda]
+      summary: Comanda com itens, solicitações e pagamento.
+      security: [{ visitorSession: [] }, { accountSession: [] }]
+      x-authz:
+        - { actor: visitor, scope: visit_owner }
+        - { actor: customer, scope: visit_owner }
+        - { actor: professional, scope: own_attendance }
+        - { actor: owner, scope: establishment }
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200': { $ref: '#/components/responses/OrderOk' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/orders/{orderId}/items:
+    put:
+      operationId: replaceOrderItems
+      tags: [comanda]
+      summary: Define o conjunto de serviços. Cliente só enquanto aguardando; equipe também chamado/em atendimento.
+      security: [{ visitorSession: [], csrfToken: [] }, { accountSession: [], csrfToken: [] }]
+      x-authz:
+        - { actor: visitor, scope: visit_owner }
+        - { actor: customer, scope: visit_owner }
+        - { actor: professional, scope: own_attendance }
+        - { actor: owner, scope: establishment }
+      x-transitions: [T-O-02, T-O-03]
+      x-events: [order.updated, queue.public.updated, queue.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReplaceOrderItemsRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/OrderOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/orders/{orderId}/items/{itemId}/mark-performed:
+    post:
+      operationId: markItemPerformed
+      tags: [comanda]
+      summary: Marca item como integralmente realizado (cliente não poderá removê-lo).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: professional, scope: own_attendance }, { actor: owner, scope: establishment }]
+      x-transitions: [T-O-13]
+      x-events: [order.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/ItemId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/OrderOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/orders/{orderId}/change-requests:
+    post:
+      operationId: createChangeRequest
+      tags: [comanda]
+      summary: Após a chamada, cliente pede inclusão/remoção; total aceito não muda até a decisão.
+      security: [{ visitorSession: [], csrfToken: [] }, { accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: visitor, scope: visit_owner }, { actor: customer, scope: visit_owner }]
+      x-transitions: [T-CR-01]
+      x-events: [change_request.updated, order.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateChangeRequestRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/OrderOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/orders/{orderId}/change-requests/{changeRequestId}/approve:
+    post:
+      operationId: approveChangeRequest
+      tags: [comanda]
+      summary: Aplica a solicitação como nova versão da comanda.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: professional, scope: own_attendance }, { actor: owner, scope: establishment }]
+      x-transitions: [T-CR-02]
+      x-events: [change_request.updated, order.updated, queue.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/ChangeRequestId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/OrderOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/orders/{orderId}/change-requests/{changeRequestId}/reject:
+    post:
+      operationId: rejectChangeRequest
+      tags: [comanda]
+      summary: Recusa a solicitação; comanda permanece na versão anterior.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: professional, scope: own_attendance }, { actor: owner, scope: establishment }]
+      x-transitions: [T-CR-03]
+      x-events: [change_request.updated, order.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/ChangeRequestId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedReasonRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/OrderOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/orders/{orderId}/close-interruption:
+    post:
+      operationId: closeInterruptedOrder
+      tags: [comanda]
+      summary: Dono revisa interrupção e fecha valor (só itens integralmente feitos; pode ser zero).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-O-07, T-O-08]
+      x-events: [order.updated, payment.updated, pendencies.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CloseInterruptionRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/OrderOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/orders/{orderId}/adjustments:
+    post:
+      operationId: adjustClosedOrder
+      tags: [comanda]
+      summary: Correção auditada de comanda com valor fechado (somente dono, sem cobrança Pix ativa ou desconhecida).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-reauth: true
+      x-transitions: [T-O-11]
+      x-events: [order.updated, payment.updated, pendencies.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdjustOrderRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/OrderOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+
+  # ---------------------------------------------------------------- pagamento
+  /v1/establishments/{establishmentId}/orders/{orderId}/payment-method:
+    post:
+      operationId: choosePaymentMethod
+      tags: [pagamento]
+      summary: Registra o meio escolhido. Trocar de Pix ativo exige ciência e tentativa de cancelamento.
+      security: [{ visitorSession: [], csrfToken: [] }, { accountSession: [], csrfToken: [] }]
+      x-authz:
+        - { actor: visitor, scope: visit_owner }
+        - { actor: customer, scope: visit_owner }
+        - { actor: professional, scope: own_attendance }
+        - { actor: owner, scope: establishment }
+      x-transitions: [T-O-12]
+      x-events: [payment.updated, pendencies.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChoosePaymentMethodRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/OrderOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/orders/{orderId}/pix-charges:
+    post:
+      operationId: createPixCharge
+      tags: [pagamento]
+      summary: Cria cobrança Pix do valor devido calculado pelo servidor. Uma tentativa ativa por comanda.
+      description: |
+        201 quando o provedor respondeu com a cobrança. 202 quando o resultado é desconhecido
+        (status `unknown`): a interface mostra "verificando pagamento" e não pode criar outra.
+      security: [{ visitorSession: [], csrfToken: [] }, { accountSession: [], csrfToken: [] }]
+      x-authz:
+        - { actor: visitor, scope: visit_owner }
+        - { actor: customer, scope: visit_owner }
+        - { actor: professional, scope: own_attendance }
+        - { actor: owner, scope: establishment }
+      x-transitions: [T-PX-01, T-PX-02, T-PX-03, T-PX-08]
+      x-events: [payment.updated]
+      x-external-pending: [api_version, authentication, remote_idempotency, expiration]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/PixChargeOk' }
+        '202': { $ref: '#/components/responses/PixChargeOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/orders/{orderId}/pix-charges/{chargeId}:
+    get:
+      operationId: getPixCharge
+      tags: [pagamento]
+      summary: Situação da cobrança conforme o banco (não consulta o provedor de forma síncrona).
+      security: [{ visitorSession: [] }, { accountSession: [] }]
+      x-authz:
+        - { actor: visitor, scope: visit_owner }
+        - { actor: customer, scope: visit_owner }
+        - { actor: professional, scope: own_attendance }
+        - { actor: owner, scope: establishment }
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/ChargeId'
+      responses:
+        '200': { $ref: '#/components/responses/PixChargeOk' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/orders/{orderId}/pix-charges/{chargeId}/cancel:
+    post:
+      operationId: cancelPixCharge
+      tags: [pagamento]
+      summary: Tenta cancelar cobrança Pix pendente no provedor (quando suportado).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: professional, scope: own_attendance }, { actor: owner, scope: establishment }]
+      x-transitions: [T-PX-07]
+      x-events: [payment.updated, pendencies.updated]
+      x-external-pending: [charge_cancellation]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/ChargeId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        '202': { $ref: '#/components/responses/PixChargeOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/orders/{orderId}/receipts:
+    post:
+      operationId: registerInPersonReceipt
+      tags: [pagamento]
+      summary: Dinheiro ou maquininha. Registra recebimento integral e conferência na mesma ação (dois registros).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: professional, scope: own_attendance }, { actor: owner, scope: establishment }]
+      x-transitions: [T-RC-01, T-O-10, T-LG-01]
+      x-events: [payment.updated, order.updated, loyalty.updated, pendencies.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterReceiptRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/OrderOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/orders/{orderId}/receipts/{receiptId}/confer:
+    post:
+      operationId: conferReceipt
+      tags: [pagamento]
+      summary: Conferência de recebimento Pix já registrado pelo provedor.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: professional, scope: own_attendance }, { actor: owner, scope: establishment }]
+      x-transitions: [T-RC-03, T-O-10, T-LG-01]
+      x-events: [payment.updated, order.updated, loyalty.updated, pendencies.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/ReceiptId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmptyRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/OrderOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/orders/{orderId}/receipts/{receiptId}/refunds:
+    post:
+      operationId: requestRefund
+      tags: [pagamento]
+      summary: Estorno integral de um recebimento (somente dono, com motivo).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-reauth: true
+      x-transitions: [T-RF-01, T-RF-02, T-RF-05]
+      x-events: [payment.updated, pendencies.updated]
+      x-external-pending: [refund_api]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/ReceiptId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        '202': { $ref: '#/components/responses/OrderOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/orders/{orderId}/refunds/{refundId}/confirm:
+    post:
+      operationId: confirmRefundManually
+      tags: [pagamento]
+      summary: Dono confirma estorno em revisão com evidência documentada (presencial ou provedor sem API).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-reauth: true
+      x-transitions: [T-RF-06, T-LG-02]
+      x-events: [payment.updated, loyalty.updated, pendencies.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/RefundId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ConfirmRefundRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/OrderOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/orders/{orderId}/refunds/{refundId}/mark-failed:
+    post:
+      operationId: markRefundFailed
+      tags: [pagamento]
+      summary: Dono registra que o estorno em revisão não ocorreu (com evidência).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-reauth: true
+      x-transitions: [T-RF-07]
+      x-events: [payment.updated, pendencies.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/RefundId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ConfirmRefundRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/OrderOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/financial-issues:
+    get:
+      operationId: listFinancialIssues
+      tags: [pagamento]
+      summary: Pendências financeiras (duplicidade, divergência, tardio, desconhecido, estorno em revisão).
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - name: status
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/FinancialIssueStatus' }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Página de pendências.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, page]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/FinancialIssue' }
+                  page: { $ref: '#/components/schemas/PageInfo' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/financial-issues/{issueId}/resolve:
+    post:
+      operationId: resolveFinancialIssue
+      tags: [pagamento]
+      summary: Dono marca pendência como tratada, com nota. Não altera nem apaga recebimentos.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-FI-02]
+      x-events: [financial_issue.updated, pendencies.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/IssueId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResolveIssueRequest' }
+      responses:
+        '200':
+          description: Pendência resolvida.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/FinancialIssue' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/pendencies:
+    get:
+      operationId: listPendencies
+      tags: [administracao]
+      summary: Painel do dono — comandas a receber, revisões, cobranças desconhecidas, exclusões, sinais de indisponibilidade.
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      responses:
+        '200':
+          description: Resumo de pendências.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, cursor]
+                properties:
+                  data: { $ref: '#/components/schemas/Pendencies' }
+                  cursor: { $ref: '#/components/schemas/StreamCursor' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/webhooks/abacatepay:
+    post:
+      operationId: receiveAbacatePayWebhook
+      tags: [provedor]
+      summary: Notificação do provedor. Autenticidade conforme contrato oficial (etapa 09).
+      description: |
+        Sem cookies, sem CSRF. O corpo bruto é persistido e deduplicado antes de responder 2xx.
+        Notificação não autenticável não confirma pagamento: dispara consulta autenticada ao provedor.
+      security: []
+      x-authz: [{ actor: provider, scope: provider_signature }]
+      x-transitions: [T-PX-05, T-PX-06, T-RC-02, T-RC-04, T-O-09, T-RF-03, T-RF-04, T-LG-02]
+      x-events: [payment.updated, order.updated, financial_issue.updated, pendencies.updated, loyalty.updated]
+      x-external-pending: [webhook_authentication, webhook_payload, retry_policy]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Formato definido pelo provedor; validado na etapa 09.
+      responses:
+        '200': { description: Notificação persistida (ou duplicata reconhecida). }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        default: { $ref: '#/components/responses/Unexpected' }
+
+  # ---------------------------------------------------------------- histórico e fidelidade (cliente)
+  /v1/me/history:
+    get:
+      operationId: listMyHistory
+      tags: [cliente]
+      summary: Histórico privado da conta verificada, por loja.
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: customer, scope: self }]
+      parameters:
+        - name: establishment_id
+          in: query
+          required: true
+          schema: { $ref: '#/components/schemas/Id' }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Página do histórico.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, page]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/HistoryEntry' }
+                  page: { $ref: '#/components/schemas/PageInfo' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/me/loyalty/{establishmentId}:
+    get:
+      operationId: getMyLoyalty
+      tags: [fidelidade]
+      summary: Saldo, retido, disponível e reserva ativa da conta nesta loja.
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: customer, scope: self }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      responses:
+        '200':
+          description: Resumo de pontos.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/LoyaltySummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/me/loyalty/{establishmentId}/ledger:
+    get:
+      operationId: listMyLoyaltyLedger
+      tags: [fidelidade]
+      summary: Extrato imutável de pontos (explica o saldo).
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: customer, scope: self }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Página do extrato.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, page]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/LedgerEntry' }
+                  page: { $ref: '#/components/schemas/PageInfo' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/reward-catalog:
+    get:
+      operationId: listCustomerRewards
+      tags: [fidelidade]
+      summary: Prêmios ativos para conta (custo, descrição, disponibilidade).
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: customer, scope: self }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      responses:
+        '200':
+          description: Prêmios.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Reward' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/reward-reservations:
+    post:
+      operationId: createRewardReservation
+      tags: [fidelidade]
+      summary: Reserva prêmio — trava pontos e uma unidade por 24 h. Uma reserva ativa por conta/loja.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: customer, scope: self }]
+      x-transitions: [T-RW-01]
+      x-events: [reward_reservation.updated, loyalty.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateReservationRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/ReservationOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+    get:
+      operationId: listRewardReservations
+      tags: [fidelidade]
+      summary: Reservas da loja para entrega (equipe).
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: professional, scope: establishment_member }, { actor: owner, scope: establishment }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - name: status
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/ReservationStatus' }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Página de reservas.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, page]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/RewardReservation' }
+                  page: { $ref: '#/components/schemas/PageInfo' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/reward-reservations/{reservationId}/cancel:
+    post:
+      operationId: cancelRewardReservation
+      tags: [fidelidade]
+      summary: Cliente cancela reserva ativa; libera pontos e unidade exatamente uma vez.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: customer, scope: self }]
+      x-transitions: [T-RW-02]
+      x-events: [reward_reservation.updated, loyalty.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/ReservationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/ReservationOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/reward-reservations/{reservationId}/deliver:
+    post:
+      operationId: deliverRewardReservation
+      tags: [fidelidade]
+      summary: Equipe confirma entrega presencial antes do vencimento; consome pontos e unidade.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: professional, scope: establishment_member }, { actor: owner, scope: establishment }]
+      x-transitions: [T-RW-04]
+      x-events: [reward_reservation.updated, loyalty.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/ReservationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/ReservationOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/reward-reservations/{reservationId}/revert-delivery:
+    post:
+      operationId: revertRewardDelivery
+      tags: [fidelidade]
+      summary: Dono corrige entrega registrada por engano, com motivo; devolve pontos e unidade uma vez.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-RW-05]
+      x-events: [reward_reservation.updated, loyalty.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/ReservationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedReasonRequiredRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/ReservationOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+
+  # ---------------------------------------------------------------- administração da loja
+  /v1/establishments/{establishmentId}:
+    get:
+      operationId: getEstablishment
+      tags: [administracao]
+      summary: Configuração da loja (equipe).
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: professional, scope: establishment_member }, { actor: owner, scope: establishment }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      responses:
+        '200': { $ref: '#/components/responses/EstablishmentOk' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+    patch:
+      operationId: updateEstablishment
+      tags: [administracao]
+      summary: Altera nome, slug e fuso da loja.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-ES-01]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateEstablishmentRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/EstablishmentOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/professionals:
+    get:
+      operationId: listProfessionals
+      tags: [administracao]
+      summary: Profissionais (inclui inativos).
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      responses:
+        '200':
+          description: Profissionais.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Professional' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+    post:
+      operationId: createProfessional
+      tags: [administracao]
+      summary: Cadastra profissional e cria sua fila (fechada).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-PR-01]
+      x-events: [queue.public.updated, queue.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateProfessionalRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/ProfessionalOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/professionals/{professionalId}:
+    patch:
+      operationId: updateProfessional
+      tags: [administracao]
+      summary: Altera nome exibido do profissional.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-PR-04]
+      x-events: [queue.public.updated, queue.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/ProfessionalId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateProfessionalRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/ProfessionalOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/professionals/{professionalId}/deactivate:
+    post:
+      operationId: deactivateProfessional
+      tags: [administracao]
+      summary: Desativa profissional sem participações ativas na fila; revoga acesso e conexões imediatamente.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-reauth: true
+      x-transitions: [T-PR-02]
+      x-events: [queue.public.updated, queue.updated, stream.session_ended]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/ProfessionalId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedReasonRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/ProfessionalOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/professionals/{professionalId}/reactivate:
+    post:
+      operationId: reactivateProfessional
+      tags: [administracao]
+      summary: Reativa profissional (fila volta fechada).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-reauth: true
+      x-transitions: [T-PR-03]
+      x-events: [queue.public.updated, queue.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/ProfessionalId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/ProfessionalOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/professionals/{professionalId}/invites:
+    post:
+      operationId: createInvite
+      tags: [administracao]
+      summary: Envia convite de acesso (uso único, 24 h). O token só vai por e-mail.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-reauth: true
+      x-transitions: [T-IN-01]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/ProfessionalId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateInviteRequest' }
+      responses:
+        '201':
+          description: Convite registrado e e-mail enfileirado.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Invite' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/invites/{inviteId}/revoke:
+    post:
+      operationId: revokeInvite
+      tags: [administracao]
+      summary: Revoga convite pendente.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-IN-03]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/InviteId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmptyRequest' }
+      responses:
+        '200':
+          description: Convite revogado.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Invite' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/services:
+    get:
+      operationId: listServices
+      tags: [administracao]
+      summary: Catálogo completo, incluindo inativos.
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: professional, scope: establishment_member }, { actor: owner, scope: establishment }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      responses:
+        '200':
+          description: Serviços.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Service' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+    post:
+      operationId: createService
+      tags: [administracao]
+      summary: Cria serviço com preço positivo em centavos, duração e pontos.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-SV-01]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateServiceRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/ServiceOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/services/{serviceId}:
+    patch:
+      operationId: updateService
+      tags: [administracao]
+      summary: Altera serviço; vale só para novas inclusões (itens aceitos guardam snapshot).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-SV-02]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/ServiceId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateServiceRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/ServiceOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/services/{serviceId}/deactivate:
+    post:
+      operationId: deactivateService
+      tags: [administracao]
+      summary: Inativa serviço (sem novas inclusões; itens aceitos permanecem).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-SV-03]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/ServiceId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/ServiceOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/services/{serviceId}/reactivate:
+    post:
+      operationId: reactivateService
+      tags: [administracao]
+      summary: Reativa serviço.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-SV-04]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/ServiceId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/ServiceOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/services/{serviceId}/professionals:
+    put:
+      operationId: setServiceProfessionals
+      tags: [administracao]
+      summary: Define profissionais habilitados para o serviço.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-SV-05]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/ServiceId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetServiceProfessionalsRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/ServiceOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/loyalty-program:
+    get:
+      operationId: getLoyaltyProgram
+      tags: [fidelidade]
+      summary: Situação do programa (desligado por padrão).
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      responses:
+        '200': { $ref: '#/components/responses/LoyaltyProgramOk' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+    put:
+      operationId: updateLoyaltyProgram
+      tags: [fidelidade]
+      summary: Liga/desliga o programa. Vale para novas visitas e novas reservas.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-LP-01, T-LP-02]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateLoyaltyProgramRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/LoyaltyProgramOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/rewards:
+    get:
+      operationId: listRewards
+      tags: [fidelidade]
+      summary: Prêmios configurados (inclui inativos).
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      responses:
+        '200':
+          description: Prêmios.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Reward' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+    post:
+      operationId: createReward
+      tags: [fidelidade]
+      summary: Cria prêmio-cortesia (custo inteiro, estoque limitado ou ilimitado).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-RD-01]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateRewardRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/RewardOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/rewards/{rewardId}:
+    patch:
+      operationId: updateReward
+      tags: [fidelidade]
+      summary: Altera prêmio; reservas existentes mantêm condições aceitas.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-RD-02]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/RewardId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateRewardRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/RewardOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/rewards/{rewardId}/deactivate:
+    post:
+      operationId: deactivateReward
+      tags: [fidelidade]
+      summary: Inativa prêmio (sem novas reservas; reservas ativas são honradas).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-RD-03]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/RewardId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/RewardOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/audit-events:
+    get:
+      operationId: listAuditEvents
+      tags: [administracao]
+      summary: Registro de auditoria da loja (sem dados pessoais).
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Página de auditoria.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, page]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/AuditEvent' }
+                  page: { $ref: '#/components/schemas/PageInfo' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+
+  # ---------------------------------------------------------------- exclusão
+  /v1/me/deletion-request:
+    post:
+      operationId: requestAccountDeletion
+      tags: [exclusao]
+      summary: Solicita exclusão da própria conta (reautenticação recente). Revoga sessões imediatamente.
+      description: |
+        Resposta informa a situação real: `processing` (com bloqueios) ou `completed`.
+        Guardar o `protocol` para consultar depois em getDeletionRequestStatus.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: customer, scope: self }, { actor: professional, scope: self }, { actor: owner, scope: self }]
+      x-reauth: true
+      x-transitions: [T-AC-03, T-P-10, T-O-05, T-RW-06, T-LG-03]
+      x-events: [stream.session_ended, participation.updated, reward_reservation.updated, deletion_request.updated, pendencies.updated]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RequestDeletionRequest' }
+      responses:
+        '202':
+          description: Solicitação registrada.
+          headers:
+            Cache-Control: { $ref: '#/components/headers/NoStore' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/DeletionRequest' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/deletion-requests/status:
+    post:
+      operationId: getDeletionRequestStatus
+      tags: [exclusao]
+      summary: Consulta situação pelo protocolo (POST para não expor o protocolo em URL/log).
+      security: []
+      x-authz: [{ actor: public, scope: protocol_holder }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeletionStatusRequest' }
+      responses:
+        '200':
+          description: Situação.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/DeletionRequest' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/deletion-requests:
+    get:
+      operationId: listDeletionRequests
+      tags: [exclusao]
+      summary: Exclusões em processamento que dependem de ação desta loja (sem dados pessoais além do necessário).
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Página de solicitações.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, page]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/DeletionRequest' }
+                  page: { $ref: '#/components/schemas/PageInfo' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+
+  # ---------------------------------------------------------------- eventos
+  /v1/stream:
+    get:
+      operationId: openEventStream
+      tags: [eventos]
+      summary: Uma conexão SSE por aba. Snapshot inicial, retomada por cursor, heartbeat.
+      description: |
+        Cada mensagem: `id:` = cursor opaco; `event:` = tipo; `data:` = EventEnvelope (JSON).
+        Retomada por cabeçalho Last-Event-ID (reconexão nativa) ou parâmetro `cursor` (não é credencial).
+        Cursor válido → reenvia eventos posteriores autorizados; inválido/expirado → `stream.snapshot`.
+        Detalhes em docs/contrato/eventos-sse.md.
+      security: [{}, { visitorSession: [] }, { accountSession: [] }]
+      x-authz:
+        - { actor: public, scope: none }
+        - { actor: visitor, scope: visit_owner }
+        - { actor: customer, scope: self }
+        - { actor: professional, scope: own_queue }
+        - { actor: owner, scope: establishment }
+      parameters:
+        - name: establishment_id
+          in: query
+          required: true
+          schema: { $ref: '#/components/schemas/Id' }
+        - name: channels
+          in: query
+          required: true
+          description: Canais desejados; o servidor ignora (e informa no snapshot) canais não autorizados.
+          schema:
+            type: array
+            minItems: 1
+            uniqueItems: true
+            items: { $ref: '#/components/schemas/AudienceKind' }
+          style: form
+          explode: false
+        - name: cursor
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/StreamCursor' }
+        - name: Last-Event-ID
+          in: header
+          required: false
+          schema: { $ref: '#/components/schemas/StreamCursor' }
+      responses:
+        '200':
+          description: Fluxo text/event-stream. Dados de cada evento seguem EventEnvelope.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: 'no-cache, no-transform' }
+            X-Accel-Buffering:
+              schema: { type: string, const: 'no' }
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              x-event-schema: { $ref: '#/components/schemas/EventEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
+
+components:
+  securitySchemes:
+    accountSession:
+      type: apiKey
+      in: cookie
+      name: __Host-fila_session
+      description: Sessão de conta (cliente ou equipe). HttpOnly, Secure, SameSite=Lax, Path=/. Token aleatório de 256 bits; servidor guarda só o hash.
+    visitorSession:
+      type: apiKey
+      in: cookie
+      name: __Host-fila_visitor
+      description: Credencial de visitante de uma loja. HttpOnly, Secure, SameSite=Lax, Path=/.
+    csrfToken:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+      description: Token obtido em getSession, vinculado às sessões do navegador. Obrigatório em métodos não seguros quando há sessão; Origin é validado sempre.
+
+  headers:
+    SetSessionCookie:
+      description: __Host-fila_session=<token>; Path=/; Secure; HttpOnly; SameSite=Lax
+      schema: { type: string }
+    SetVisitorCookie:
+      description: __Host-fila_visitor=<token>; Path=/; Secure; HttpOnly; SameSite=Lax
+      schema: { type: string }
+    NoStore:
+      description: Resposta contém segredo exibido uma única vez.
+      schema: { type: string, const: no-store }
+    RequestId:
+      description: Identificador da requisição para diagnóstico (também em Problem.request_id).
+      schema: { type: string }
+    IdempotentReplayed:
+      description: Presente com valor "true" quando a resposta é repetição armazenada.
+      schema: { type: string, enum: ['true'] }
+
+  parameters:
+    EstablishmentId:
+      name: establishmentId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    QueueId:
+      name: queueId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    ParticipationId:
+      name: participationId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    OrderId:
+      name: orderId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    ItemId:
+      name: itemId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    ChangeRequestId:
+      name: changeRequestId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    ChargeId:
+      name: chargeId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    ReceiptId:
+      name: receiptId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    RefundId:
+      name: refundId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    IssueId:
+      name: issueId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    ProfessionalId:
+      name: professionalId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    ServiceId:
+      name: serviceId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    RewardId:
+      name: rewardId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    ReservationId:
+      name: reservationId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    InviteId:
+      name: inviteId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    Slug:
+      name: slug
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])$' }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+      schema: { type: string, minLength: 16, maxLength: 128, pattern: '^[A-Za-z0-9_-]+$' }
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Cursor opaco de paginação devolvido em page.next_cursor.
+      schema: { type: string, maxLength: 512 }
+
+  responses:
+    Health:
+      description: Situação do processo.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [status]
+            properties:
+              status: { type: string, enum: [ok, not_ready] }
+    AcceptedGeneric:
+      description: Solicitação aceita. Mesma resposta exista ou não a conta.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data:
+                type: object
+                required: [message]
+                properties:
+                  message: { type: string }
+    VisitOk:
+      description: Visita (participação + comanda) após o comando.
+      headers:
+        Idempotent-Replayed: { $ref: '#/components/headers/IdempotentReplayed' }
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: { $ref: '#/components/schemas/Visit' }
+    OrderOk:
+      description: Comanda após o comando.
+      headers:
+        Idempotent-Replayed: { $ref: '#/components/headers/IdempotentReplayed' }
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: { $ref: '#/components/schemas/Order' }
+    PixChargeOk:
+      description: Cobrança Pix.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: { $ref: '#/components/schemas/PixCharge' }
+    StaffQueueOk:
+      description: Fila (visão da equipe).
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: { $ref: '#/components/schemas/StaffQueue' }
+    EstablishmentOk:
+      description: Loja.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: { $ref: '#/components/schemas/Establishment' }
+    ProfessionalOk:
+      description: Profissional.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: { $ref: '#/components/schemas/Professional' }
+    ServiceOk:
+      description: Serviço.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: { $ref: '#/components/schemas/Service' }
+    LoyaltyProgramOk:
+      description: Programa de fidelidade.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: { $ref: '#/components/schemas/LoyaltyProgram' }
+    RewardOk:
+      description: Prêmio.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: { $ref: '#/components/schemas/Reward' }
+    ReservationOk:
+      description: Reserva de prêmio.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: { $ref: '#/components/schemas/RewardReservation' }
+    BadRequest:
+      description: Entrada inválida (`validation_failed`, `idempotency_key_missing`, campo desconhecido).
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Unauthorized:
+      description: Sem sessão válida ou credenciais inválidas (`unauthenticated`, `invalid_credentials`, `recovery_code_invalid`).
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Forbidden:
+      description: Sessão válida sem permissão, CSRF/origem inválidos ou reautenticação necessária.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    NotFound:
+      description: Inexistente ou fora do escopo do ator (não revela existência em outra loja).
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Conflict:
+      description: Estado ou versão incompatível. `current` traz a visão atual do recurso para o ator.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    IdempotencyMismatch:
+      description: Mesma Idempotency-Key com conteúdo diferente (`idempotency_key_reused`).
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    PayloadTooLarge:
+      description: Corpo acima do limite.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    TooManyRequests:
+      description: Limite de tentativas/taxa atingido.
+      headers:
+        Retry-After:
+          schema: { type: integer, minimum: 1 }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    ServiceUnavailable:
+      description: Dependência indisponível (banco, provedor).
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Unexpected:
+      description: Erro inesperado (`internal_error`); sem detalhes internos.
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/RequestId' }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  schemas:
+    # ------------------------------------------------------------ primitivos
+    Id:
+      type: string
+      format: uuid
+      description: Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+    Timestamp:
+      type: string
+      format: date-time
+      pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$'
+      description: RFC 3339 em UTC com sufixo Z.
+    Money:
+      type: object
+      additionalProperties: false
+      required: [amount_cents, currency]
+      properties:
+        amount_cents: { type: integer, format: int64, minimum: 0, description: Centavos inteiros. }
+        currency: { type: string, const: BRL }
+    Version:
+      type: integer
+      format: int64
+      minimum: 1
+      description: Versão do agregado; incrementa a cada mudança.
+    Reason:
+      type: string
+      minLength: 3
+      maxLength: 500
+    Nick:
+      type: string
+      minLength: 1
+      maxLength: 30
+      description: Texto puro (normalizado NFC, sem caracteres de controle). Exibido sempre como texto, nunca HTML.
+    StreamCursor:
+      type: string
+      maxLength: 128
+      description: Cursor opaco de eventos SSE (posição pós-commit + época do fluxo).
+    Estimate:
+      type: object
+      additionalProperties: false
+      required: [kind, minutes, computed_at]
+      properties:
+        kind: { type: string, const: estimate, description: Sempre estimativa; nunca horário garantido. }
+        minutes: { type: integer, minimum: 0 }
+        computed_at: { $ref: '#/components/schemas/Timestamp' }
+    PageInfo:
+      type: object
+      additionalProperties: false
+      required: [next_cursor, has_more]
+      properties:
+        next_cursor: { type: [string, 'null'], maxLength: 512 }
+        has_more: { type: boolean }
+
+    # ------------------------------------------------------------ erros
+    Problem:
+      type: object
+      description: RFC 9457 (application/problem+json) com extensões.
+      required: [type, title, status, code, request_id]
+      properties:
+        type: { type: string, format: uri-reference, description: 'Ex.: /problems/version_conflict' }
+        title: { type: string, description: Frase curta e estável (pt-BR). }
+        status: { type: integer, minimum: 400, maximum: 599 }
+        detail: { type: string, description: 'Explicação para o usuário, sem dados internos.' }
+        instance: { type: string }
+        code: { $ref: '#/components/schemas/ErrorCode' }
+        request_id: { type: string }
+        errors:
+          type: array
+          items: { $ref: '#/components/schemas/FieldError' }
+        current:
+          type: object
+          description: Em 409, a visão atual do recurso para este ator (mesmo esquema do GET correspondente).
+        retry_after_seconds: { type: integer, minimum: 1 }
+    FieldError:
+      type: object
+      additionalProperties: false
+      required: [field, code]
+      properties:
+        field: { type: string, description: Caminho JSON Pointer do campo. }
+        code: { type: string, enum: [required, unknown_field, invalid_format, too_short, too_long, out_of_range, not_allowed, duplicate] }
+        message: { type: string }
+    ErrorCode:
+      type: string
+      enum:
+        # gerais
+        - validation_failed
+        - unauthenticated
+        - forbidden
+        - not_found
+        - csrf_failed
+        - origin_not_allowed
+        - reauthentication_required
+        - rate_limited
+        - payload_too_large
+        - unsupported_media_type
+        - idempotency_key_missing
+        - idempotency_key_reused
+        - idempotency_in_progress
+        - version_conflict
+        - invalid_transition
+        - internal_error
+        - service_unavailable
+        # identidade
+        - invalid_credentials
+        - email_not_verified
+        - token_invalid
+        - recovery_code_invalid
+        - invite_invalid
+        - visitor_visit_in_progress
+        - sole_owner
+        - deletion_in_progress
+        # fila e loja
+        - queue_not_open
+        - queue_has_pending_participants
+        - active_participation_exists
+        - pending_order_exists
+        - service_not_eligible
+        - service_inactive
+        - no_waiting_participant
+        - professional_busy
+        - professional_inactive
+        - professional_has_active_participations
+        - tolerance_not_elapsed
+        - transfer_consent_required
+        - transfer_target_incompatible
+        - slug_taken
+        # comanda
+        - order_requires_item
+        - duplicate_service
+        - change_request_pending
+        - item_already_performed
+        - performed_item_required
+        - order_not_editable
+        - order_not_payable
+        # pagamento
+        - pix_charge_active
+        - pix_charge_outcome_unknown
+        - payment_amount_mismatch
+        - payment_method_not_allowed
+        - refund_exceeds_available
+        - refund_not_allowed
+        - provider_unavailable
+        - webhook_unauthenticated
+        # fidelidade
+        - loyalty_program_disabled
+        - account_required
+        - insufficient_points
+        - reward_out_of_stock
+        - reward_inactive
+        - reservation_already_active
+        - reservation_expired
+
+    # ------------------------------------------------------------ enums de estado
+    QueueStatus:
+      type: string
+      enum: [open, paused, closed]
+    ParticipationStatus:
+      type: string
+      enum: [waiting, called, in_service, completed, cancelled, no_show, interrupted]
+    OrderStatus:
+      type: string
+      description: Estado da comanda (financeiro), independente do estado da participação.
+      enum: [open, pending_review, awaiting_payment, awaiting_confirmation, settled, closed_no_charge]
+    OrderItemStatus:
+      type: string
+      enum: [accepted, performed, not_performed, removed]
+    ClosureReason:
+      type: string
+      enum: [cancelled_by_customer, cancelled_by_owner, cancelled_by_account_deletion, no_show, interruption_zero_total]
+    ChangeRequestStatus:
+      type: string
+      enum: [pending, approved, rejected, voided]
+    PaymentMethod:
+      type: string
+      enum: [pix, cash, card]
+    PixChargeStatus:
+      type: string
+      enum: [creating, pending, unknown, paid, expired, cancelled, failed]
+    ReceiptStatus:
+      type: string
+      enum: [registered, conferred]
+    ReceiptClassification:
+      type: string
+      enum: [principal, excess]
+    RefundStatus:
+      type: string
+      enum: [requested, processing, unknown, under_review, confirmed, failed]
+    FinancialIssueKind:
+      type: string
+      enum: [duplicate_receipt, late_receipt, amount_mismatch, charge_outcome_unresolved, refund_under_review, active_pix_on_method_switch, adjustment_excess]
+    FinancialIssueStatus:
+      type: string
+      enum: [open, resolved]
+    ReservationStatus:
+      type: string
+      enum: [active, delivered, expired, cancelled, delivery_reverted]
+    LedgerEntryKind:
+      type: string
+      enum: [credit, credit_reversal, hold, hold_release, consume, consume_reversal, account_closure]
+    AccountStatus:
+      type: string
+      enum: [pending_verification, active, deletion_processing, deleted]
+    StaffRole:
+      type: string
+      enum: [owner, professional]
+    SessionKind:
+      type: string
+      enum: [customer, staff]
+    ProfessionalStatus:
+      type: string
+      enum: [active, inactive]
+    ServiceStatus:
+      type: string
+      enum: [active, inactive]
+    RewardStatus:
+      type: string
+      enum: [active, inactive]
+    InviteStatus:
+      type: string
+      enum: [pending, accepted, expired, revoked]
+    DeletionStatus:
+      type: string
+      enum: [processing, completed]
+    DeletionBlocker:
+      type: string
+      enum: [service_in_progress, financial_pending, sole_owner, professional_queue_has_participants]
+    AudienceKind:
+      type: string
+      description: Canal/audiência de eventos SSE.
+      enum: [public, visit, account, professional, owner]
+    EventType:
+      type: string
+      enum:
+        - stream.snapshot
+        - stream.session_ended
+        - queue.public.updated
+        - queue.updated
+        - participation.updated
+        - order.updated
+        - change_request.updated
+        - payment.updated
+        - financial_issue.updated
+        - pendencies.updated
+        - loyalty.updated
+        - reward_reservation.updated
+        - deletion_request.updated
+
+    # ------------------------------------------------------------ requisições
+    EmptyRequest:
+      type: object
+      additionalProperties: false
+    TokenRequest:
+      type: object
+      additionalProperties: false
+      required: [token]
+      properties:
+        token: { type: string, minLength: 32, maxLength: 128 }
+    EmailRequest:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email: { type: string, format: email, maxLength: 254 }
+    RegisterAccountRequest:
+      type: object
+      additionalProperties: false
+      required: [name, email, password]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        email: { type: string, format: email, maxLength: 254 }
+        password: { type: string, minLength: 10, maxLength: 128 }
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password, context]
+      properties:
+        email: { type: string, format: email, maxLength: 254 }
+        password: { type: string, minLength: 1, maxLength: 128 }
+        context: { $ref: '#/components/schemas/SessionKind' }
+    PasswordResetConfirmRequest:
+      type: object
+      additionalProperties: false
+      required: [token, new_password]
+      properties:
+        token: { type: string, minLength: 32, maxLength: 128 }
+        new_password: { type: string, minLength: 10, maxLength: 128 }
+    ChangePasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [current_password, new_password]
+      properties:
+        current_password: { type: string, minLength: 1, maxLength: 128 }
+        new_password: { type: string, minLength: 10, maxLength: 128 }
+    ReauthenticateRequest:
+      type: object
+      additionalProperties: false
+      required: [password]
+      properties:
+        password: { type: string, minLength: 1, maxLength: 128 }
+    AcceptInviteRequest:
+      type: object
+      additionalProperties: false
+      required: [token, password]
+      properties:
+        token: { type: string, minLength: 32, maxLength: 128 }
+        name: { type: string, minLength: 1, maxLength: 80, description: Obrigatório quando cria conta nova. }
+        password: { type: string, minLength: 1, maxLength: 128, description: Nova senha (conta nova) ou senha atual (conta existente). }
+    UpdateProfileRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+    CreateVisitorSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [nick]
+      properties:
+        nick: { $ref: '#/components/schemas/Nick' }
+    RecoverVisitorSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [recovery_code]
+      properties:
+        recovery_code: { type: string, minLength: 16, maxLength: 32, description: 'Formato XXXX-XXXX-XXXX-XXXX (base32 Crockford, 80 bits).' }
+    CreateParticipationRequest:
+      type: object
+      additionalProperties: false
+      required: [queue_id, service_ids]
+      description: Sem preço, total, papel ou identidade — tudo é derivado no servidor.
+      properties:
+        queue_id: { $ref: '#/components/schemas/Id' }
+        service_ids:
+          type: array
+          minItems: 1
+          maxItems: 10
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/Id' }
+    VersionedRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      properties:
+        expected_version: { $ref: '#/components/schemas/Version' }
+    VersionedReasonRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      description: '`reason` obrigatório quando o ator é equipe (validado no servidor).'
+      properties:
+        expected_version: { $ref: '#/components/schemas/Version' }
+        reason: { $ref: '#/components/schemas/Reason' }
+    VersionedReasonRequiredRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version, reason]
+      properties:
+        expected_version: { $ref: '#/components/schemas/Version' }
+        reason: { $ref: '#/components/schemas/Reason' }
+    ReasonRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { $ref: '#/components/schemas/Reason' }
+    TransferRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version, target_queue_id, reason, customer_consent]
+      properties:
+        expected_version: { $ref: '#/components/schemas/Version' }
+        target_queue_id: { $ref: '#/components/schemas/Id' }
+        reason: { $ref: '#/components/schemas/Reason' }
+        customer_consent:
+          type: object
+          additionalProperties: false
+          required: [given, method]
+          properties:
+            given: { type: boolean, const: true }
+            method: { type: string, enum: [in_person_verbal] }
+            note: { type: string, maxLength: 300 }
+    CompleteServiceRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version, order_expected_version, items]
+      properties:
+        expected_version: { $ref: '#/components/schemas/Version' }
+        order_expected_version: { $ref: '#/components/schemas/Version' }
+        items:
+          type: array
+          minItems: 1
+          description: Resultado de cada item aceito. Pelo menos um `performed`. `not_performed` exige `reason`.
+          items:
+            type: object
+            additionalProperties: false
+            required: [item_id, outcome]
+            properties:
+              item_id: { $ref: '#/components/schemas/Id' }
+              outcome: { type: string, enum: [performed, not_performed] }
+              reason: { $ref: '#/components/schemas/Reason' }
+    InterruptServiceRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version, order_expected_version, reason, items]
+      properties:
+        expected_version: { $ref: '#/components/schemas/Version' }
+        order_expected_version: { $ref: '#/components/schemas/Version' }
+        reason: { $ref: '#/components/schemas/Reason' }
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            additionalProperties: false
+            required: [item_id, outcome]
+            properties:
+              item_id: { $ref: '#/components/schemas/Id' }
+              outcome: { type: string, enum: [fully_performed, partially_performed, not_started] }
+    ReplaceOrderItemsRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version, service_ids]
+      properties:
+        expected_version: { $ref: '#/components/schemas/Version' }
+        service_ids:
+          type: array
+          minItems: 1
+          maxItems: 10
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/Id' }
+        reason: { $ref: '#/components/schemas/Reason' }
+    CreateChangeRequestRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      properties:
+        expected_version: { $ref: '#/components/schemas/Version' }
+        add_service_ids:
+          type: array
+          maxItems: 10
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/Id' }
+        remove_item_ids:
+          type: array
+          maxItems: 10
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/Id' }
+    CloseInterruptionRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version, review_note, items]
+      properties:
+        expected_version: { $ref: '#/components/schemas/Version' }
+        review_note: { $ref: '#/components/schemas/Reason' }
+        items:
+          type: array
+          minItems: 1
+          description: Decisão do dono por item; só `fully_performed` é cobrado pelo preço aceito.
+          items:
+            type: object
+            additionalProperties: false
+            required: [item_id, outcome]
+            properties:
+              item_id: { $ref: '#/components/schemas/Id' }
+              outcome: { type: string, enum: [fully_performed, partially_performed, not_started] }
+    AdjustOrderRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version, reason]
+      description: Correção por item; não existe valor livre nem desconto.
+      properties:
+        expected_version: { $ref: '#/components/schemas/Version' }
+        reason: { $ref: '#/components/schemas/Reason' }
+        uncharge_item_ids:
+          type: array
+          uniqueItems: true
+          maxItems: 10
+          items: { $ref: '#/components/schemas/Id' }
+        add_performed_service_ids:
+          type: array
+          uniqueItems: true
+          maxItems: 10
+          description: Serviço feito e não registrado; preço atual do catálogo vira snapshot.
+          items: { $ref: '#/components/schemas/Id' }
+    ChoosePaymentMethodRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version, method]
+      properties:
+        expected_version: { $ref: '#/components/schemas/Version' }
+        method: { $ref: '#/components/schemas/PaymentMethod' }
+        acknowledge_active_pix:
+          type: boolean
+          default: false
+          description: Necessário para sair de Pix com cobrança ativa (gera alerta e tentativa de cancelamento).
+    RegisterReceiptRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version, method, amount_cents]
+      properties:
+        expected_version: { $ref: '#/components/schemas/Version' }
+        method: { type: string, enum: [cash, card] }
+        amount_cents:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Deve ser igual ao valor devido calculado pelo servidor (confirmação, não definição).
+        cash_tendered_cents:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Só dinheiro; troco = entregue − devido. Receita registrada = devido.
+        card_reference:
+          type: string
+          maxLength: 40
+          pattern: '^[A-Za-z0-9-]*$'
+          description: Referência opcional da maquininha, sem dados do cartão.
+    ConfirmRefundRequest:
+      type: object
+      additionalProperties: false
+      required: [evidence_note]
+      properties:
+        evidence_note: { $ref: '#/components/schemas/Reason' }
+        external_reference: { type: string, maxLength: 80 }
+    ResolveIssueRequest:
+      type: object
+      additionalProperties: false
+      required: [resolution_note]
+      properties:
+        resolution_note: { $ref: '#/components/schemas/Reason' }
+    AvailabilitySignalRequest:
+      type: object
+      additionalProperties: false
+      required: [unavailable]
+      properties:
+        unavailable: { type: boolean }
+        note: { type: string, maxLength: 200 }
+    UpdateEstablishmentRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      properties:
+        expected_version: { $ref: '#/components/schemas/Version' }
+        name: { type: string, minLength: 1, maxLength: 80 }
+        slug: { type: string, pattern: '^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])$' }
+        timezone: { type: string, maxLength: 64, description: 'Identificador IANA, ex. America/Sao_Paulo.' }
+    CreateProfessionalRequest:
+      type: object
+      additionalProperties: false
+      required: [display_name, queue_letter]
+      properties:
+        display_name: { type: string, minLength: 1, maxLength: 40 }
+        queue_letter: { type: string, pattern: '^[A-Z]$', description: Prefixo das senhas desta fila. }
+    UpdateProfessionalRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version, display_name]
+      properties:
+        expected_version: { $ref: '#/components/schemas/Version' }
+        display_name: { type: string, minLength: 1, maxLength: 40 }
+    CreateInviteRequest:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email: { type: string, format: email, maxLength: 254 }
+    CreateServiceRequest:
+      type: object
+      additionalProperties: false
+      required: [name, price_cents, duration_minutes, points]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 60 }
+        price_cents: { type: integer, format: int64, minimum: 1, maximum: 10000000 }
+        duration_minutes: { type: integer, minimum: 1, maximum: 480 }
+        points: { type: integer, minimum: 0, maximum: 100000 }
+        professional_ids:
+          type: array
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/Id' }
+    UpdateServiceRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      properties:
+        expected_version: { $ref: '#/components/schemas/Version' }
+        name: { type: string, minLength: 1, maxLength: 60 }
+        price_cents: { type: integer, format: int64, minimum: 1, maximum: 10000000 }
+        duration_minutes: { type: integer, minimum: 1, maximum: 480 }
+        points: { type: integer, minimum: 0, maximum: 100000 }
+    SetServiceProfessionalsRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version, professional_ids]
+      properties:
+        expected_version: { $ref: '#/components/schemas/Version' }
+        professional_ids:
+          type: array
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/Id' }
+    UpdateLoyaltyProgramRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version, enabled]
+      properties:
+        expected_version: { $ref: '#/components/schemas/Version' }
+        enabled: { type: boolean }
+    CreateRewardRequest:
+      type: object
+      additionalProperties: false
+      required: [name, description, usage_instructions, cost_points, stock]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 60 }
+        description: { type: string, minLength: 1, maxLength: 500 }
+        usage_instructions: { type: string, minLength: 1, maxLength: 500 }
+        cost_points: { type: integer, minimum: 1, maximum: 1000000 }
+        stock: { $ref: '#/components/schemas/RewardStockInput' }
+    UpdateRewardRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      properties:
+        expected_version: { $ref: '#/components/schemas/Version' }
+        name: { type: string, minLength: 1, maxLength: 60 }
+        description: { type: string, minLength: 1, maxLength: 500 }
+        usage_instructions: { type: string, minLength: 1, maxLength: 500 }
+        cost_points: { type: integer, minimum: 1, maximum: 1000000 }
+        stock: { $ref: '#/components/schemas/RewardStockInput' }
+    RewardStockInput:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [kind]
+          properties:
+            kind: { type: string, const: unlimited }
+        - type: object
+          additionalProperties: false
+          required: [kind, units_available]
+          properties:
+            kind: { type: string, const: limited }
+            units_available: { type: integer, minimum: 0, maximum: 100000 }
+    CreateReservationRequest:
+      type: object
+      additionalProperties: false
+      required: [reward_id, expected_reward_version]
+      properties:
+        reward_id: { $ref: '#/components/schemas/Id' }
+        expected_reward_version:
+          $ref: '#/components/schemas/Version'
+          description: Garante que o cliente aceitou as condições exibidas.
+    RequestDeletionRequest:
+      type: object
+      additionalProperties: false
+      required: [confirm_effects]
+      properties:
+        confirm_effects: { type: boolean, const: true, description: 'Cliente viu os efeitos (cancelamentos, perda do saldo).' }
+    DeletionStatusRequest:
+      type: object
+      additionalProperties: false
+      required: [protocol]
+      properties:
+        protocol: { type: string, minLength: 16, maxLength: 64 }
+
+    # ------------------------------------------------------------ visões
+    SessionView:
+      type: object
+      required: [account, session, visitors, memberships, csrf_token]
+      properties:
+        account:
+          oneOf:
+            - $ref: '#/components/schemas/AccountView'
+            - type: 'null'
+        session:
+          oneOf:
+            - type: object
+              required: [kind, expires_at, reauth_valid_until]
+              properties:
+                kind: { $ref: '#/components/schemas/SessionKind' }
+                expires_at: { $ref: '#/components/schemas/Timestamp' }
+                reauth_valid_until:
+                  oneOf:
+                    - $ref: '#/components/schemas/Timestamp'
+                    - type: 'null'
+            - type: 'null'
+        visitors:
+          type: array
+          description: Credenciais de visitante ativas neste navegador (uma por loja).
+          items: { $ref: '#/components/schemas/VisitorView' }
+        memberships:
+          type: array
+          description: Vínculos de equipe. Só concedem permissão com sessão de contexto staff.
+          items: { $ref: '#/components/schemas/MembershipView' }
+        csrf_token: { type: [string, 'null'] }
+    AccountView:
+      type: object
+      required: [id, name, email, status]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        name: { type: string }
+        email: { type: string, format: email }
+        status: { $ref: '#/components/schemas/AccountStatus' }
+    MembershipView:
+      type: object
+      required: [establishment_id, establishment_name, role]
+      properties:
+        establishment_id: { $ref: '#/components/schemas/Id' }
+        establishment_name: { type: string }
+        role: { $ref: '#/components/schemas/StaffRole' }
+        professional_id:
+          oneOf:
+            - $ref: '#/components/schemas/Id'
+            - type: 'null'
+    VisitorView:
+      type: object
+      required: [id, establishment_id, nick, expires_at]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        establishment_id: { $ref: '#/components/schemas/Id' }
+        nick: { $ref: '#/components/schemas/Nick' }
+        expires_at: { $ref: '#/components/schemas/Timestamp' }
+    VisitorSessionCreated:
+      type: object
+      required: [visitor, recovery_code, recovery_code_valid_until]
+      properties:
+        visitor: { $ref: '#/components/schemas/VisitorView' }
+        recovery_code: { type: string, description: Exibido uma única vez; não é armazenado em claro. }
+        recovery_code_valid_until: { $ref: '#/components/schemas/Timestamp' }
+    PublicEstablishment:
+      type: object
+      required: [id, slug, name, timezone]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        slug: { type: string }
+        name: { type: string }
+        timezone: { type: string }
+    PublicService:
+      type: object
+      required: [id, name, price, duration_minutes, professional_ids]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        name: { type: string }
+        price: { $ref: '#/components/schemas/Money' }
+        duration_minutes: { type: integer }
+        professional_ids:
+          type: array
+          items: { $ref: '#/components/schemas/Id' }
+    PublicQueue:
+      type: object
+      description: Somente dados públicos. Sem nick, serviços, valores ou contatos.
+      required: [queue_id, professional, status, waiting_count, tickets, estimated_wait, version]
+      properties:
+        queue_id: { $ref: '#/components/schemas/Id' }
+        professional:
+          type: object
+          required: [id, display_name]
+          properties:
+            id: { $ref: '#/components/schemas/Id' }
+            display_name: { type: string }
+        status: { $ref: '#/components/schemas/QueueStatus' }
+        waiting_count: { type: integer, minimum: 0 }
+        tickets:
+          type: array
+          items:
+            type: object
+            required: [ticket_code, status]
+            properties:
+              ticket_code: { type: string }
+              status: { type: string, enum: [waiting, called, in_service] }
+        estimated_wait: { $ref: '#/components/schemas/Estimate' }
+        version: { $ref: '#/components/schemas/Version' }
+    Visit:
+      type: object
+      required: [participation, order]
+      properties:
+        participation: { $ref: '#/components/schemas/Participation' }
+        order: { $ref: '#/components/schemas/Order' }
+    Participation:
+      type: object
+      required: [id, establishment_id, queue_id, professional_id, ticket_code, status, nick, version, order_id, created_at]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        establishment_id: { $ref: '#/components/schemas/Id' }
+        queue_id: { $ref: '#/components/schemas/Id' }
+        professional_id: { $ref: '#/components/schemas/Id' }
+        ticket_code: { type: string }
+        status: { $ref: '#/components/schemas/ParticipationStatus' }
+        position: { type: [integer, 'null'], minimum: 1, description: Só enquanto aguardando. }
+        estimated_wait:
+          oneOf:
+            - $ref: '#/components/schemas/Estimate'
+            - type: 'null'
+        nick: { $ref: '#/components/schemas/Nick' }
+        identity_kind: { type: string, enum: [visitor, account], description: Só para equipe. }
+        loyalty_eligible: { type: boolean, description: Snapshot registrado na entrada. }
+        called_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+        tolerance_ends_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+        started_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+        finished_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+        end_reason: { type: [string, 'null'] }
+        transfers:
+          type: array
+          items:
+            type: object
+            required: [from_queue_id, to_queue_id, at]
+            properties:
+              from_queue_id: { $ref: '#/components/schemas/Id' }
+              to_queue_id: { $ref: '#/components/schemas/Id' }
+              at: { $ref: '#/components/schemas/Timestamp' }
+        version: { $ref: '#/components/schemas/Version' }
+        order_id: { $ref: '#/components/schemas/Id' }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+    Order:
+      type: object
+      required: [id, establishment_id, participation_id, status, version, items, total, payment, created_at]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        establishment_id: { $ref: '#/components/schemas/Id' }
+        participation_id: { $ref: '#/components/schemas/Id' }
+        status: { $ref: '#/components/schemas/OrderStatus' }
+        version: { $ref: '#/components/schemas/Version' }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/OrderItem' }
+        total:
+          $ref: '#/components/schemas/Money'
+          description: Soma dos itens cobráveis da versão atual (calculada no servidor).
+        total_frozen_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+        pending_change_request:
+          oneOf:
+            - $ref: '#/components/schemas/ChangeRequest'
+            - type: 'null'
+        closure_reason:
+          oneOf:
+            - $ref: '#/components/schemas/ClosureReason'
+            - type: 'null'
+        points_expected: { type: [integer, 'null'], minimum: 0, description: Só para o dono da visita com conta elegível. }
+        payment: { $ref: '#/components/schemas/OrderPayment' }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+        closed_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+    OrderItem:
+      type: object
+      required: [id, service_id, name, unit_price, duration_minutes, points, status, charged]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        service_id: { $ref: '#/components/schemas/Id' }
+        name: { type: string, description: Snapshot na inclusão. }
+        unit_price: { $ref: '#/components/schemas/Money' }
+        duration_minutes: { type: integer }
+        points: { type: integer, minimum: 0 }
+        status: { $ref: '#/components/schemas/OrderItemStatus' }
+        charged: { type: boolean, description: Entra no total fechado. }
+        added_at: { $ref: '#/components/schemas/Timestamp' }
+        performed_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+    ChangeRequest:
+      type: object
+      required: [id, status, add, remove_item_ids, created_at]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        status: { $ref: '#/components/schemas/ChangeRequestStatus' }
+        add:
+          type: array
+          items:
+            type: object
+            required: [service_id, name, unit_price]
+            properties:
+              service_id: { $ref: '#/components/schemas/Id' }
+              name: { type: string }
+              unit_price: { $ref: '#/components/schemas/Money' }
+        remove_item_ids:
+          type: array
+          items: { $ref: '#/components/schemas/Id' }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+        decided_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+        decided_by_role: { oneOf: [{ $ref: '#/components/schemas/StaffRole' }, { type: 'null' }] }
+        decision_reason: { type: [string, 'null'] }
+    OrderPayment:
+      type: object
+      required: [method_choice, amounts, verifying, charges, receipts, refunds]
+      properties:
+        method_choice:
+          oneOf:
+            - $ref: '#/components/schemas/PaymentMethod'
+            - type: 'null'
+        amounts:
+          type: object
+          required: [due, received, conferred, refunded, outstanding]
+          properties:
+            due: { $ref: '#/components/schemas/Money' }
+            received: { $ref: '#/components/schemas/Money' }
+            conferred: { $ref: '#/components/schemas/Money' }
+            refunded: { $ref: '#/components/schemas/Money' }
+            outstanding: { $ref: '#/components/schemas/Money' }
+        verifying: { type: boolean, description: Há cobrança com resultado desconhecido; interface mostra "verificando pagamento". }
+        charges:
+          type: array
+          items: { $ref: '#/components/schemas/PixCharge' }
+        receipts:
+          type: array
+          items: { $ref: '#/components/schemas/Receipt' }
+        refunds:
+          type: array
+          items: { $ref: '#/components/schemas/Refund' }
+    PixCharge:
+      type: object
+      required: [id, order_id, status, amount, created_at]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        order_id: { $ref: '#/components/schemas/Id' }
+        status: { $ref: '#/components/schemas/PixChargeStatus' }
+        amount: { $ref: '#/components/schemas/Money' }
+        br_code: { type: [string, 'null'], description: Copia-e-cola; o QR é desenhado no navegador a partir dele. }
+        expires_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+        resolved_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+        cancel_requested_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+    Receipt:
+      type: object
+      required: [id, method, amount, status, classification, registered_at, registered_by]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        method: { $ref: '#/components/schemas/PaymentMethod' }
+        amount: { $ref: '#/components/schemas/Money' }
+        status: { $ref: '#/components/schemas/ReceiptStatus' }
+        classification: { $ref: '#/components/schemas/ReceiptClassification' }
+        pix_charge_id: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        registered_at: { $ref: '#/components/schemas/Timestamp' }
+        registered_by: { type: string, enum: [provider, professional, owner] }
+        conferred_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+        conferred_by_role: { oneOf: [{ $ref: '#/components/schemas/StaffRole' }, { type: 'null' }] }
+        cash_tendered: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }] }
+        change_given: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }] }
+        card_reference: { type: [string, 'null'] }
+        refunded: { $ref: '#/components/schemas/Money' }
+    Refund:
+      type: object
+      required: [id, receipt_id, amount, status, reason, requested_at]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        receipt_id: { $ref: '#/components/schemas/Id' }
+        amount: { $ref: '#/components/schemas/Money' }
+        status: { $ref: '#/components/schemas/RefundStatus' }
+        reason: { type: string }
+        requested_at: { $ref: '#/components/schemas/Timestamp' }
+        resolved_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+        evidence: { type: string, enum: [provider, owner_documented], description: Origem da confirmação. }
+    FinancialIssue:
+      type: object
+      required: [id, order_id, kind, status, created_at]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        order_id: { $ref: '#/components/schemas/Id' }
+        kind: { $ref: '#/components/schemas/FinancialIssueKind' }
+        status: { $ref: '#/components/schemas/FinancialIssueStatus' }
+        amount: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }] }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+        resolved_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+        resolution_note: { type: [string, 'null'] }
+    StaffQueue:
+      type: object
+      required: [queue_id, professional, status, version, unavailable_signal, entries]
+      properties:
+        queue_id: { $ref: '#/components/schemas/Id' }
+        professional:
+          type: object
+          required: [id, display_name, status]
+          properties:
+            id: { $ref: '#/components/schemas/Id' }
+            display_name: { type: string }
+            status: { $ref: '#/components/schemas/ProfessionalStatus' }
+        status: { $ref: '#/components/schemas/QueueStatus' }
+        version: { $ref: '#/components/schemas/Version' }
+        unavailable_signal:
+          type: object
+          required: [active]
+          properties:
+            active: { type: boolean }
+            note: { type: [string, 'null'] }
+            since: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+        entries:
+          type: array
+          description: Aguardando (ordem FIFO), chamado e em atendimento.
+          items:
+            type: object
+            required: [participation_id, order_id, ticket_code, nick, status, service_names, version]
+            properties:
+              participation_id: { $ref: '#/components/schemas/Id' }
+              order_id: { $ref: '#/components/schemas/Id' }
+              ticket_code: { type: string }
+              nick: { $ref: '#/components/schemas/Nick' }
+              status: { $ref: '#/components/schemas/ParticipationStatus' }
+              service_names:
+                type: array
+                items: { type: string }
+              called_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+              tolerance_ends_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+              has_pending_change_request: { type: boolean }
+              version: { $ref: '#/components/schemas/Version' }
+    Establishment:
+      type: object
+      required: [id, name, slug, timezone, version]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        name: { type: string }
+        slug: { type: string }
+        timezone: { type: string }
+        version: { $ref: '#/components/schemas/Version' }
+    Professional:
+      type: object
+      required: [id, display_name, queue_id, queue_letter, status, has_access, version]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        display_name: { type: string }
+        queue_id: { $ref: '#/components/schemas/Id' }
+        queue_letter: { type: string }
+        status: { $ref: '#/components/schemas/ProfessionalStatus' }
+        has_access: { type: boolean, description: Conta vinculada e ativa. }
+        pending_invite:
+          oneOf:
+            - $ref: '#/components/schemas/Invite'
+            - type: 'null'
+        version: { $ref: '#/components/schemas/Version' }
+    Invite:
+      type: object
+      required: [id, professional_id, status, expires_at]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        professional_id: { $ref: '#/components/schemas/Id' }
+        status: { $ref: '#/components/schemas/InviteStatus' }
+        expires_at: { $ref: '#/components/schemas/Timestamp' }
+    Service:
+      type: object
+      required: [id, name, price, duration_minutes, points, status, professional_ids, version]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        name: { type: string }
+        price: { $ref: '#/components/schemas/Money' }
+        duration_minutes: { type: integer }
+        points: { type: integer, minimum: 0 }
+        status: { $ref: '#/components/schemas/ServiceStatus' }
+        professional_ids:
+          type: array
+          items: { $ref: '#/components/schemas/Id' }
+        version: { $ref: '#/components/schemas/Version' }
+    LoyaltyProgram:
+      type: object
+      required: [enabled, version]
+      properties:
+        enabled: { type: boolean }
+        version: { $ref: '#/components/schemas/Version' }
+        updated_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+    Reward:
+      type: object
+      required: [id, name, description, usage_instructions, cost_points, stock, status, version]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        name: { type: string }
+        description: { type: string }
+        usage_instructions: { type: string }
+        cost_points: { type: integer, minimum: 1 }
+        stock:
+          type: object
+          required: [kind]
+          properties:
+            kind: { type: string, enum: [unlimited, limited] }
+            units_available: { type: [integer, 'null'], minimum: 0 }
+        status: { $ref: '#/components/schemas/RewardStatus' }
+        version: { $ref: '#/components/schemas/Version' }
+    RewardReservation:
+      type: object
+      required: [id, reward_id, accepted_terms, status, created_at, expires_at, version]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        reward_id: { $ref: '#/components/schemas/Id' }
+        accepted_terms:
+          type: object
+          description: Condições aceitas no momento da reserva (não mudam com o catálogo).
+          required: [name, description, usage_instructions, cost_points]
+          properties:
+            name: { type: string }
+            description: { type: string }
+            usage_instructions: { type: string }
+            cost_points: { type: integer }
+        status: { $ref: '#/components/schemas/ReservationStatus' }
+        holder_display_name: { type: string, description: Só para equipe (nome da conta). }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+        expires_at: { $ref: '#/components/schemas/Timestamp' }
+        resolved_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+        version: { $ref: '#/components/schemas/Version' }
+    LoyaltySummary:
+      type: object
+      required: [program_enabled, balance, held, available, active_reservation]
+      properties:
+        program_enabled: { type: boolean }
+        balance: { type: integer, description: Pode ser negativo após reversão de pontos já usados. }
+        held: { type: integer, minimum: 0 }
+        available: { type: integer, description: balance − held. }
+        active_reservation:
+          oneOf:
+            - $ref: '#/components/schemas/RewardReservation'
+            - type: 'null'
+    LedgerEntry:
+      type: object
+      required: [id, kind, balance_delta, held_delta, occurred_at, source]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        kind: { $ref: '#/components/schemas/LedgerEntryKind' }
+        balance_delta: { type: integer }
+        held_delta: { type: integer }
+        occurred_at: { $ref: '#/components/schemas/Timestamp' }
+        source:
+          type: object
+          required: [type, id]
+          properties:
+            type: { type: string, enum: [order, reservation, account] }
+            id: { $ref: '#/components/schemas/Id' }
+        note: { type: [string, 'null'] }
+    HistoryEntry:
+      type: object
+      required: [order_id, visited_at, professional_name, items, total, order_status, participation_status, points_credited]
+      properties:
+        order_id: { $ref: '#/components/schemas/Id' }
+        visited_at: { $ref: '#/components/schemas/Timestamp' }
+        professional_name: { type: string }
+        items:
+          type: array
+          items:
+            type: object
+            required: [name, unit_price, charged]
+            properties:
+              name: { type: string }
+              unit_price: { $ref: '#/components/schemas/Money' }
+              charged: { type: boolean }
+        total: { $ref: '#/components/schemas/Money' }
+        order_status: { $ref: '#/components/schemas/OrderStatus' }
+        participation_status: { $ref: '#/components/schemas/ParticipationStatus' }
+        points_credited: { type: integer, minimum: 0 }
+    Pendencies:
+      type: object
+      required: [orders_awaiting_payment, orders_awaiting_confirmation, interruptions_to_review, charges_unknown, open_financial_issues, refunds_under_review, deletion_requests_processing, unavailable_signals]
+      properties:
+        orders_awaiting_payment: { type: integer, minimum: 0 }
+        orders_awaiting_confirmation: { type: integer, minimum: 0 }
+        interruptions_to_review: { type: integer, minimum: 0 }
+        charges_unknown: { type: integer, minimum: 0 }
+        open_financial_issues: { type: integer, minimum: 0 }
+        refunds_under_review: { type: integer, minimum: 0 }
+        deletion_requests_processing: { type: integer, minimum: 0 }
+        unavailable_signals: { type: integer, minimum: 0 }
+    AuditEvent:
+      type: object
+      required: [id, occurred_at, actor, action, target]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        occurred_at: { $ref: '#/components/schemas/Timestamp' }
+        actor:
+          type: object
+          required: [kind]
+          properties:
+            kind: { type: string, enum: [visitor, customer, professional, owner, provider, system, operator] }
+            id: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }], description: Pseudônimo interno; nunca e-mail ou nick. }
+        action: { type: string, description: 'Código da transição, ex.: T-P-02.' }
+        target:
+          type: object
+          required: [type, id]
+          properties:
+            type: { type: string }
+            id: { $ref: '#/components/schemas/Id' }
+        from_state: { type: [string, 'null'] }
+        to_state: { type: [string, 'null'] }
+        reason: { type: [string, 'null'] }
+        request_id: { type: [string, 'null'] }
+    DeletionRequest:
+      type: object
+      required: [protocol, status, blockers, requested_at]
+      properties:
+        protocol: { type: string, description: 'Completo uma única vez ao titular; repetição idempotente e equipe veem só o sufixo.' }
+        status: { $ref: '#/components/schemas/DeletionStatus' }
+        blockers:
+          type: array
+          items: { $ref: '#/components/schemas/DeletionBlocker' }
+        requested_at: { $ref: '#/components/schemas/Timestamp' }
+        completed_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+        target_days: { type: integer, const: 30, description: 'Meta operacional, não prazo legal.' }
+
+    # ------------------------------------------------------------ eventos SSE
+    EventEnvelope:
+      type: object
+      description: Conteúdo do campo data de cada mensagem SSE.
+      required: [schema_version, event_id, type, occurred_at, establishment_id, audience, resource, data]
+      properties:
+        schema_version: { type: integer, const: 1 }
+        event_id: { $ref: '#/components/schemas/Id' }
+        type: { $ref: '#/components/schemas/EventType' }
+        occurred_at: { $ref: '#/components/schemas/Timestamp' }
+        establishment_id: { $ref: '#/components/schemas/Id' }
+        audience: { $ref: '#/components/schemas/AudienceKind' }
+        resource:
+          type: object
+          required: [type, id, version]
+          properties:
+            type: { type: string, enum: [queue, participation, order, change_request, financial_issue, establishment, loyalty_account, reward_reservation, deletion_request, stream] }
+            id: { $ref: '#/components/schemas/Id' }
+            version: { type: integer, minimum: 0, description: Aplicar só se maior que a versão conhecida. }
+        data:
+          type: object
+          description: Visão completa do recurso para esta audiência (mesmo esquema do GET correspondente).
+    StreamSnapshot:
+      type: object
+      description: Dados de stream.snapshot.
+      required: [reason, granted_channels, denied_channels]
+      properties:
+        reason: { type: string, enum: [initial, cursor_expired, cursor_invalid, epoch_changed] }
+        granted_channels:
+          type: array
+          items: { $ref: '#/components/schemas/AudienceKind' }
+        denied_channels:
+          type: array
+          items: { $ref: '#/components/schemas/AudienceKind' }
+        public_queues:
+          type: array
+          items: { $ref: '#/components/schemas/PublicQueue' }
+        visit:
+          oneOf:
+            - $ref: '#/components/schemas/Visit'
+            - type: 'null'
+        staff_queues:
+          type: array
+          items: { $ref: '#/components/schemas/StaffQueue' }
+        pendencies:
+          oneOf:
+            - $ref: '#/components/schemas/Pendencies'
+            - type: 'null'
+        loyalty:
+          oneOf:
+            - $ref: '#/components/schemas/LoyaltySummary'
+            - type: 'null'

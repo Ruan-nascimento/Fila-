@@ -1,0 +1,10 @@
+# Exceções justificadas do lint (Redocly). Revisar se o contrato mudar.
+openapi.yaml:
+  # Liveness/readiness não têm respostas 4xx significativas.
+  operation-4xx-response:
+    - '#/paths/~1healthz~1live/get/responses'
+    - '#/paths/~1healthz~1ready/get/responses'
+  # Esquemas usados pelo fluxo SSE (x-event-schema); OpenAPI 3.1 não descreve itens de text/event-stream.
+  no-unused-components:
+    - '#/components/schemas/EventEnvelope'
+    - '#/components/schemas/StreamSnapshot'

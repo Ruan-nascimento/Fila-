@@ -1,0 +1,10 @@
+# Fins de linha LF no repositório (evita diferenças falsas entre Windows e Linux/CI).
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.png binary
+*.ico binary
+
+# Arquivos gerados: marcados para revisão de código e estatísticas.
+backend/internal/contrato/types.gen.go linguist-generated=true
+frontend/src/api/schema.gen.ts linguist-generated=true
+frontend/package-lock.json linguist-generated=true

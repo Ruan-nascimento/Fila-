@@ -1,0 +1,6 @@
+# Configuração do gerador de tipos Go (oapi-codegen). Só modelos nesta etapa;
+# os servidores de cada rota serão gerados quando as rotas forem implementadas.
+package: contrato
+output: types.gen.go
+generate:
+  models: true
