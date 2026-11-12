@@ -64,6 +64,8 @@ type Service struct {
 	idem    *idempotency.Runner
 	log     *slog.Logger
 	cfg     Config
+	// activeVisit é nil até existirem fila e comanda (etapas 04/05).
+	activeVisit ActiveVisitFunc
 }
 
 // Deps são as dependências do serviço.
@@ -74,6 +76,8 @@ type Deps struct {
 	Hasher *Hasher
 	Log    *slog.Logger
 	Config Config
+	// ActiveVisit (opcional) informa se o visitante tem visita ativa ou comanda pendente.
+	ActiveVisit ActiveVisitFunc
 }
 
 // New cria o serviço.
@@ -88,6 +92,8 @@ func New(d Deps) *Service {
 		idem:    idempotency.New(d.Pool, d.Clock, d.Log),
 		log:     d.Log,
 		cfg:     d.Config,
+
+		activeVisit: d.ActiveVisit,
 	}
 }
 
@@ -225,6 +231,11 @@ func (s *Service) resolve(ctx context.Context, r *http.Request) (*Principal, err
 			return nil, err
 		}
 		p.Session = sess
+	}
+	if c, err := r.Cookie(s.visitorCookieName()); err == nil && c.Value != "" && len(c.Value) <= 64 {
+		if err := s.loadVisitors(ctx, s.pool, p, hashToken(c.Value), now); err != nil {
+			return nil, err
+		}
 	}
 	return p, nil
 }

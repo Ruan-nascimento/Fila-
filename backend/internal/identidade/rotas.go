@@ -25,6 +25,9 @@ func (s *Service) Routes() []hs.Route {
 			Grants: []hs.Grant{hs.GrantOwner}, Handler: s.createInvite},
 		{Operation: "revokeInvite", Method: http.MethodPost, Path: "/v1/establishments/{establishmentId}/invites/{inviteId}/revoke",
 			Grants: []hs.Grant{hs.GrantOwner}, Handler: s.revokeInvite},
+		{Operation: "createVisitorSession", Method: http.MethodPost, Path: "/v1/establishments/{establishmentId}/visitor-sessions", Grants: pub, Handler: s.createVisitorSession},
+		{Operation: "recoverVisitorSession", Method: http.MethodPost, Path: "/v1/establishments/{establishmentId}/visitor-sessions/recover", Grants: pub, Handler: s.recoverVisitorSession},
+		{Operation: "endVisitorSession", Method: http.MethodPost, Path: "/v1/visitor-sessions/current/end", Grants: []hs.Grant{{Actor: "visitor", Scope: "self"}}, Handler: s.endVisitorSession},
 		{Operation: "getPublicEstablishmentBySlug", Method: http.MethodGet, Path: "/v1/public/slugs/{slug}", Grants: pub, Handler: s.publicEstablishment},
 	}
 }
