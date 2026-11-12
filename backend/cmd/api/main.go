@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"fila/internal/platform/app"
+	"fila/internal/platform/database"
 	"fila/internal/platform/httpserver"
 )
 
@@ -41,7 +42,7 @@ func run(ctx context.Context, environ []string, stdout, stderr io.Writer, listen
 	}
 
 	health := httpserver.NewHealth(log, 2*time.Second,
-		httpserver.Check{Name: "database", Fn: rt.Pool.Ping},
+		httpserver.Check{Name: "database", Fn: func(ctx context.Context) error { return database.Ping(ctx, rt.Pool) }},
 		httpserver.Check{Name: "migrations", Fn: rt.Migrator.CheckCurrent},
 	)
 	mux := http.NewServeMux()

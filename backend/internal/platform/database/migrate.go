@@ -98,7 +98,7 @@ var ErrSchemaBehind = errors.New("banco sem todas as migrações; rode: go -C ba
 func (m *Migrator) CheckCurrent(ctx context.Context) error {
 	v, err := m.provider.GetDBVersion(ctx)
 	if err != nil {
-		return fmt.Errorf("ler versão do banco: %w", err)
+		return errors.New("ler versão do banco: " + Describe(err))
 	}
 	if v < m.latest {
 		return fmt.Errorf("%w (banco na versão %d, esperado %d)", ErrSchemaBehind, v, m.latest)

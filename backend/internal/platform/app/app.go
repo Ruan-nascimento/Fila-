@@ -71,7 +71,7 @@ func Start(service string, environ []string, stdout, stderr io.Writer) (*Runtime
 func (r *Runtime) CheckDatabase(ctx context.Context, timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	if err := r.Pool.Ping(ctx); err != nil {
+	if err := database.Ping(ctx, r.Pool); err != nil {
 		return fmt.Errorf("banco inacessível: %w", err)
 	}
 	return r.Migrator.CheckCurrent(ctx)

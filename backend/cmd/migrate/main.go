@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"fila/internal/platform/app"
+	"fila/internal/platform/database"
 )
 
 const usage = `uso: migrate <comando>
@@ -46,7 +47,7 @@ func run(ctx context.Context, args, environ []string, stdout, stderr io.Writer) 
 
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-	if err := rt.Pool.Ping(ctx); err != nil {
+	if err := database.Ping(ctx, rt.Pool); err != nil {
 		rt.Log.Error("banco inacessível; confira se o PostgreSQL está rodando e a FILA_DATABASE_URL", "error", err.Error())
 		return app.ExitFailure
 	}
