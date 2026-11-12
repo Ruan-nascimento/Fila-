@@ -4,6 +4,8 @@
 !.env.example
 *.pem
 *.key
+# E-mails capturados em desenvolvimento (contêm links com tokens)
+.correio/
 
 # Binários e saídas de build
 /bin/

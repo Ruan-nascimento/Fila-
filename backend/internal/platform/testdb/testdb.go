@@ -9,6 +9,7 @@ package testdb
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"net/url"
 	"os"
@@ -74,6 +75,31 @@ func New(t testing.TB) string {
 	}
 	parsed.Path = "/" + name
 	return parsed.String()
+}
+
+// Migrated cria um banco temporário, aplica todas as migrações e devolve o pool.
+func Migrated(t testing.TB) *pgxpool.Pool {
+	t.Helper()
+	pool := Pool(t, New(t))
+	m, err := database.NewMigrator(pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	if _, err := m.Up(ctx); err != nil {
+		t.Fatalf("migrar banco de teste: %v", err)
+	}
+	return pool
+}
+
+// SecretKeyVar devolve "FILA_SECRET_KEY=<chave aleatória>" para testes. A chave é gerada a cada
+// chamada: nenhuma chave fica escrita no código.
+func SecretKeyVar() string {
+	b := make([]byte, 32)
+	_, _ = rand.Read(b)
+	return config.VarSecretKey + "=" + base64.RawURLEncoding.EncodeToString(b)
 }
 
 // Pool abre um pool para a URL informada e o fecha no fim do teste.

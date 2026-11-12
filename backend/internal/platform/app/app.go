@@ -45,6 +45,10 @@ func (r *Runtime) Close() {
 // Em erro, escreve a explicação em stderr e devolve o código de saída adequado.
 func Start(service string, environ []string, stdout, stderr io.Writer) (*Runtime, int) {
 	cfg, envFile, err := config.Resolve(environ)
+	if err == nil && service != "migrate" {
+		// Só o migrate dispensa a chave do servidor: ele não lida com sessões, códigos nem e-mails.
+		err = cfg.RequireSecretKey()
+	}
 	if err != nil {
 		fmt.Fprintf(stderr, "%s: %v\n", service, err)
 		return nil, ExitConfigError

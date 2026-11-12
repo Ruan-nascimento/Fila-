@@ -14,7 +14,7 @@ import (
 )
 
 func environ(dbURL string) []string {
-	return []string{"FILA_ENV=test", "FILA_DATABASE_URL=" + dbURL, "FILA_HTTP_ADDR=127.0.0.1:0", "FILA_LOG_FORMAT=json"}
+	return []string{"FILA_ENV=test", "FILA_DATABASE_URL=" + dbURL, "FILA_HTTP_ADDR=127.0.0.1:0", "FILA_LOG_FORMAT=json", testdb.SecretKeyVar()}
 }
 
 func TestInvalidConfigFailsClearly(t *testing.T) {

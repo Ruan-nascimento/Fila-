@@ -35,8 +35,16 @@ Todos os comandos abaixo são para o **PowerShell**, executados **na pasta raiz 
 Copy-Item .env.example .env
 ```
 
-Abra o `.env` num editor e troque `troque-esta-senha-local` por uma senha sua, **nas duas linhas** (`POSTGRES_PASSWORD` e dentro de `FILA_DATABASE_URL`).
-O `.env` fica só no seu computador: o Git o ignora. Nunca coloque senhas reais no `.env.example`.
+Abra o `.env` num editor e troque `troque-esta-senha-local` por uma senha sua, **nas duas linhas** (`POSTGRES_PASSWORD` e dentro de `FILA_DATABASE_URL`, mantendo o `fila:` antes dela: `postgres://fila:SUA-SENHA@...`).
+Use na senha só letras, números, `-` e `_` (símbolos como `@ : / # %` quebram a URL).
+
+Depois gere a chave secreta do servidor e cole o resultado em `FILA_SECRET_KEY=` no `.env`:
+
+```powershell
+go -C backend run ./cmd/fila-admin gerar-chave
+```
+
+O `.env` fica só no seu computador: o Git o ignora. Nunca coloque senhas ou chaves reais no `.env.example`.
 
 ## 3A. Subir o banco com Docker (recomendado)
 

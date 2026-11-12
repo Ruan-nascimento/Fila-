@@ -8,6 +8,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -35,7 +36,39 @@ type Config struct {
 	LogFormat string // "json" ou "text"
 	HTTP      HTTPConfig
 	Database  DatabaseConfig
+	Security  SecurityConfig
+	Mail      MailConfig
 }
+
+// SecurityConfig reúne chave do servidor, origens permitidas e opções de cookie (ADR-0006, ADR-0017).
+type SecurityConfig struct {
+	// SecretKey é a chave mestra (bytes já decodificados). Vazia quando não configurada;
+	// os executáveis que precisam dela chamam RequireSecretKey.
+	SecretKey Secret
+	// AllowedOrigins: origens aceitas no cabeçalho Origin de métodos não seguros.
+	AllowedOrigins []string
+	// PublicBaseURL: origem do frontend, usada nos links enviados por e-mail.
+	PublicBaseURL string
+	// CookieSecure: cookies com Secure e prefixo __Host-. Obrigatório em produção.
+	CookieSecure bool
+	// TrustForwardedFor: usar o último endereço de X-Forwarded-For como IP do cliente
+	// (somente atrás de proxy reverso próprio que sobrescreve o cabeçalho).
+	TrustForwardedFor bool
+}
+
+// MailConfig define como os e-mails são entregues.
+type MailConfig struct {
+	// Mode: "file" grava cada mensagem em arquivo (só desenvolvimento/teste);
+	// "disabled" não envia nada (padrão em produção até haver provedor — limitação externa).
+	Mode string
+	Dir  string
+}
+
+// Modos de entrega de e-mail.
+const (
+	MailFile     = "file"
+	MailDisabled = "disabled"
+)
 
 // HTTPConfig reúne endereço e limites de tempo do servidor HTTP.
 type HTTPConfig struct {
@@ -103,6 +136,13 @@ const (
 	VarDatabaseURL       = "FILA_DATABASE_URL"
 	VarDBMaxConns        = "FILA_DB_MAX_CONNS"
 	VarDBConnectTimeout  = "FILA_DB_CONNECT_TIMEOUT"
+	VarSecretKey         = "FILA_SECRET_KEY"
+	VarAllowedOrigins    = "FILA_ALLOWED_ORIGINS"
+	VarPublicBaseURL     = "FILA_PUBLIC_BASE_URL"
+	VarCookieSecure      = "FILA_COOKIE_SECURE"
+	VarTrustForwardedFor = "FILA_TRUST_X_FORWARDED_FOR"
+	VarMailMode          = "FILA_MAIL_MODE"
+	VarMailDir           = "FILA_MAIL_DIR"
 	// VarTestDatabaseURL é lida só pelos testes de integração; aceita aqui para não ser "desconhecida".
 	VarTestDatabaseURL = "FILA_TEST_DATABASE_URL"
 	VarRequireDBTests  = "FILA_REQUIRE_DB_TESTS"
@@ -115,7 +155,12 @@ var knownVars = map[string]bool{
 	VarReadHeaderTimeout: true, VarReadTimeout: true, VarWriteTimeout: true, VarIdleTimeout: true,
 	VarShutdownTimeout: true, VarDatabaseURL: true, VarDBMaxConns: true, VarDBConnectTimeout: true,
 	VarTestDatabaseURL: true, VarRequireDBTests: true, VarAPIProxyTarget: true,
+	VarSecretKey: true, VarAllowedOrigins: true, VarPublicBaseURL: true, VarCookieSecure: true,
+	VarTrustForwardedFor: true, VarMailMode: true, VarMailDir: true,
 }
+
+// Origens padrão fora de produção: o servidor de desenvolvimento do Vite.
+var devOrigins = []string{"http://127.0.0.1:5173", "http://localhost:5173"}
 
 // placeholderMarkers identifica senhas de exemplo copiadas do .env.example.
 var placeholderMarkers = []string{"troque", "change-me", "changeme"}
@@ -142,6 +187,28 @@ func Load(environ []string) (*Config, error) {
 		MaxConns:       int32(l.intRange(VarDBMaxConns, 10, 1, 200)),
 		ConnectTimeout: l.duration(VarDBConnectTimeout, 5*time.Second, time.Second, time.Minute),
 	}
+	prod := cfg.Env == EnvProduction
+	cfg.Security = SecurityConfig{
+		SecretKey:         l.secretKey(),
+		AllowedOrigins:    l.origins(prod),
+		PublicBaseURL:     l.publicBaseURL(prod),
+		CookieSecure:      l.boolean(VarCookieSecure, prod),
+		TrustForwardedFor: l.boolean(VarTrustForwardedFor, false),
+	}
+	if prod && !cfg.Security.CookieSecure {
+		l.fail(VarCookieSecure, "em produção os cookies precisam ser Secure (use true ou remova a variável)")
+	}
+	mailDefault := MailFile
+	if prod {
+		mailDefault = MailDisabled
+	}
+	cfg.Mail = MailConfig{
+		Mode: l.oneOf(VarMailMode, mailDefault, MailFile, MailDisabled),
+		Dir:  l.text(VarMailDir, ".correio"),
+	}
+	if prod && cfg.Mail.Mode == MailFile {
+		l.fail(VarMailMode, "o modo file (arquivos locais) é só para desenvolvimento; em produção use disabled até configurar um provedor")
+	}
 	l.unknownVars()
 
 	if len(l.problems) > 0 {
@@ -149,6 +216,16 @@ func Load(environ []string) (*Config, error) {
 		return nil, &ValidationError{Problems: l.problems}
 	}
 	return cfg, nil
+}
+
+// RequireSecretKey falha (com ValidationError) quando FILA_SECRET_KEY não foi definida.
+// Usado pelos executáveis que protegem sessões, códigos e e-mails (api, worker, fila-admin).
+func (c *Config) RequireSecretKey() error {
+	if c.Security.SecretKey == "" {
+		return &ValidationError{Problems: []Problem{{Var: VarSecretKey,
+			Message: "obrigatória; gere uma com: go -C backend run ./cmd/fila-admin gerar-chave"}}}
+	}
+	return nil
 }
 
 // IsValidationError informa se err é erro de configuração (útil para escolher o código de saída).
@@ -292,6 +369,105 @@ func (l *loader) databaseURL(env Environment) Secret {
 		}
 	}
 	return Secret(val)
+}
+
+func (l *loader) text(v, def string) string {
+	if val, ok := l.get(v); ok {
+		return val
+	}
+	return def
+}
+
+func (l *loader) boolean(v string, def bool) bool {
+	val, ok := l.get(v)
+	if !ok {
+		return def
+	}
+	switch strings.ToLower(val) {
+	case "true", "1", "sim":
+		return true
+	case "false", "0", "nao", "não":
+		return false
+	}
+	l.fail(v, "use true ou false")
+	return def
+}
+
+func (l *loader) secretKey() Secret {
+	val, ok := l.get(VarSecretKey)
+	if !ok {
+		return ""
+	}
+	raw, err := decodeBase64(val)
+	if err != nil {
+		l.fail(VarSecretKey, "deve estar em base64 (gere com: go -C backend run ./cmd/fila-admin gerar-chave)")
+		return ""
+	}
+	if len(raw) < 32 {
+		l.fail(VarSecretKey, "curta demais: são necessários pelo menos 32 bytes aleatórios")
+		return ""
+	}
+	return Secret(raw)
+}
+
+func decodeBase64(s string) ([]byte, error) {
+	s = strings.TrimRight(s, "=")
+	if b, err := base64.RawURLEncoding.DecodeString(s); err == nil {
+		return b, nil
+	}
+	return base64.RawStdEncoding.DecodeString(s)
+}
+
+// origin valida "esquema://host[:porta]" sem caminho. Em produção exige https.
+func (l *loader) origin(v, val string, prod bool) (string, bool) {
+	u, err := url.Parse(val)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" ||
+		(u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" || u.User != nil {
+		l.fail(v, `cada origem deve ter o formato "https://dominio" (sem caminho no final)`)
+		return "", false
+	}
+	if prod && u.Scheme != "https" {
+		l.fail(v, "em produção use https")
+		return "", false
+	}
+	return u.Scheme + "://" + strings.ToLower(u.Host), true
+}
+
+func (l *loader) origins(prod bool) []string {
+	val, ok := l.get(VarAllowedOrigins)
+	if !ok {
+		if prod {
+			l.fail(VarAllowedOrigins, "obrigatória em produção (ex.: https://fila.exemplo.com.br)")
+			return nil
+		}
+		return append([]string(nil), devOrigins...)
+	}
+	var out []string
+	for _, part := range strings.Split(val, ",") {
+		if part = strings.TrimSpace(part); part == "" {
+			continue
+		}
+		if o, ok := l.origin(VarAllowedOrigins, part, prod); ok {
+			out = append(out, o)
+		}
+	}
+	if len(out) == 0 {
+		l.fail(VarAllowedOrigins, "informe pelo menos uma origem")
+	}
+	return out
+}
+
+func (l *loader) publicBaseURL(prod bool) string {
+	val, ok := l.get(VarPublicBaseURL)
+	if !ok {
+		if prod {
+			l.fail(VarPublicBaseURL, "obrigatória em produção (endereço público do site, usado nos links de e-mail)")
+			return ""
+		}
+		return devOrigins[0]
+	}
+	o, _ := l.origin(VarPublicBaseURL, val, prod)
+	return o
 }
 
 func (l *loader) unknownVars() {

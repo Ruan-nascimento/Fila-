@@ -79,8 +79,21 @@ func TestConcurrentMigrationsAreSerialized(t *testing.T) {
 			t.Fatalf("instância %d falhou: %v", i, err)
 		}
 	}
-	if total := len(applied[0]) + len(applied[1]); total != 1 {
-		t.Fatalf("cada migração deve ser aplicada exatamente uma vez; aplicadas: %v", applied)
+	seen := map[int64]int{}
+	for _, list := range applied {
+		for _, v := range list {
+			seen[v]++
+		}
+	}
+	m, err := database.NewMigrator(testdb.Pool(t, dbURL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+	for v := int64(1); v <= m.LatestVersion(); v++ {
+		if seen[v] != 1 {
+			t.Fatalf("cada migração deve ser aplicada exatamente uma vez; aplicadas: %v", applied)
+		}
 	}
 }
 

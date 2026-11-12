@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -93,9 +94,67 @@ func TestProductionRequiresTLSAndRealPassword(t *testing.T) {
 		}
 	}
 	cfg, err := Load([]string{"FILA_ENV=production",
-		"FILA_DATABASE_URL=postgres://fila:Xk29-forte@db.interno:5432/fila?sslmode=verify-full"})
+		"FILA_DATABASE_URL=postgres://fila:Xk29-forte@db.interno:5432/fila?sslmode=verify-full",
+		"FILA_ALLOWED_ORIGINS=https://fila.exemplo.com.br", "FILA_PUBLIC_BASE_URL=https://fila.exemplo.com.br"})
 	if err != nil || cfg.Env != EnvProduction {
 		t.Fatalf("produção válida falhou: %v", err)
+	}
+	if !cfg.Security.CookieSecure || cfg.Mail.Mode != MailDisabled {
+		t.Fatalf("produção deve usar cookie Secure e e-mail desativado por padrão: %+v %+v", cfg.Security, cfg.Mail)
+	}
+}
+
+func TestProductionSecurityRules(t *testing.T) {
+	_, err := Load([]string{"FILA_ENV=production",
+		"FILA_DATABASE_URL=postgres://fila:Xk29-forte@db.interno:5432/fila?sslmode=verify-full",
+		"FILA_ALLOWED_ORIGINS=http://fila.exemplo.com.br", "FILA_COOKIE_SECURE=false", "FILA_MAIL_MODE=file"})
+	for _, v := range []string{VarAllowedOrigins, VarPublicBaseURL, VarCookieSecure, VarMailMode} {
+		if err == nil || !strings.Contains(err.Error(), v) {
+			t.Errorf("esperava erro em %s: %v", v, err)
+		}
+	}
+}
+
+func TestSecurityDefaultsAndSecretKey(t *testing.T) {
+	cfg, err := Load(valid())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Security.CookieSecure || cfg.Mail.Mode != MailFile || len(cfg.Security.AllowedOrigins) != 2 ||
+		cfg.Security.PublicBaseURL != "http://127.0.0.1:5173" || cfg.Security.SecretKey != "" {
+		t.Fatalf("padrões de desenvolvimento inesperados: %+v %+v", cfg.Security, cfg.Mail)
+	}
+	if err := cfg.RequireSecretKey(); err == nil || !strings.Contains(err.Error(), VarSecretKey) {
+		t.Fatalf("chave ausente deveria ser exigida: %v", err)
+	}
+
+	raw := make([]byte, 32)
+	for i := range raw {
+		raw[i] = byte(i)
+	}
+	key := base64.RawURLEncoding.EncodeToString(raw)
+	cfg, err = Load(valid("FILA_SECRET_KEY="+key, "FILA_ALLOWED_ORIGINS=http://localhost:5173/, https://a.b"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Security.SecretKey.Reveal()) != 32 || cfg.Security.SecretKey.Reveal()[31] != 31 {
+		t.Fatal("chave decodificada incorretamente")
+	}
+	if strings.Join(cfg.Security.AllowedOrigins, " ") != "http://localhost:5173 https://a.b" {
+		t.Fatalf("origens normalizadas incorretamente: %v", cfg.Security.AllowedOrigins)
+	}
+	if err := cfg.RequireSecretKey(); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = Load(valid("FILA_SECRET_KEY=curta", "FILA_ALLOWED_ORIGINS=https://a.b/caminho", "FILA_COOKIE_SECURE=talvez"))
+	for _, v := range []string{VarSecretKey, VarAllowedOrigins, VarCookieSecure} {
+		if err == nil || !strings.Contains(err.Error(), v) {
+			t.Errorf("esperava erro em %s: %v", v, err)
+		}
+	}
+	if err != nil && strings.Contains(err.Error(), "curta=") {
+		t.Fatal("valor não pode aparecer")
 	}
 }
 
