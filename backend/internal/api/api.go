@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"fila/internal/catalogo"
 	"fila/internal/estabelecimento"
 	"fila/internal/identidade"
 	"fila/internal/platform/clock"
@@ -64,10 +65,12 @@ func New(d Deps, register func(mux *http.ServeMux)) (*API, error) {
 
 	est := estabelecimento.New(estabelecimento.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Auth: ident,
 		Occupancy: d.Occupancy, PendingInvites: ident.PendingInvites, AccessRevoked: ident.AccessRevoked})
+	cat := catalogo.New(catalogo.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Auth: ident})
 
 	a := &API{Identity: ident, mux: http.NewServeMux()}
 	a.routes = append(a.routes, ident.Routes()...)
 	a.routes = append(a.routes, est.Routes()...)
+	a.routes = append(a.routes, cat.Routes()...)
 	hs.Mount(a.mux, d.Log, a.routes)
 	if register != nil {
 		register(a.mux)
