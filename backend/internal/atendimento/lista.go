@@ -85,7 +85,8 @@ func (s *Service) listOrders(w http.ResponseWriter, r *http.Request) error {
 	q := r.URL.Query()
 	var fe []hs.FieldError
 	var statuses []string
-	if raw := q.Get("status"); raw != "" {
+	// status aceita "a,b" (style form, explode false, como no contrato) e também status=a&status=b.
+	for _, raw := range q["status"] {
 		for _, st := range strings.Split(raw, ",") {
 			if !slices.Contains(orderStatuses, st) {
 				fe = append(fe, hs.FieldError{Field: "status", Code: hs.FieldNotAllowed})

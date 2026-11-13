@@ -34,6 +34,9 @@ function Reauth({ onDone }: { onDone: () => void }) {
   const [error, setError] = useState<string | null>(null);
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    // Este formulário pode aparecer dentro do formulário da ação; o envio não pode subir até ele
+    // (senão a ação seria enviada duas vezes: aqui, por onDone, e pelo formulário de fora).
+    e.stopPropagation();
     setBusy(true);
     const out = await call(() => api.POST("/v1/auth/reauthenticate", { body: { password } }));
     setBusy(false);

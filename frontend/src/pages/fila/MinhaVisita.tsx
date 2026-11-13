@@ -4,8 +4,10 @@ import { call, problemMessage } from "../../api/problem";
 import type { components } from "../../api/schema.gen";
 import { formatCents } from "../../money";
 import { Notice, Submit } from "../../ui/ui";
+import { ItensDaComanda } from "../comanda/comanda";
 import { useCommand } from "../gestao/comando";
 import { CommandError } from "../gestao/comum";
+import { Pedido } from "./Pedido";
 
 type Visit = components["schemas"]["Visit"];
 type PublicService = components["schemas"]["PublicService"];
@@ -67,7 +69,11 @@ export function MinhaVisita({ shopId }: { shopId: string }) {
 
   if (error) return <Notice kind="erro">{error}</Notice>;
   if (visit === undefined) return <p role="status">Carregando sua visita…</p>;
-  const ativa = visit && ["waiting", "called", "in_service"].includes(visit.participation.status);
+  // Com participação ativa ou comanda ainda pendente, não há nova entrada (R-FILA-02/03).
+  const ocupada =
+    visit &&
+    (["waiting", "called", "in_service"].includes(visit.participation.status) ||
+      ["open", "pending_review", "awaiting_payment"].includes(visit.order.status));
   return (
     <>
       {visit && (
@@ -78,7 +84,7 @@ export function MinhaVisita({ shopId }: { shopId: string }) {
           onReload={reload}
         />
       )}
-      {!ativa && <Entrar shopId={shopId} onEntered={setVisit} />}
+      {!ocupada && <Entrar shopId={shopId} onEntered={setVisit} />}
     </>
   );
 }
@@ -128,14 +134,22 @@ function Acompanhar({
           pode marcar ausência.
         </p>
       )}
-      <p className="muted">
-        Serviços:{" "}
-        {o.items
-          .filter((i) => i.status !== "removed")
-          .map((i) => i.name)
-          .join(", ")}{" "}
-        · total {formatCents(o.total.amount_cents)}
-      </p>
+      <ItensDaComanda order={o} />
+      {o.status === "awaiting_payment" && (
+        <p>
+          <strong>Valor a pagar: {formatCents(o.payment.amounts.due.amount_cents)}</strong>. Combine o
+          pagamento com a equipe da loja.
+        </p>
+      )}
+      {o.status === "pending_review" && (
+        <p>O dono da loja vai revisar o que foi feito. Só serviços feitos por inteiro são cobrados.</p>
+      )}
+      <Pedido
+        shopId={shopId}
+        visit={visit}
+        onOrder={(order) => onChange({ ...visit, order })}
+        onConflict={onReload}
+      />
       <CommandError problem={cmd.problem} offline={cmd.offline} />
       <div className="actions">
         <button type="button" className="button button--secondary" onClick={() => void onReload()}>

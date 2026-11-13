@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { api } from "../../api/client";
 import type { components } from "../../api/schema.gen";
 import { Field, Submit } from "../../ui/ui";
+import { Atendimento } from "./Atendimento";
 import { useCommand } from "./comando";
 import { CommandError, type StaffContext } from "./comum";
 
@@ -33,6 +34,7 @@ export function Entradas({
   onDone: () => Promise<void>;
 }) {
   const cmd = useCommand();
+  const [shown, setShown] = useState<string | null>(null);
   const canOperate = ctx.isOwner || ctx.professionalId === queue.professional.id;
   const busy = queue.entries.some((e) => e.status === "called" || e.status === "in_service");
   const waiting = queue.entries.some((e) => e.status === "waiting");
@@ -96,6 +98,7 @@ export function Entradas({
               <li key={e.participation_id}>
                 <strong>{e.ticket_code}</strong> · {e.nick} · {statusText[e.status] ?? e.status}
                 <span className="muted"> · {e.service_names.join(", ")}</span>
+                {e.has_pending_change_request && <strong> · pedido de alteração aguardando</strong>}
                 {e.status === "called" && e.tolerance_ends_at && (
                   <span className="muted">
                     {" "}
@@ -123,6 +126,18 @@ export function Entradas({
                     </button>
                   </div>
                 )}
+                {canOperate &&
+                  (e.status === "in_service" || shown === e.participation_id ? (
+                    <Atendimento ctx={ctx} entry={e} onDone={onDone} />
+                  ) : (
+                    <button
+                      type="button"
+                      className="link-button"
+                      onClick={() => setShown(e.participation_id)}
+                    >
+                      Ver comanda de {e.ticket_code}
+                    </button>
+                  ))}
                 {ctx.isOwner && (e.status === "waiting" || e.status === "called") && (
                   <DonoAcoes ctx={ctx} entry={e} queue={queue} queues={queues} onDone={onDone} />
                 )}

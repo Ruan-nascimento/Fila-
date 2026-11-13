@@ -1,6 +1,7 @@
 import { Link, NavLink, Navigate, Route, Routes, useParams } from "react-router";
 import { useSession } from "../../session/context";
 import { Notice } from "../../ui/ui";
+import { Comandas } from "./Comandas";
 import type { StaffContext } from "./comum";
 import { Filas } from "./Filas";
 import { LojaConfig } from "./LojaConfig";
@@ -57,6 +58,9 @@ export function GestaoLoja() {
             <NavLink to="filas">Filas</NavLink>
           </li>
           <li>
+            <NavLink to="comandas">Comandas</NavLink>
+          </li>
+          <li>
             <NavLink to="servicos">Serviços</NavLink>
           </li>
           {ctx.isOwner && (
@@ -73,6 +77,7 @@ export function GestaoLoja() {
       </nav>
       <Routes>
         <Route path="filas" element={<Filas ctx={ctx} />} />
+        <Route path="comandas" element={<Comandas ctx={ctx} />} />
         <Route path="servicos" element={<Servicos ctx={ctx} />} />
         <Route
           path="profissionais"

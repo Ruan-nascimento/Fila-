@@ -392,3 +392,31 @@ form,
   border: 2px solid var(--cor-borda);
   border-radius: 6px;
 }
+
+.order__items {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.order__items li,
+.order__total {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  align-items: center;
+}
+
+.order__price {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.order__total {
+  margin: 0;
+  padding-top: 6px;
+  border-top: 1px solid var(--cor-borda);
+}
