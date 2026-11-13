@@ -25,12 +25,13 @@ func TestAccessLogKeepsRouteBehindCopyingMiddleware(t *testing.T) {
 	copying := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mux.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxMarker{}, 1)))
 	})
-	Chain(copying, log).ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/v1/lojas/123?segredo=x", nil))
+	// Valor do caminho que não aparece por acaso num id de requisição (hex) nem num horário.
+	Chain(copying, log).ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/v1/lojas/loja-zqx?segredo=x", nil))
 	out := logs.String()
 	if !strings.Contains(out, `"route":"GET /v1/lojas/{id}"`) {
 		t.Fatalf("rota ausente no log de acesso: %s", out)
 	}
-	if strings.Contains(out, "segredo") || strings.Contains(out, "123") {
+	if strings.Contains(out, "segredo") || strings.Contains(out, "loja-zqx") {
 		t.Fatalf("log com query ou valor do caminho: %s", out)
 	}
 }
