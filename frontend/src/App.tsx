@@ -3,6 +3,7 @@ import { ApiStatus } from "./features/status/ApiStatus";
 import { Cadastro, EsqueciSenha, ReenviarVerificacao } from "./pages/Contas";
 import { Conta } from "./pages/Conta";
 import { Entrar } from "./pages/Entrar";
+import { GestaoInicio, GestaoLoja } from "./pages/gestao/Gestao";
 import { AceitarConvite, RedefinirSenha, VerificarEmail } from "./pages/Links";
 import { Loja } from "./pages/Loja";
 import { useSession } from "./session/context";
@@ -32,6 +33,8 @@ export function App() {
           <Route path="/convite" element={<AceitarConvite />} />
           <Route path="/conta" element={<Conta />} />
           <Route path="/loja/:slug" element={<Loja />} />
+          <Route path="/gestao" element={<GestaoInicio />} />
+          <Route path="/gestao/:estId/*" element={<GestaoLoja />} />
           <Route path="*" element={<NaoEncontrada />} />
         </Routes>
       </main>
@@ -42,9 +45,15 @@ export function App() {
 function Menu() {
   const { state } = useSession();
   const logged = state.status === "ready" && state.session.account !== null;
+  const staff = state.status === "ready" && state.session.session?.kind === "staff";
   return (
     <nav aria-label="Principal">
       <ul className="menu">
+        {staff && (
+          <li>
+            <NavLink to="/gestao">Gestão</NavLink>
+          </li>
+        )}
         {logged ? (
           <li>
             <NavLink to="/conta">Minha conta</NavLink>

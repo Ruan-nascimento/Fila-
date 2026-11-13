@@ -313,3 +313,65 @@ form,
 .status--offline {
   color: var(--cor-erro);
 }
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: var(--espaco);
+  margin: var(--espaco) 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cards .card {
+  margin: 0;
+  max-width: none;
+}
+
+.cards .card h3 {
+  margin: 0;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0 0 var(--espaco);
+  padding: 0;
+  list-style: none;
+  border-bottom: 1px solid var(--cor-borda);
+}
+
+.tabs a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--cor-link);
+}
+
+.tabs a[aria-current="page"] {
+  font-weight: 700;
+  text-decoration-thickness: 3px;
+}
+
+.badge {
+  margin: 0;
+  font-weight: 600;
+}
+
+.link-button {
+  min-height: 44px;
+  padding: 0;
+  font: inherit;
+  color: var(--cor-link);
+  text-decoration: underline;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}

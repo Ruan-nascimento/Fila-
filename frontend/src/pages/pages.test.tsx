@@ -123,6 +123,12 @@ describe("link de verificação de e-mail", () => {
 });
 
 describe("Loja (visitante)", () => {
+  const publicCatalog = {
+    "GET /v1/public/establishments/0190a000-0000-7000-8000-000000000001/services": () =>
+      Response.json({ data: [] }),
+    "GET /v1/public/establishments/0190a000-0000-7000-8000-000000000001/queues": () =>
+      Response.json({ data: [], cursor: null }),
+  };
   const shop = {
     id: "0190a000-0000-7000-8000-000000000001",
     slug: "barbearia-teste",
@@ -147,6 +153,7 @@ describe("Loja (visitante)", () => {
     const { requests } = fakeApi({
       "GET /v1/session": () => Response.json(session),
       "GET /v1/public/slugs/barbearia-teste": () => Response.json({ data: shop }),
+      ...publicCatalog,
       [`POST /v1/establishments/${shop.id}/visitor-sessions`]: () => {
         session = { data: { ...anonymousSession.data, visitors: [created.data.visitor] as never[] } };
         return Response.json(created, { status: 201 });
@@ -168,6 +175,7 @@ describe("Loja (visitante)", () => {
     const { requests } = fakeApi({
       "GET /v1/session": () => Response.json(anonymousSession),
       "GET /v1/public/slugs/barbearia-teste": () => Response.json({ data: shop }),
+      ...publicCatalog,
       [`POST /v1/establishments/${shop.id}/visitor-sessions/recover`]: () =>
         problem(401, "recovery_code_invalid", "Código incorreto, já usado ou vencido."),
     });

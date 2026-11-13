@@ -1,7 +1,7 @@
 # Fila — MVP web para barbearia
 
 Sistema de fila, atendimento, pagamento e fidelidade para barbearia, construído em etapas (veja [REGRAS.md](REGRAS.md)).
-**Situação atual: etapa 02 (identidade, visitantes e acesso).** Já funcionam: conta de cliente com confirmação de e-mail, login de cliente e de equipe, troca e recuperação de senha, convite de profissionais, dono inicial por comando controlado e visitante com código de recuperação. Fila, serviços, comanda e pagamento chegam nas próximas etapas.
+**Situação atual: etapa 03 (estabelecimento, equipe e serviços).** Já funcionam: contas, login de cliente e de equipe, recuperação de senha, convites, dono inicial por comando controlado, visitante com código de recuperação, configuração da loja, profissionais, filas (aberta/pausada/fechada) e catálogo de serviços. Entrada na fila, atendimento e pagamento chegam nas próximas etapas.
 
 | Pasta | O que tem |
 |---|---|
@@ -125,7 +125,8 @@ Telas desta etapa:
 | `/entrar` | Entrar como **Cliente** ou como **Equipe da barbearia** |
 | `/conta` | Ver a conta, trocar a senha e sair |
 | `/esqueci-senha` | Pedir link para criar senha nova (vale 30 minutos) |
-| `/loja/barbearia-teste` | Página da loja (use o `-slug` do passo 5.2): entrar sem conta com um apelido e receber o **código de recuperação**, ou recuperar a visita com o código |
+| `/loja/barbearia-teste` | Página pública da loja (use o `-slug` do passo 5.2): serviços com preço, profissionais e situação das filas; entrar sem conta com um apelido e receber o **código de recuperação**, ou recuperar a visita com o código |
+| `/gestao` | Área da equipe (entre como **Equipe**). Dono: filas (abrir, pausar, fechar), profissionais (cadastrar, convidar, renomear, desativar), serviços (preço, duração, pontos, quem atende) e dados da loja. Profissional: vê a própria fila, avisa indisponibilidade e consulta os serviços |
 | `/verificar-email`, `/redefinir-senha`, `/convite` | Abertos pelos links dos e-mails |
 
 Use sempre o mesmo endereço (`http://127.0.0.1:5173` ou `http://localhost:5173`) durante o uso: cada um tem seus próprios cookies.

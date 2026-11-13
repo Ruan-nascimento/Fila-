@@ -73,6 +73,15 @@ func (m *Migrator) Up(ctx context.Context) ([]int64, error) {
 	return applied, nil
 }
 
+// UpTo aplica as migrações pendentes até a versão informada (inclusive). Usado em testes de
+// compatibilidade: simular um banco de uma etapa anterior com dados e depois atualizar.
+func (m *Migrator) UpTo(ctx context.Context, version int64) error {
+	if _, err := m.provider.UpTo(ctx, version); err != nil {
+		return fmt.Errorf("aplicar migrações até %d: %w", version, err)
+	}
+	return nil
+}
+
 // Status lista todas as migrações e se foram aplicadas.
 func (m *Migrator) Status(ctx context.Context) ([]MigrationStatus, error) {
 	st, err := m.provider.Status(ctx)

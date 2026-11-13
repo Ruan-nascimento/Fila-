@@ -6,6 +6,7 @@ import type { components } from "../api/schema.gen";
 import { useSession } from "../session/context";
 import { Field, Notice, Submit } from "../ui/ui";
 import { useForm } from "../ui/useForm";
+import { formatCents } from "../money";
 
 type PublicEstablishment = components["schemas"]["PublicEstablishment"];
 type VisitorCreated = components["schemas"]["VisitorSessionCreated"];
@@ -41,6 +42,7 @@ export function Loja() {
     <section aria-labelledby="titulo-loja">
       <h2 id="titulo-loja">{shop.name}</h2>
       <Visitante shop={shop} />
+      <CatalogoPublico shopId={shop.id} />
     </section>
   );
 }
@@ -217,5 +219,83 @@ function CodigoUmaVez({ created }: { created: VisitorCreated }) {
         Não compartilhe nem tire foto em local público. Sem o código, a equipe resolve no balcão.
       </p>
     </Notice>
+  );
+}
+
+type PublicService = components["schemas"]["PublicService"];
+type PublicQueue = components["schemas"]["PublicQueue"];
+
+const queueStatus: Record<PublicQueue["status"], string> = {
+  open: "● Aberta",
+  paused: "Ⅱ Pausada",
+  closed: "■ Fechada",
+};
+
+/** Serviços e filas públicos da loja: só nome, preço, duração, profissional e situação da fila. */
+function CatalogoPublico({ shopId }: { shopId: string }) {
+  const [services, setServices] = useState<PublicService[] | null>(null);
+  const [queues, setQueues] = useState<PublicQueue[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    const path = { establishmentId: shopId };
+    void Promise.all([
+      call(() => api.GET("/v1/public/establishments/{establishmentId}/services", { params: { path } })),
+      call(() => api.GET("/v1/public/establishments/{establishmentId}/queues", { params: { path } })),
+    ]).then(([s, q]) => {
+      if (!active) return;
+      if (s.ok) setServices(s.data.data);
+      else setError(problemMessage(s.problem, s.offline));
+      if (q.ok) setQueues(q.data.data);
+    });
+    return () => {
+      active = false;
+    };
+  }, [shopId]);
+
+  if (error) return <Notice kind="erro">{error}</Notice>;
+  if (!services) return <p role="status">Carregando serviços…</p>;
+  const names = new Map(queues.map((q) => [q.professional.id, q.professional.display_name]));
+  return (
+    <>
+      <h3>Profissionais</h3>
+      {queues.length === 0 ? (
+        <p>Nenhum profissional disponível no momento.</p>
+      ) : (
+        <ul className="cards">
+          {queues.map((q) => (
+            <li key={q.queue_id} className="card">
+              <strong>{q.professional.display_name}</strong>
+              <span>{queueStatus[q.status]}</span>
+              <span className="muted">
+                {q.waiting_count} aguardando · espera estimada de {q.estimated_wait.minutes} min (estimativa)
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <h3>Serviços</h3>
+      {services.length === 0 ? (
+        <p>Nenhum serviço disponível no momento.</p>
+      ) : (
+        <ul className="cards">
+          {services.map((s) => (
+            <li key={s.id} className="card">
+              <strong>{s.name}</strong>
+              <span>
+                {formatCents(s.price.amount_cents)} · cerca de {s.duration_minutes} min
+              </span>
+              <span className="muted">
+                Com:{" "}
+                {s.professional_ids
+                  .map((id) => names.get(id))
+                  .filter(Boolean)
+                  .join(", ") || "nenhum profissional no momento"}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
   );
 }
