@@ -72,10 +72,16 @@ func (s *syncBuffer) String() string {
 	return s.b.String()
 }
 
-func newEnv(t *testing.T) *env { t.Helper(); return newEnvWith(t, nil) }
+func newEnv(t *testing.T) *env { t.Helper(); return newEnvDeps(t, nil) }
 
-// newEnvWith permite simular participações nas filas (o módulo fila chega na etapa 04).
+// newEnvWith permite simular participações nas filas (testes da etapa 03).
 func newEnvWith(t *testing.T, occ estabelecimento.Occupancy) *env {
+	t.Helper()
+	return newEnvDeps(t, func(d *api.Deps) { d.Occupancy = occ })
+}
+
+// newEnvDeps permite trocar dependências da API (ex.: cobranças Pix simuladas, etapa 08).
+func newEnvDeps(t *testing.T, change func(*api.Deps)) *env {
 	t.Helper()
 	pool := testdb.Migrated(t)
 	master := make([]byte, 32)
@@ -90,7 +96,11 @@ func newEnvWith(t *testing.T, occ estabelecimento.Occupancy) *env {
 	logs := &syncBuffer{}
 	log := logging.New(logs, slog.LevelDebug, "json")
 	clk := clock.NewFake(time.Date(2026, 11, 12, 12, 0, 0, 0, time.UTC))
-	a, err := api.New(api.Deps{Config: cfg, Pool: pool, Log: log, Clock: clk, PasswordParams: lightParams, Occupancy: occ}, nil)
+	deps := api.Deps{Config: cfg, Pool: pool, Log: log, Clock: clk, PasswordParams: lightParams}
+	if change != nil {
+		change(&deps)
+	}
+	a, err := api.New(deps, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

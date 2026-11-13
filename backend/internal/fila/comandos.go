@@ -90,7 +90,7 @@ func (s *Service) callNext(w http.ResponseWriter, r *http.Request) error {
 			}
 			return idempotency.Result{}, err
 		}
-		return s.finish(ctx, tx, next.EstablishmentID, next.ID, role{staff: actor, isStaff: true}, "T-P-02", Waiting, Called, "", http.StatusOK)
+		return s.finish(ctx, tx, next.EstablishmentID, next.ID, role{staff: actor, isStaff: true}, "T-P-02", Waiting, Called, "", http.StatusOK, queueID)
 	})
 }
 
@@ -202,6 +202,8 @@ func validateBody(body any, who role) error {
 		}
 	case *versionOnly:
 		v.Version("/expected_version", b.ExpectedVersion)
+	case *completeRequest, *interruptRequest:
+		validateClosing(&v, b)
 	case *transferRequest:
 		v.Version("/expected_version", b.ExpectedVersion)
 		v.Required("/target_queue_id", b.TargetQueueID == nil)
@@ -245,7 +247,7 @@ func (s *Service) startService(w http.ResponseWriter, r *http.Request) error {
 				p.ID, now); err != nil {
 				return idempotency.Result{}, err
 			}
-			return s.finish(ctx, tx, p.EstablishmentID, p.ID, who, "T-P-03", Called, InService, "", http.StatusOK)
+			return s.finish(ctx, tx, p.EstablishmentID, p.ID, who, "T-P-03", Called, InService, "", http.StatusOK, p.QueueID)
 		}, func() int64 { return deref(body.ExpectedVersion) }, nil)
 }
 
@@ -318,7 +320,7 @@ func (s *Service) end(ctx context.Context, tx pgx.Tx, p row, who role, to, closu
 			return idempotency.Result{}, err
 		}
 	}
-	return s.finish(ctx, tx, p.EstablishmentID, p.ID, who, action, p.Status, to, reason, http.StatusOK)
+	return s.finish(ctx, tx, p.EstablishmentID, p.ID, who, action, p.Status, to, reason, http.StatusOK, p.QueueID)
 }
 
 type transferRequest struct {
@@ -395,7 +397,10 @@ func (s *Service) transferParticipation(w http.ResponseWriter, r *http.Request) 
 				p.ID, p.QueueID, target, p.TicketCode, code, reason, *body.Consent.Method, note, who.staff.AccountID, now); err != nil {
 				return idempotency.Result{}, err
 			}
-			return s.finish(ctx, tx, p.EstablishmentID, p.ID, who, "T-P-07", Waiting, Waiting, reason, http.StatusOK)
+			if err := atendimento.Reassign(ctx, tx, p.EstablishmentID, p.OrderID, tq.ProfessionalID); err != nil {
+				return idempotency.Result{}, err
+			}
+			return s.finish(ctx, tx, p.EstablishmentID, p.ID, who, "T-P-07", Waiting, Waiting, reason, http.StatusOK, p.QueueID, target)
 		}, func() int64 { return deref(body.ExpectedVersion) }, func() *uuid.UUID { return body.TargetQueueID })
 }
 
@@ -422,8 +427,9 @@ func (s *Service) auditBase(ctx context.Context, p row, who role) auditoria.Even
 	return e
 }
 
-// finish grava a auditoria da transição e devolve a visita atualizada.
-func (s *Service) finish(ctx context.Context, tx pgx.Tx, estID, partID uuid.UUID, who role, action, from, to, reason string, status int) (idempotency.Result, error) {
+// finish grava a auditoria da transição, os eventos da participação e das filas afetadas
+// (outbox, mesma transação) e devolve a visita atualizada.
+func (s *Service) finish(ctx context.Context, tx pgx.Tx, estID, partID uuid.UUID, who role, action, from, to, reason string, status int, queues ...uuid.UUID) (idempotency.Result, error) {
 	p, err := load(ctx, tx, estID, partID, false)
 	if err != nil {
 		return idempotency.Result{}, err
@@ -433,6 +439,14 @@ func (s *Service) finish(ctx context.Context, tx pgx.Tx, estID, partID uuid.UUID
 	e.TargetType, e.TargetID, e.FromState, e.ToState, e.Reason = "participation", partID, from, to, reason
 	if err := auditoria.Record(ctx, tx, e); err != nil {
 		return idempotency.Result{}, err
+	}
+	if err := s.recordParticipation(ctx, tx, p); err != nil {
+		return idempotency.Result{}, err
+	}
+	for _, q := range queues {
+		if err := s.QueueChanged(ctx, tx, estID, q); err != nil {
+			return idempotency.Result{}, err
+		}
 	}
 	view, err := s.visit(ctx, tx, p, who.isStaff)
 	if err != nil {

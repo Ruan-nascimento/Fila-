@@ -601,7 +601,7 @@ paths:
         - { actor: customer, scope: visit_owner }
         - { actor: owner, scope: establishment }
       x-transitions: [T-P-04, T-P-05, T-O-05, T-CR-04]
-      x-events: [participation.updated, order.updated, queue.public.updated, queue.updated]
+      x-events: [participation.updated, order.updated, payment.updated, change_request.updated, queue.public.updated, queue.updated]
       parameters:
         - $ref: '#/components/parameters/EstablishmentId'
         - $ref: '#/components/parameters/ParticipationId'
@@ -655,7 +655,7 @@ paths:
       security: [{ accountSession: [], csrfToken: [] }]
       x-authz: [{ actor: professional, scope: own_queue }, { actor: owner, scope: establishment }]
       x-transitions: [T-P-06, T-O-05, T-CR-04]
-      x-events: [participation.updated, order.updated, queue.public.updated, queue.updated]
+      x-events: [participation.updated, order.updated, payment.updated, change_request.updated, queue.public.updated, queue.updated]
       parameters:
         - $ref: '#/components/parameters/EstablishmentId'
         - $ref: '#/components/parameters/ParticipationId'
@@ -736,7 +736,7 @@ paths:
       security: [{ accountSession: [], csrfToken: [] }]
       x-authz: [{ actor: professional, scope: own_queue }, { actor: owner, scope: establishment }]
       x-transitions: [T-P-09, T-O-06, T-CR-04]
-      x-events: [participation.updated, order.updated, queue.public.updated, queue.updated, pendencies.updated]
+      x-events: [participation.updated, order.updated, change_request.updated, queue.public.updated, queue.updated, pendencies.updated]
       parameters:
         - $ref: '#/components/parameters/EstablishmentId'
         - $ref: '#/components/parameters/ParticipationId'
@@ -1044,7 +1044,7 @@ paths:
       security: [{ visitorSession: [], csrfToken: [] }, { accountSession: [], csrfToken: [] }]
       x-authz: [{ actor: visitor, scope: visit_owner }, { actor: customer, scope: visit_owner }]
       x-transitions: [T-CR-01]
-      x-events: [change_request.updated, order.updated]
+      x-events: [change_request.updated, order.updated, queue.updated, queue.public.updated]
       parameters:
         - $ref: '#/components/parameters/EstablishmentId'
         - $ref: '#/components/parameters/OrderId'
@@ -1071,7 +1071,7 @@ paths:
       security: [{ accountSession: [], csrfToken: [] }]
       x-authz: [{ actor: professional, scope: own_attendance }, { actor: owner, scope: establishment }]
       x-transitions: [T-CR-02]
-      x-events: [change_request.updated, order.updated, queue.updated]
+      x-events: [change_request.updated, order.updated, queue.updated, queue.public.updated]
       parameters:
         - $ref: '#/components/parameters/EstablishmentId'
         - $ref: '#/components/parameters/OrderId'
@@ -1099,7 +1099,7 @@ paths:
       security: [{ accountSession: [], csrfToken: [] }]
       x-authz: [{ actor: professional, scope: own_attendance }, { actor: owner, scope: establishment }]
       x-transitions: [T-CR-03]
-      x-events: [change_request.updated, order.updated]
+      x-events: [change_request.updated, order.updated, queue.updated, queue.public.updated]
       parameters:
         - $ref: '#/components/parameters/EstablishmentId'
         - $ref: '#/components/parameters/OrderId'
@@ -3007,7 +3007,7 @@ components:
       enum: [accepted, performed, not_performed, removed]
     ClosureReason:
       type: string
-      enum: [cancelled_by_customer, cancelled_by_owner, cancelled_by_account_deletion, no_show, interruption_zero_total]
+      enum: [cancelled_by_customer, cancelled_by_owner, cancelled_by_account_deletion, no_show, interruption_zero_total, adjustment_zero_total]
     ChangeRequestStatus:
       type: string
       enum: [pending, approved, rejected, voided]
@@ -3669,10 +3669,22 @@ components:
           oneOf:
             - $ref: '#/components/schemas/ChangeRequest'
             - type: 'null'
+        change_requests:
+          type: array
+          description: Todas as solicitações da comanda, em ordem de criação (o cliente vê a decisão e o motivo).
+          items: { $ref: '#/components/schemas/ChangeRequest' }
         closure_reason:
           oneOf:
             - $ref: '#/components/schemas/ClosureReason'
             - type: 'null'
+        interrupted_at:
+          oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }]
+          description: Atendimento interrompido (T-O-06); comanda interrompida nunca gera pontos.
+        review_note: { type: [string, 'null'], description: Nota do dono ao revisar a interrupção (T-O-07/08). }
+        adjustments:
+          type: array
+          description: Correções do dono depois de fechado o valor (T-O-11), em ordem.
+          items: { $ref: '#/components/schemas/OrderAdjustment' }
         points_expected: { type: [integer, 'null'], minimum: 0, description: Só para o dono da visita com conta elegível. }
         payment: { $ref: '#/components/schemas/OrderPayment' }
         created_at: { $ref: '#/components/schemas/Timestamp' }
@@ -3691,6 +3703,22 @@ components:
         charged: { type: boolean, description: Entra no total fechado. }
         added_at: { $ref: '#/components/schemas/Timestamp' }
         performed_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+        reported_outcome:
+          type: [string, 'null']
+          enum: [fully_performed, partially_performed, not_started, null]
+          description: O que o profissional informou na interrupção (a decisão final é do dono).
+        outcome_reason: { type: [string, 'null'], description: Motivo informado quando o serviço não foi realizado. }
+    OrderAdjustment:
+      type: object
+      required: [id, reason, previous_total, new_total, uncharged_item_ids, added_item_ids, at]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        reason: { type: string }
+        previous_total: { $ref: '#/components/schemas/Money' }
+        new_total: { $ref: '#/components/schemas/Money' }
+        uncharged_item_ids: { type: array, items: { $ref: '#/components/schemas/Id' } }
+        added_item_ids: { type: array, items: { $ref: '#/components/schemas/Id' } }
+        at: { $ref: '#/components/schemas/Timestamp' }
     ChangeRequest:
       type: object
       required: [id, status, add, remove_item_ids, created_at]

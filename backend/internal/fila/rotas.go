@@ -20,6 +20,8 @@ func (s *Service) Routes() []hs.Route {
 		{Operation: "cancelParticipation", Method: http.MethodPost, Path: part + "/cancel",
 			Grants: append(append([]hs.Grant{}, visitOwner...), hs.GrantOwner), Handler: s.cancelParticipation},
 		{Operation: "startService", Method: http.MethodPost, Path: part + "/start", Grants: staff, Handler: s.startService},
+		{Operation: "completeService", Method: http.MethodPost, Path: part + "/complete", Grants: staff, Handler: s.completeService},
+		{Operation: "interruptService", Method: http.MethodPost, Path: part + "/interrupt", Grants: staff, Handler: s.interruptService},
 		{Operation: "markNoShow", Method: http.MethodPost, Path: part + "/no-show", Grants: staff, Handler: s.markNoShow},
 		{Operation: "transferParticipation", Method: http.MethodPost, Path: part + "/transfer", Grants: []hs.Grant{hs.GrantOwner}, Handler: s.transferParticipation},
 		{Operation: "callNext", Method: http.MethodPost, Path: est + "/queues/{queueId}/call-next", Grants: staff, Handler: s.callNext},

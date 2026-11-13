@@ -1598,7 +1598,7 @@ export interface components {
         /** @enum {string} */
         OrderItemStatus: "accepted" | "performed" | "not_performed" | "removed";
         /** @enum {string} */
-        ClosureReason: "cancelled_by_customer" | "cancelled_by_owner" | "cancelled_by_account_deletion" | "no_show" | "interruption_zero_total";
+        ClosureReason: "cancelled_by_customer" | "cancelled_by_owner" | "cancelled_by_account_deletion" | "no_show" | "interruption_zero_total" | "adjustment_zero_total";
         /** @enum {string} */
         ChangeRequestStatus: "pending" | "approved" | "rejected" | "voided";
         /** @enum {string} */
@@ -2007,7 +2007,15 @@ export interface components {
             total: components["schemas"]["Money"];
             total_frozen_at?: components["schemas"]["Timestamp"] | null;
             pending_change_request?: components["schemas"]["ChangeRequest"] | null;
+            /** @description Todas as solicitações da comanda, em ordem de criação (o cliente vê a decisão e o motivo). */
+            change_requests?: components["schemas"]["ChangeRequest"][];
             closure_reason?: components["schemas"]["ClosureReason"] | null;
+            /** @description Atendimento interrompido (T-O-06); comanda interrompida nunca gera pontos. */
+            interrupted_at?: components["schemas"]["Timestamp"] | null;
+            /** @description Nota do dono ao revisar a interrupção (T-O-07/08). */
+            review_note?: string | null;
+            /** @description Correções do dono depois de fechado o valor (T-O-11), em ordem. */
+            adjustments?: components["schemas"]["OrderAdjustment"][];
             /** @description Só para o dono da visita com conta elegível. */
             points_expected?: number | null;
             payment: components["schemas"]["OrderPayment"];
@@ -2027,6 +2035,22 @@ export interface components {
             charged: boolean;
             added_at?: components["schemas"]["Timestamp"];
             performed_at?: components["schemas"]["Timestamp"] | null;
+            /**
+             * @description O que o profissional informou na interrupção (a decisão final é do dono).
+             * @enum {string|null}
+             */
+            reported_outcome?: "fully_performed" | "partially_performed" | "not_started" | null;
+            /** @description Motivo informado quando o serviço não foi realizado. */
+            outcome_reason?: string | null;
+        };
+        OrderAdjustment: {
+            id: components["schemas"]["Id"];
+            reason: string;
+            previous_total: components["schemas"]["Money"];
+            new_total: components["schemas"]["Money"];
+            uncharged_item_ids: components["schemas"]["Id"][];
+            added_item_ids: components["schemas"]["Id"][];
+            at: components["schemas"]["Timestamp"];
         };
         ChangeRequest: {
             id: components["schemas"]["Id"];

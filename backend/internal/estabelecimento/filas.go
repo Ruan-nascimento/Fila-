@@ -361,13 +361,7 @@ func (s *Service) listPublicQueues(w http.ResponseWriter, r *http.Request) error
 			return err
 		}
 		for i := range list {
-			if sn, ok := snaps[list[i].QueueID]; ok {
-				list[i].WaitingCount = sn.WaitingCount
-				if sn.Tickets != nil {
-					list[i].Tickets = sn.Tickets
-				}
-				list[i].EstimatedWait.Minutes = sn.EstimateMinutes
-			}
+			list[i].apply(snaps)
 		}
 	}
 	if list == nil {
@@ -382,14 +376,18 @@ func (s *Service) listPublicQueues(w http.ResponseWriter, r *http.Request) error
 
 // fillEntries preenche as pessoas de cada fila (módulo fila).
 func (s *Service) fillEntries(ctx context.Context, q database.Querier, views []staffQueueView) error {
-	if s.Activity == nil || len(views) == 0 {
+	return fillEntries(ctx, q, s.Activity, views)
+}
+
+func fillEntries(ctx context.Context, q database.Querier, activity QueueActivity, views []staffQueueView) error {
+	if activity == nil || len(views) == 0 {
 		return nil
 	}
 	ids := make([]uuid.UUID, len(views))
 	for i := range views {
 		ids[i] = views[i].QueueID
 	}
-	entries, err := s.Activity.StaffEntries(ctx, q, ids)
+	entries, err := activity.StaffEntries(ctx, q, ids)
 	if err != nil {
 		return err
 	}
@@ -399,4 +397,47 @@ func (s *Service) fillEntries(ctx context.Context, q database.Querier, views []s
 		}
 	}
 	return nil
+}
+
+func (v *publicQueueView) apply(snaps map[uuid.UUID]PublicSnapshot) {
+	if sn, ok := snaps[v.QueueID]; ok {
+		v.WaitingCount = sn.WaitingCount
+		if sn.Tickets != nil {
+			v.Tickets = sn.Tickets
+		}
+		v.EstimatedWait.Minutes = sn.EstimateMinutes
+	}
+}
+
+// QueueViews são as visões de UMA fila usadas nos eventos (outbox): a da equipe (StaffQueue,
+// com nick e serviços) e a pública (PublicQueue, só senhas e estimativa), montada separadamente
+// a partir da projeção pública — nunca da visão da equipe com campos apagados.
+type QueueViews struct {
+	Staff          any
+	Public         any
+	Version        int64
+	ProfessionalID uuid.UUID
+}
+
+// QueueEventViews monta as duas visões da fila queueID desta loja.
+func QueueEventViews(ctx context.Context, q database.Querier, activity QueueActivity, estID, queueID uuid.UUID, now time.Time) (QueueViews, error) {
+	staff, err := loadQueue(ctx, q, estID, queueID, false)
+	if err != nil {
+		return QueueViews{}, err
+	}
+	views := []staffQueueView{staff}
+	if err := fillEntries(ctx, q, activity, views); err != nil {
+		return QueueViews{}, err
+	}
+	pub := publicQueueView{QueueID: staff.QueueID, Status: staff.Status, Version: staff.Version, Tickets: []PublicTicket{},
+		EstimatedWait: estimate{Kind: "estimate", ComputedAt: now}}
+	pub.Professional.ID, pub.Professional.DisplayName = staff.Professional.ID, staff.Professional.DisplayName
+	if activity != nil {
+		snaps, err := activity.PublicSnapshots(ctx, q, []uuid.UUID{queueID}, now)
+		if err != nil {
+			return QueueViews{}, err
+		}
+		pub.apply(snaps)
+	}
+	return QueueViews{Staff: views[0], Public: pub, Version: staff.Version, ProfessionalID: staff.Professional.ID}, nil
 }

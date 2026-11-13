@@ -142,6 +142,7 @@ func (e CloseInterruptionRequestItemsOutcome) Valid() bool {
 
 // Defines values for ClosureReason.
 const (
+	ClosureReasonAdjustmentZeroTotal        ClosureReason = "adjustment_zero_total"
 	ClosureReasonCancelledByAccountDeletion ClosureReason = "cancelled_by_account_deletion"
 	ClosureReasonCancelledByCustomer        ClosureReason = "cancelled_by_customer"
 	ClosureReasonCancelledByOwner           ClosureReason = "cancelled_by_owner"
@@ -152,6 +153,8 @@ const (
 // Valid indicates whether the value is a known member of the ClosureReason enum.
 func (e ClosureReason) Valid() bool {
 	switch e {
+	case ClosureReasonAdjustmentZeroTotal:
+		return true
 	case ClosureReasonCancelledByAccountDeletion:
 		return true
 	case ClosureReasonCancelledByCustomer:
@@ -647,6 +650,30 @@ const (
 func (e MoneyCurrency) Valid() bool {
 	switch e {
 	case BRL:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for OrderItemReportedOutcome.
+const (
+	OrderItemReportedOutcomeFullyPerformed     OrderItemReportedOutcome = "fully_performed"
+	OrderItemReportedOutcomeLessThannil        OrderItemReportedOutcome = "<nil>"
+	OrderItemReportedOutcomeNotStarted         OrderItemReportedOutcome = "not_started"
+	OrderItemReportedOutcomePartiallyPerformed OrderItemReportedOutcome = "partially_performed"
+)
+
+// Valid indicates whether the value is a known member of the OrderItemReportedOutcome enum.
+func (e OrderItemReportedOutcome) Valid() bool {
+	switch e {
+	case OrderItemReportedOutcomeFullyPerformed:
+		return true
+	case OrderItemReportedOutcomeLessThannil:
+		return true
+	case OrderItemReportedOutcomeNotStarted:
+		return true
+	case OrderItemReportedOutcomePartiallyPerformed:
 		return true
 	default:
 		return false
@@ -1701,8 +1728,13 @@ type Nick = string
 
 // Order defines model for Order.
 type Order struct {
-	ClosedAt      *Timestamp     `json:"closed_at,omitempty"`
-	ClosureReason *ClosureReason `json:"closure_reason,omitempty"`
+	// Adjustments Correções do dono depois de fechado o valor (T-O-11), em ordem.
+	Adjustments *[]OrderAdjustment `json:"adjustments,omitempty"`
+
+	// ChangeRequests Todas as solicitações da comanda, em ordem de criação (o cliente vê a decisão e o motivo).
+	ChangeRequests *[]ChangeRequest `json:"change_requests,omitempty"`
+	ClosedAt       *Timestamp       `json:"closed_at,omitempty"`
+	ClosureReason  *ClosureReason   `json:"closure_reason,omitempty"`
 
 	// CreatedAt RFC 3339 em UTC com sufixo Z.
 	CreatedAt Timestamp `json:"created_at"`
@@ -1711,8 +1743,11 @@ type Order struct {
 	EstablishmentId Id `json:"establishment_id"`
 
 	// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
-	Id    Id          `json:"id"`
-	Items []OrderItem `json:"items"`
+	Id Id `json:"id"`
+
+	// InterruptedAt Atendimento interrompido (T-O-06); comanda interrompida nunca gera pontos.
+	InterruptedAt *Timestamp  `json:"interrupted_at,omitempty"`
+	Items         []OrderItem `json:"items"`
 
 	// ParticipationId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
 	ParticipationId      Id             `json:"participation_id"`
@@ -1721,6 +1756,9 @@ type Order struct {
 
 	// PointsExpected Só para o dono da visita com conta elegível.
 	PointsExpected *int `json:"points_expected,omitempty"`
+
+	// ReviewNote Nota do dono ao revisar a interrupção (T-O-07/08).
+	ReviewNote *string `json:"review_note,omitempty"`
 
 	// Status Estado da comanda (financeiro), independente do estado da participação.
 	Status OrderStatus `json:"status"`
@@ -1731,6 +1769,21 @@ type Order struct {
 
 	// Version Versão do agregado; incrementa a cada mudança.
 	Version Version `json:"version"`
+}
+
+// OrderAdjustment defines model for OrderAdjustment.
+type OrderAdjustment struct {
+	AddedItemIds []Id `json:"added_item_ids"`
+
+	// At RFC 3339 em UTC com sufixo Z.
+	At Timestamp `json:"at"`
+
+	// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	Id               Id     `json:"id"`
+	NewTotal         Money  `json:"new_total"`
+	PreviousTotal    Money  `json:"previous_total"`
+	Reason           string `json:"reason"`
+	UnchargedItemIds []Id   `json:"uncharged_item_ids"`
 }
 
 // OrderItem defines model for OrderItem.
@@ -1746,15 +1799,24 @@ type OrderItem struct {
 	Id Id `json:"id"`
 
 	// Name Snapshot na inclusão.
-	Name        string     `json:"name"`
-	PerformedAt *Timestamp `json:"performed_at,omitempty"`
-	Points      int        `json:"points"`
+	Name string `json:"name"`
+
+	// OutcomeReason Motivo informado quando o serviço não foi realizado.
+	OutcomeReason *string    `json:"outcome_reason,omitempty"`
+	PerformedAt   *Timestamp `json:"performed_at,omitempty"`
+	Points        int        `json:"points"`
+
+	// ReportedOutcome O que o profissional informou na interrupção (a decisão final é do dono).
+	ReportedOutcome *OrderItemReportedOutcome `json:"reported_outcome,omitempty"`
 
 	// ServiceId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
 	ServiceId Id              `json:"service_id"`
 	Status    OrderItemStatus `json:"status"`
 	UnitPrice Money           `json:"unit_price"`
 }
+
+// OrderItemReportedOutcome O que o profissional informou na interrupção (a decisão final é do dono).
+type OrderItemReportedOutcome string
 
 // OrderItemStatus defines model for OrderItemStatus.
 type OrderItemStatus string

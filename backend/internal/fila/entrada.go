@@ -154,14 +154,16 @@ func (s *Service) createParticipation(w http.ResponseWriter, r *http.Request) er
 		if id.Kind == acesso.IdentityVisitor {
 			audit.ActorKind = auditoria.ActorVisitor
 		}
+		// Elegibilidade de pontos (R-FID-03): só conta com programa ligado. O programa de pontos
+		// chega na etapa 10 e começa desligado (R-FID-01); até lá ninguém é elegível. O valor é
+		// copiado (snapshot) para a participação e para a comanda.
+		const loyaltyEligible = false
 		if _, err := atendimento.CreateOrder(ctx, tx, atendimento.NewOrder{ID: orderID, EstablishmentID: estID,
-			ParticipationID: partID, Identity: orderIdentity(*id), Services: services, Now: now}, audit); err != nil {
+			ParticipationID: partID, ProfessionalID: qi.ProfessionalID, Identity: orderIdentity(*id),
+			LoyaltyEligible: loyaltyEligible, Services: services, Now: now}, audit); err != nil {
 			return idempotency.Result{}, err
 		}
 		oi := orderIdentity(*id)
-		// Elegibilidade de pontos (R-FID-03): só conta com programa ligado. O programa de pontos
-		// chega na etapa 10 e começa desligado (R-FID-01); até lá ninguém é elegível.
-		const loyaltyEligible = false
 		_, err = tx.Exec(ctx, `
 			INSERT INTO participation (id, establishment_id, queue_id, order_id, account_id, visitor_id, nick, loyalty_eligible,
 			                           position, ticket_day, ticket_number, ticket_code, created_at, updated_at)
@@ -187,6 +189,12 @@ func (s *Service) createParticipation(w http.ResponseWriter, r *http.Request) er
 		}
 		p, err := load(ctx, tx, estID, partID, false)
 		if err != nil {
+			return idempotency.Result{}, err
+		}
+		if err := s.recordParticipation(ctx, tx, p); err != nil {
+			return idempotency.Result{}, err
+		}
+		if err := s.QueueChanged(ctx, tx, estID, qi.ID); err != nil {
 			return idempotency.Result{}, err
 		}
 		view, err := s.visit(ctx, tx, p, false)

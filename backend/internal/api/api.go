@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"fila/internal/atendimento"
 	"fila/internal/catalogo"
 	"fila/internal/estabelecimento"
 	"fila/internal/fila"
@@ -32,6 +33,9 @@ type Deps struct {
 	PasswordParams identidade.PasswordParams
 	// Occupancy substitui a ocupação real das filas (só em testes). nil = módulo fila.
 	Occupancy estabelecimento.Occupancy
+	// Charges informa cobranças Pix ativas/desconhecidas de uma comanda. As cobranças chegam na
+	// etapa 08; até lá nil = nenhuma cobrança (os testes simulam uma para provar o bloqueio).
+	Charges atendimento.ChargeGuard
 }
 
 // API é a aplicação montada.
@@ -76,12 +80,15 @@ func New(d Deps, register func(mux *http.ServeMux)) (*API, error) {
 	est := estabelecimento.New(estabelecimento.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Auth: ident,
 		Occupancy: occ, Activity: fl, PendingInvites: ident.PendingInvites, AccessRevoked: ident.AccessRevoked})
 	cat := catalogo.New(catalogo.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Auth: ident})
+	atd := atendimento.New(atendimento.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Auth: ident, Customers: ident,
+		Visits: fl, Charges: d.Charges, VisitClosed: ident.VisitClosed})
 
 	a := &API{Identity: ident, mux: http.NewServeMux()}
 	a.routes = append(a.routes, ident.Routes()...)
 	a.routes = append(a.routes, est.Routes()...)
 	a.routes = append(a.routes, cat.Routes()...)
 	a.routes = append(a.routes, fl.Routes()...)
+	a.routes = append(a.routes, atd.Routes()...)
 	hs.Mount(a.mux, d.Log, a.routes)
 	if register != nil {
 		register(a.mux)

@@ -79,11 +79,12 @@ var tableOwners = map[string][]string{
 	"estabelecimento":      {"establishment", "professional", "staff_membership", "queue"},
 	"catalogo":             {"service", "service_professional", "service_revision"},
 	"fila":                 {"participation", "participation_transfer", "queue_counter"},
-	"atendimento":          {"service_order", "order_item"},
+	"atendimento":          {"service_order", "order_item", "change_request", "change_request_addition", "order_adjustment"},
 	"auditoria":            {"audit_event"},
 	"platform/ratelimit":   {"rate_limit"},
 	"platform/idempotency": {"idempotency_record"},
 	"platform/mail":        {"mail_outbox"},
+	"platform/outbox":      {"outbox"},
 }
 
 // Pacotes que podem tocar tabelas da plataforma para manutenção técnica.

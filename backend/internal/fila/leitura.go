@@ -122,6 +122,7 @@ func (s *Service) StaffEntries(ctx context.Context, q database.Querier, queueIDs
 			out[qid] = append(out[qid], estabelecimento.StaffEntry{
 				ParticipationID: e.ID, OrderID: e.OrderID, TicketCode: e.TicketCode, Nick: e.Nick, Status: e.Status,
 				ServiceNames: names, CalledAt: e.CalledAt, ToleranceEndsAt: e.ToleranceEndsAt, Version: e.Version,
+				HasPendingChangeRequest: e.summary.HasPendingChangeRequest,
 			})
 		}
 	}

@@ -240,24 +240,23 @@ func TestPendingOrderBlocksEntry(t *testing.T) {
 	b := e.barbearia(t)
 	maria := e.verifiedCustomer("maria@exemplo.com")
 	p, _ := visitOf(maria.mustStatus(maria.enter(b.id, b.filaBeto, b.corte), 201))
-	finish := func(orderStatus string) {
+	finish := func(queue uuid.UUID, orderStatus string) {
 		t.Helper()
-		// Conclusão e pagamento são das etapas 05/09: simulamos o resultado no banco.
-		ctx := context.Background()
-		now := e.clock.Now()
-		if _, err := e.pool.Exec(ctx, `UPDATE participation SET status = 'completed', called_at = $2::timestamptz, tolerance_ends_at = $2::timestamptz + interval '10 minutes',
-			started_at = $2, finished_at = $2 WHERE id = $1`, p["id"], now); err != nil {
-			t.Fatal(err)
+		// Conclusão real (etapa 05): comanda aguardando pagamento com valor fechado.
+		b.owner.serve(b.id, queue, p["id"].(string))
+		if orderStatus == "awaiting_payment" {
+			return
 		}
+		// Recebimento e conferência são das etapas 08/09: simulamos o resultado no banco.
 		closed := "NULL"
 		if orderStatus == "settled" {
 			closed = "now()"
 		}
-		if _, err := e.pool.Exec(ctx, `UPDATE service_order SET status = $2, closed_at = `+closed+` WHERE participation_id = $1`, p["id"], orderStatus); err != nil {
+		if _, err := e.pool.Exec(context.Background(), `UPDATE service_order SET status = $2, closed_at = `+closed+` WHERE participation_id = $1`, p["id"], orderStatus); err != nil {
 			t.Fatal(err)
 		}
 	}
-	finish("awaiting_payment")
+	finish(b.filaBeto, "awaiting_payment")
 	if r := maria.enter(b.id, b.filaBeto, b.corte); r.status != 409 || r.code() != "pending_order_exists" {
 		t.Fatalf("comanda aguardando pagamento: %d %s", r.status, r.raw)
 	}
@@ -268,7 +267,7 @@ func TestPendingOrderBlocksEntry(t *testing.T) {
 	lia := e.verifiedCustomer("lia@exemplo.com")
 	pl, _ := visitOf(lia.mustStatus(lia.enter(b.id, b.filaCaio, b.corte), 201))
 	p = pl
-	finish("awaiting_confirmation")
+	finish(b.filaCaio, "awaiting_confirmation")
 	lia.mustStatus(lia.enter(b.id, b.filaCaio, b.corte), 201)
 	_ = p2
 }
