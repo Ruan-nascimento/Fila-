@@ -124,6 +124,9 @@ func (s *Service) login(w http.ResponseWriter, r *http.Request) error {
 				WHERE id = $1 AND revoked_at IS NULL`, prev.Session.ID, now); err != nil {
 				return err
 			}
+			if err := notifyRevocation(ctx, tx); err != nil {
+				return err
+			}
 		}
 		absolute, idle := now.Add(StaffAbsolute), (*int32)(nil)
 		if kind == KindCustomer {
@@ -176,6 +179,9 @@ func (s *Service) logout(w http.ResponseWriter, r *http.Request) error {
 	err = database.InTx(ctx, s.pool, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, `UPDATE account_session SET revoked_at = $2, revoke_reason = 'logout'
 			WHERE id = $1 AND revoked_at IS NULL`, sess.ID, now); err != nil {
+			return err
+		}
+		if err := notifyRevocation(ctx, tx); err != nil {
 			return err
 		}
 		return auditoria.Record(ctx, tx, auditoria.Event{OccurredAt: now, ActorKind: auditoria.ActorCustomer,

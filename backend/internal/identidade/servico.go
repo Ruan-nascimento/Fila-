@@ -206,6 +206,16 @@ func (s *Service) Middleware(next http.Handler) http.Handler {
 	})
 }
 
+// Refresh relê as sessões dos cookies da requisição (uma conexão SSE aberta reconfere a cada 30 s
+// e a cada aviso de revogação) e devolve uma cópia da requisição com o principal atualizado.
+func (s *Service) Refresh(r *http.Request) (*http.Request, error) {
+	p, err := s.resolve(r.Context(), r)
+	if err != nil {
+		return nil, err
+	}
+	return r.WithContext(context.WithValue(r.Context(), principalKey{}, p)), nil
+}
+
 // csrfToken é um HMAC das sessões presentes: muda quando a pessoa entra, sai ou troca de
 // visitante, e não pode ser calculado por quem não tem a chave do servidor.
 func (s *Service) csrfToken(p *Principal) string {

@@ -57,6 +57,12 @@ func run(ctx context.Context, environ []string, stdout, stderr io.Writer, listen
 		log.Warn("cookies sem Secure (somente desenvolvimento com http://); em produção FILA_COOKIE_SECURE é obrigatório")
 	}
 	srv := httpserver.New(cfg.HTTP, httpserver.Chain(a.Handler(), log), log)
+	// Ao parar, encerra as conexões SSE (senão o desligamento esperaria por elas); os navegadores
+	// reconectam com o cursor e não perdem eventos.
+	srv.RegisterOnShutdown(a.Stream.Shutdown)
+	hubCtx, stopHub := context.WithCancel(ctx)
+	defer stopHub()
+	go a.Run(hubCtx)
 
 	ln, err := net.Listen("tcp", cfg.HTTP.Addr)
 	if err != nil {

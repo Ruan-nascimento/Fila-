@@ -14,6 +14,7 @@ import (
 	"fila/internal/estabelecimento"
 	"fila/internal/platform/database"
 	hs "fila/internal/platform/httpserver"
+	"fila/internal/platform/outbox"
 )
 
 // ---------------------------------------------------------------------------------------------
@@ -299,18 +300,14 @@ func (s *Service) getParticipation(w http.ResponseWriter, r *http.Request) error
 
 // getCurrentVisit: visita da identidade em uso nesta loja (conta, se houver sessão de conta;
 // senão o visitante). Mostra a participação ativa, ou a comanda ainda não encerrada, ou — para
-// visitante — a visita encerrada há menos de 24 horas. cursor nulo até a etapa 06.
+// visitante — a visita encerrada há menos de 24 horas. O cursor é do mesmo instante da leitura.
 func (s *Service) getCurrentVisit(w http.ResponseWriter, r *http.Request) error {
 	estID, err := pathID(r, "establishmentId")
 	if err != nil {
 		return err
 	}
 	account, visitor := s.Customers.CustomerIdentities(r, estID)
-	id := account
-	if id == nil {
-		id = visitor
-	}
-	if id == nil {
+	if account == nil && visitor == nil {
 		return hs.ErrUnauthenticated()
 	}
 	ctx := r.Context()
@@ -320,28 +317,71 @@ func (s *Service) getCurrentVisit(w http.ResponseWriter, r *http.Request) error 
 		return err
 	}
 	var data *visitView
-	col := "account_id"
-	if id.Kind == acesso.IdentityVisitor {
-		col = "visitor_id"
-	}
-	p, err := scanRow(s.Pool.QueryRow(ctx, rowSelect+` WHERE establishment_id = $1 AND `+col+` = $2 ORDER BY created_at DESC LIMIT 1`, estID, id.ID()))
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return err
-	}
-	if err == nil {
-		v, err := s.visit(ctx, s.Pool, p, false)
-		if err != nil {
+	var cursor string
+	err = database.InSnapshot(ctx, s.Pool, func(tx pgx.Tx) error {
+		var err error
+		if data, err = s.currentVisit(ctx, tx, estID, account, visitor); err != nil {
 			return err
 		}
-		closed := v.Order.Status == "settled" || v.Order.Status == "closed_no_charge"
-		recent := id.Kind == acesso.IdentityVisitor && v.Order.ClosedAt != nil && s.Clock.Now().Sub(*v.Order.ClosedAt) < 24*time.Hour
-		if p.active() || !closed || recent {
-			data = &v
-		}
+		cursor, err = outbox.CurrentCursor(ctx, tx)
+		return err
+	})
+	if err != nil {
+		return err
 	}
 	hs.WriteJSON(w, http.StatusOK, struct {
 		Data   *visitView `json:"data"`
 		Cursor *string    `json:"cursor"`
-	}{Data: data})
+	}{Data: data, Cursor: &cursor})
 	return nil
+}
+
+// CurrentVisit devolve a visita atual (Visit) da identidade nesta loja, ou nil. Usado pelo
+// snapshot do SSE.
+func (s *Service) CurrentVisit(ctx context.Context, q database.Querier, estID uuid.UUID, account, visitor *acesso.Identity) (any, error) {
+	v, err := s.currentVisit(ctx, q, estID, account, visitor)
+	if v == nil || err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (s *Service) currentVisit(ctx context.Context, q database.Querier, estID uuid.UUID, account, visitor *acesso.Identity) (*visitView, error) {
+	id := account
+	if id == nil {
+		id = visitor
+	}
+	if id == nil {
+		return nil, nil
+	}
+	col := "account_id"
+	if id.Kind == acesso.IdentityVisitor {
+		col = "visitor_id"
+	}
+	p, err := scanRow(q.QueryRow(ctx, rowSelect+` WHERE establishment_id = $1 AND `+col+` = $2 ORDER BY created_at DESC LIMIT 1`, estID, id.ID()))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	v, err := s.visit(ctx, q, p, false)
+	if err != nil {
+		return nil, err
+	}
+	closed := v.Order.Status == "settled" || v.Order.Status == "closed_no_charge"
+	recent := id.Kind == acesso.IdentityVisitor && v.Order.ClosedAt != nil && s.Clock.Now().Sub(*v.Order.ClosedAt) < 24*time.Hour
+	if p.active() || !closed || recent {
+		return &v, nil
+	}
+	return nil, nil
+}
+
+// StaffQueues e PublicQueues expõem as visões das filas para o snapshot do SSE.
+func (s *Service) StaffQueues(ctx context.Context, q database.Querier, estID uuid.UUID, professionalID *uuid.UUID) (any, error) {
+	return estabelecimento.StaffQueues(ctx, q, s, estID, professionalID)
+}
+
+func (s *Service) PublicQueues(ctx context.Context, q database.Querier, estID uuid.UUID, now time.Time) (any, error) {
+	return estabelecimento.PublicQueues(ctx, q, s, estID, now)
 }

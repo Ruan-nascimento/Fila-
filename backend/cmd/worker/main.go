@@ -1,12 +1,15 @@
 // Comando worker: processo de tarefas em segundo plano (mesmo código da API, executável separado).
 //
 // Tarefas desta etapa:
+//
 //   - entregar os e-mails da caixa de saída (verificação, redefinição de senha, convites);
+//
 //   - apagar registros vencidos (contadores de tentativas, respostas de idempotência,
 //     e-mails já entregues).
 //
-// As demais tarefas entram nas etapas seguintes (publicação da outbox de eventos na 06,
-// reconciliação de pagamentos na 09, expiração de reservas na 10, exclusões na 07).
+//   - publicar a outbox de eventos no event_log e apagar eventos com mais de 24 h (etapa 06).
+//
+// As demais tarefas entram nas etapas seguintes (reconciliação de pagamentos na 09, expiração de reservas na 10, exclusões na 07).
 //
 // Uso (a partir da raiz do repositório):
 //
@@ -28,6 +31,7 @@ import (
 	"fila/internal/platform/keys"
 	"fila/internal/platform/mail"
 	"fila/internal/platform/maintenance"
+	"fila/internal/platform/outbox"
 )
 
 func main() {
@@ -70,6 +74,26 @@ func run(ctx context.Context, environ []string, stdout, stderr io.Writer, starte
 	}
 	cleaner := &maintenance.Cleaner{Pool: rt.Pool, Clock: clk, Log: log.With("tarefa", "limpeza")}
 	wg.Go(func() { cleaner.Run(ctx, 10*time.Minute) })
+	// Eventos: publica a outbox no event_log (pode rodar em mais de um worker) e aplica a
+	// retenção de 24 h do event_log.
+	publisher := &outbox.Publisher{Pool: rt.Pool, Clock: clk, Log: log.With("tarefa", "eventos")}
+	wg.Go(func() { publisher.Run(ctx, time.Second) })
+	wg.Go(func() {
+		t := time.NewTicker(10 * time.Minute)
+		defer t.Stop()
+		for {
+			if n, err := outbox.Prune(ctx, rt.Pool, clk.Now()); err != nil && ctx.Err() == nil {
+				log.Warn("retenção de eventos falhou", "error", err.Error())
+			} else if n > 0 {
+				log.Info("eventos antigos apagados (retenção de 24 h)", "quantidade", n)
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+			}
+		}
+	})
 
 	log.Info("worker pronto")
 	if started != nil {

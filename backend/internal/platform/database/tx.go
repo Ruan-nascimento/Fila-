@@ -58,3 +58,15 @@ func IsUniqueViolation(err error, constraint string) bool {
 	}
 	return constraint == "" || pgErr.ConstraintName == constraint
 }
+
+// InSnapshot roda fn numa transação REPEATABLE READ somente leitura: todas as leituras de fn
+// enxergam o MESMO instante do banco. Usado para devolver dados junto com o cursor de eventos
+// daquele instante (eventos-sse.md §6).
+func InSnapshot(ctx context.Context, pool *pgxpool.Pool, fn func(tx pgx.Tx) error) error {
+	tx, err := pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return fmt.Errorf("iniciar leitura: %s", Describe(err))
+	}
+	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	return fn(tx)
+}

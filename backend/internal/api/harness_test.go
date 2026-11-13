@@ -50,6 +50,7 @@ type env struct {
 	ring  *keys.Ring
 	logs  *syncBuffer
 	inbox []mail.Message
+	deps  api.Deps
 	// ipSeq numera os navegadores simulados; atômico porque testes de concorrência criam
 	// navegadores em várias goroutines ao mesmo tempo.
 	ipSeq atomic.Int64
@@ -105,9 +106,16 @@ func newEnvDeps(t *testing.T, change func(*api.Deps)) *env {
 		t.Fatal(err)
 	}
 	srv := httptest.NewTLSServer(httpserver.Chain(a.Handler(), log))
-	t.Cleanup(srv.Close)
+	hubCtx, stopHub := context.WithCancel(context.Background())
+	go a.Run(hubCtx)
+	// Ordem ao terminar: encerra os fluxos SSE (senão o Close esperaria por eles) e o Hub.
+	t.Cleanup(func() {
+		a.Stream.Shutdown()
+		srv.Close()
+		stopHub()
+	})
 	ring, _ := keys.New(master)
-	return &env{t: t, pool: pool, clock: clk, api: a, srv: srv, ring: ring, logs: logs}
+	return &env{t: t, pool: pool, clock: clk, api: a, srv: srv, ring: ring, logs: logs, deps: deps}
 }
 
 // browser simula um navegador: cookies próprios, origem do site e token CSRF em memória.

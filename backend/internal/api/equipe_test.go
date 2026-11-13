@@ -38,7 +38,7 @@ func TestCreateProfessionalCreatesClosedQueue(t *testing.T) {
 	}
 	strictDecode(t, loja.owner.mustStatus(loja.owner.do("GET", estPath(loja.id, "/queues"), nil), 200).raw, &queues)
 	if len(queues.Data) != 1 || queues.Data[0].Status != "closed" || queues.Data[0].QueueId != prof.Data.QueueId ||
-		queues.Data[0].Professional.Id != prof.Data.Id || len(queues.Data[0].Entries) != 0 || queues.Cursor != nil {
+		queues.Data[0].Professional.Id != prof.Data.Id || len(queues.Data[0].Entries) != 0 || queues.Cursor == nil {
 		t.Fatalf("filas: %+v", queues)
 	}
 

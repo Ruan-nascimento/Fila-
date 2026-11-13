@@ -77,6 +77,9 @@ func (s *Service) AccessRevoked(ctx context.Context, q database.Querier, account
 			WHERE account_id = $1 AND kind = 'staff' AND revoked_at IS NULL`, acc, now); err != nil {
 			return err
 		}
+		if err := notifyRevocation(ctx, q); err != nil {
+			return err
+		}
 	}
 	return nil
 }

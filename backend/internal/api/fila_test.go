@@ -108,7 +108,7 @@ func TestQueueEntry(t *testing.T) {
 	}
 	// Visita atual (cliente) e fila pública.
 	cur := maria.mustStatus(maria.do("GET", estPath(b.id, "/my-visit"), nil), 200)
-	if cur.body["cursor"] != nil || cur.data()["participation"].(map[string]any)["ticket_code"] != "A001" {
+	if cur.body["cursor"] == nil || cur.data()["participation"].(map[string]any)["ticket_code"] != "A001" {
 		t.Fatalf("visita atual: %s", cur.raw)
 	}
 	pub := e.browser().mustStatus(e.browser().do("GET", "/v1/public/establishments/"+b.id.String()+"/queues", nil), 200)

@@ -13,6 +13,7 @@ import (
 	"fila/internal/platform/database"
 	"fila/internal/platform/httpserver"
 	"fila/internal/platform/idempotency"
+	"fila/internal/platform/outbox"
 	"fila/internal/platform/validate"
 )
 
@@ -80,34 +81,59 @@ func (s *Service) listStaffQueues(w http.ResponseWriter, r *http.Request) error 
 		return err
 	}
 	ctx := r.Context()
-	sql := queueSelect + ` WHERE q.establishment_id = $1`
-	args := []any{estID}
+	var only *uuid.UUID
 	if !actor.IsOwner() {
 		if actor.ProfessionalID == nil {
 			return httpserver.ErrForbidden("Somente a equipe da loja pode ver as filas.")
 		}
-		sql += ` AND q.professional_id = $2`
-		args = append(args, *actor.ProfessionalID)
+		only = actor.ProfessionalID
 	}
-	rows, err := s.Pool.Query(ctx, sql+` ORDER BY p.queue_letter`, args...)
-	if err != nil {
+	var list []staffQueueView
+	var cursor string
+	// Dados e cursor do mesmo instante: o cliente pode abrir o SSE a partir daqui sem perder nada.
+	err = database.InSnapshot(ctx, s.Pool, func(tx pgx.Tx) error {
+		var err error
+		if list, err = staffQueues(ctx, tx, s.Activity, estID, only); err != nil {
+			return err
+		}
+		cursor, err = outbox.CurrentCursor(ctx, tx)
 		return err
-	}
-	list, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (staffQueueView, error) { return scanQueue(row) })
+	})
 	if err != nil {
-		return err
-	}
-	if list == nil {
-		list = []staffQueueView{}
-	}
-	if err := s.fillEntries(ctx, s.Pool, list); err != nil {
 		return err
 	}
 	httpserver.WriteJSON(w, http.StatusOK, struct {
 		Data   []staffQueueView `json:"data"`
 		Cursor *string          `json:"cursor"`
-	}{Data: list})
+	}{Data: list, Cursor: &cursor})
 	return nil
+}
+
+// StaffQueues devolve as filas como a equipe vê (StaffQueue[]); professionalID != nil limita à
+// fila daquele profissional (own_queue). Usado pelo snapshot do SSE.
+func StaffQueues(ctx context.Context, q database.Querier, activity QueueActivity, estID uuid.UUID, professionalID *uuid.UUID) (any, error) {
+	return staffQueues(ctx, q, activity, estID, professionalID)
+}
+
+func staffQueues(ctx context.Context, q database.Querier, activity QueueActivity, estID uuid.UUID, professionalID *uuid.UUID) ([]staffQueueView, error) {
+	sql := queueSelect + ` WHERE q.establishment_id = $1`
+	args := []any{estID}
+	if professionalID != nil {
+		sql += ` AND q.professional_id = $2`
+		args = append(args, *professionalID)
+	}
+	rows, err := q.Query(ctx, sql+` ORDER BY p.queue_letter`, args...)
+	if err != nil {
+		return nil, err
+	}
+	list, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (staffQueueView, error) { return scanQueue(row) })
+	if err != nil {
+		return nil, err
+	}
+	if list == nil {
+		list = []staffQueueView{}
+	}
+	return list, fillEntries(ctx, q, activity, list)
 }
 
 type versionRequest struct {
@@ -203,6 +229,9 @@ func (s *Service) changeQueue(w http.ResponseWriter, r *http.Request, op string)
 			FromState: cur.Status, ToState: to, RequestID: httpserver.RequestIDFrom(ctx)}); err != nil {
 			return idempotency.Result{}, err
 		}
+		if err := s.queueChanged(ctx, tx, estID, queueID); err != nil {
+			return idempotency.Result{}, err
+		}
 		next, err := loadQueue(ctx, tx, estID, queueID, false)
 		if err != nil {
 			return idempotency.Result{}, err
@@ -286,6 +315,9 @@ func (s *Service) signalAvailability(w http.ResponseWriter, r *http.Request) err
 			ToState: to, RequestID: httpserver.RequestIDFrom(ctx)}); err != nil {
 			return idempotency.Result{}, err
 		}
+		if err := s.queueChanged(ctx, tx, estID, queueID); err != nil {
+			return idempotency.Result{}, err
+		}
 		next, err := loadQueue(ctx, tx, estID, queueID, false)
 		if err != nil {
 			return idempotency.Result{}, err
@@ -332,15 +364,40 @@ func (s *Service) listPublicQueues(w http.ResponseWriter, r *http.Request) error
 	} else if err != nil {
 		return err
 	}
-	rows, err := s.Pool.Query(ctx, `
+	var list []publicQueueView
+	var cursor string
+	err = database.InSnapshot(ctx, s.Pool, func(tx pgx.Tx) error {
+		var err error
+		if list, err = publicQueues(ctx, tx, s.Activity, estID, s.Clock.Now()); err != nil {
+			return err
+		}
+		cursor, err = outbox.CurrentCursor(ctx, tx)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	httpserver.WriteJSON(w, http.StatusOK, struct {
+		Data   []publicQueueView `json:"data"`
+		Cursor *string           `json:"cursor"`
+	}{Data: list, Cursor: &cursor})
+	return nil
+}
+
+// PublicQueues devolve as filas como o público vê (PublicQueue[]). Usado pelo snapshot do SSE.
+func PublicQueues(ctx context.Context, q database.Querier, activity QueueActivity, estID uuid.UUID, now time.Time) (any, error) {
+	return publicQueues(ctx, q, activity, estID, now)
+}
+
+func publicQueues(ctx context.Context, q database.Querier, activity QueueActivity, estID uuid.UUID, now time.Time) ([]publicQueueView, error) {
+	rows, err := q.Query(ctx, `
 		SELECT q.id, p.id, p.display_name, q.status, q.version
 		FROM queue q JOIN professional p ON p.id = q.professional_id
 		WHERE q.establishment_id = $1 AND p.status = 'active'
 		ORDER BY p.queue_letter`, estID)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	now := s.Clock.Now()
 	list, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (publicQueueView, error) {
 		var v publicQueueView
 		err := row.Scan(&v.QueueID, &v.Professional.ID, &v.Professional.DisplayName, &v.Status, &v.Version)
@@ -349,16 +406,16 @@ func (s *Service) listPublicQueues(w http.ResponseWriter, r *http.Request) error
 		return v, err
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if s.Activity != nil && len(list) > 0 {
+	if activity != nil && len(list) > 0 {
 		ids := make([]uuid.UUID, len(list))
 		for i := range list {
 			ids[i] = list[i].QueueID
 		}
-		snaps, err := s.Activity.PublicSnapshots(ctx, s.Pool, ids, now)
+		snaps, err := activity.PublicSnapshots(ctx, q, ids, now)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		for i := range list {
 			list[i].apply(snaps)
@@ -367,11 +424,7 @@ func (s *Service) listPublicQueues(w http.ResponseWriter, r *http.Request) error
 	if list == nil {
 		list = []publicQueueView{}
 	}
-	httpserver.WriteJSON(w, http.StatusOK, struct {
-		Data   []publicQueueView `json:"data"`
-		Cursor *string           `json:"cursor"`
-	}{Data: list})
-	return nil
+	return list, nil
 }
 
 // fillEntries preenche as pessoas de cada fila (módulo fila).

@@ -64,6 +64,14 @@ func Record(ctx context.Context, q database.Querier, events ...Event) error {
 			return fmt.Errorf("gravar evento %s: %w", e.Type, err)
 		}
 	}
+	if len(events) == 0 {
+		return nil
+	}
+	// Acorda o publicador. O PostgreSQL só entrega o aviso no COMMIT (e junta avisos iguais da
+	// mesma transação); se a transação desfizer, não há aviso nem evento.
+	if _, err := q.Exec(ctx, `SELECT pg_notify($1, '')`, ChannelOutbox); err != nil {
+		return fmt.Errorf("avisar publicador: %w", err)
+	}
 	return nil
 }
 

@@ -4,3 +4,7 @@ package: contrato
 output: types.gen.go
 generate:
   models: true
+output-options:
+  # Gera todos os esquemas, inclusive os usados só pelo SSE (EventEnvelope, StreamSnapshot),
+  # que o contrato referencia por extensão (x-event-schema) e não por uma rota.
+  skip-prune: true

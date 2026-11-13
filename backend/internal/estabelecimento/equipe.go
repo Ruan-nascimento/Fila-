@@ -98,7 +98,16 @@ func (s *Service) listProfessionals(w http.ResponseWriter, r *http.Request) erro
 	return nil
 }
 
-func (s *Service) professionalResult(ctx context.Context, q database.Querier, estID, profID uuid.UUID, status int) (idempotency.Result, error) {
+// professionalResult grava o evento da fila do profissional (nome e situação dele aparecem nas
+// visões da fila) e devolve o profissional atualizado.
+func (s *Service) professionalResult(ctx context.Context, q pgx.Tx, estID, profID uuid.UUID, status int) (idempotency.Result, error) {
+	if queueID, err := QueueOfProfessional(ctx, q, profID); err == nil {
+		if err := s.queueChanged(ctx, q, estID, queueID); err != nil {
+			return idempotency.Result{}, err
+		}
+	} else if !errors.Is(err, ErrNotFound) {
+		return idempotency.Result{}, err
+	}
 	v, err := loadProfessional(ctx, q, estID, profID, false)
 	if err != nil {
 		return idempotency.Result{}, err

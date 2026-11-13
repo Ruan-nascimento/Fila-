@@ -455,6 +455,114 @@ func (e EstimateKind) Valid() bool {
 	}
 }
 
+// Defines values for EventEnvelopeResourceType.
+const (
+	EventEnvelopeResourceTypeChangeRequest     EventEnvelopeResourceType = "change_request"
+	EventEnvelopeResourceTypeDeletionRequest   EventEnvelopeResourceType = "deletion_request"
+	EventEnvelopeResourceTypeEstablishment     EventEnvelopeResourceType = "establishment"
+	EventEnvelopeResourceTypeFinancialIssue    EventEnvelopeResourceType = "financial_issue"
+	EventEnvelopeResourceTypeLoyaltyAccount    EventEnvelopeResourceType = "loyalty_account"
+	EventEnvelopeResourceTypeOrder             EventEnvelopeResourceType = "order"
+	EventEnvelopeResourceTypeParticipation     EventEnvelopeResourceType = "participation"
+	EventEnvelopeResourceTypeQueue             EventEnvelopeResourceType = "queue"
+	EventEnvelopeResourceTypeRewardReservation EventEnvelopeResourceType = "reward_reservation"
+	EventEnvelopeResourceTypeStream            EventEnvelopeResourceType = "stream"
+)
+
+// Valid indicates whether the value is a known member of the EventEnvelopeResourceType enum.
+func (e EventEnvelopeResourceType) Valid() bool {
+	switch e {
+	case EventEnvelopeResourceTypeChangeRequest:
+		return true
+	case EventEnvelopeResourceTypeDeletionRequest:
+		return true
+	case EventEnvelopeResourceTypeEstablishment:
+		return true
+	case EventEnvelopeResourceTypeFinancialIssue:
+		return true
+	case EventEnvelopeResourceTypeLoyaltyAccount:
+		return true
+	case EventEnvelopeResourceTypeOrder:
+		return true
+	case EventEnvelopeResourceTypeParticipation:
+		return true
+	case EventEnvelopeResourceTypeQueue:
+		return true
+	case EventEnvelopeResourceTypeRewardReservation:
+		return true
+	case EventEnvelopeResourceTypeStream:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EventEnvelopeSchemaVersion.
+const (
+	N1 EventEnvelopeSchemaVersion = 1
+)
+
+// Valid indicates whether the value is a known member of the EventEnvelopeSchemaVersion enum.
+func (e EventEnvelopeSchemaVersion) Valid() bool {
+	switch e {
+	case N1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EventType.
+const (
+	EventTypeChangeRequestUpdated     EventType = "change_request.updated"
+	EventTypeDeletionRequestUpdated   EventType = "deletion_request.updated"
+	EventTypeFinancialIssueUpdated    EventType = "financial_issue.updated"
+	EventTypeLoyaltyUpdated           EventType = "loyalty.updated"
+	EventTypeOrderUpdated             EventType = "order.updated"
+	EventTypeParticipationUpdated     EventType = "participation.updated"
+	EventTypePaymentUpdated           EventType = "payment.updated"
+	EventTypePendenciesUpdated        EventType = "pendencies.updated"
+	EventTypeQueuePublicUpdated       EventType = "queue.public.updated"
+	EventTypeQueueUpdated             EventType = "queue.updated"
+	EventTypeRewardReservationUpdated EventType = "reward_reservation.updated"
+	EventTypeStreamSessionEnded       EventType = "stream.session_ended"
+	EventTypeStreamSnapshot           EventType = "stream.snapshot"
+)
+
+// Valid indicates whether the value is a known member of the EventType enum.
+func (e EventType) Valid() bool {
+	switch e {
+	case EventTypeChangeRequestUpdated:
+		return true
+	case EventTypeDeletionRequestUpdated:
+		return true
+	case EventTypeFinancialIssueUpdated:
+		return true
+	case EventTypeLoyaltyUpdated:
+		return true
+	case EventTypeOrderUpdated:
+		return true
+	case EventTypeParticipationUpdated:
+		return true
+	case EventTypePaymentUpdated:
+		return true
+	case EventTypePendenciesUpdated:
+		return true
+	case EventTypeQueuePublicUpdated:
+		return true
+	case EventTypeQueueUpdated:
+		return true
+	case EventTypeRewardReservationUpdated:
+		return true
+	case EventTypeStreamSessionEnded:
+		return true
+	case EventTypeStreamSnapshot:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for FieldErrorCode.
 const (
 	Duplicate     FieldErrorCode = "duplicate"
@@ -1184,6 +1292,30 @@ func (e StaffRole) Valid() bool {
 	}
 }
 
+// Defines values for StreamSnapshotReason.
+const (
+	CursorExpired StreamSnapshotReason = "cursor_expired"
+	CursorInvalid StreamSnapshotReason = "cursor_invalid"
+	EpochChanged  StreamSnapshotReason = "epoch_changed"
+	Initial       StreamSnapshotReason = "initial"
+)
+
+// Valid indicates whether the value is a known member of the StreamSnapshotReason enum.
+func (e StreamSnapshotReason) Valid() bool {
+	switch e {
+	case CursorExpired:
+		return true
+	case CursorInvalid:
+		return true
+	case EpochChanged:
+		return true
+	case Initial:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TransferRequestCustomerConsentGiven.
 const (
 	TransferRequestCustomerConsentGivenTrue TransferRequestCustomerConsentGiven = true
@@ -1554,6 +1686,43 @@ type Estimate struct {
 
 // EstimateKind Sempre estimativa; nunca horário garantido.
 type EstimateKind string
+
+// EventEnvelope Conteúdo do campo data de cada mensagem SSE.
+type EventEnvelope struct {
+	// Audience Canal/audiência de eventos SSE.
+	Audience AudienceKind `json:"audience"`
+
+	// Data Visão completa do recurso para esta audiência (mesmo esquema do GET correspondente).
+	Data map[string]interface{} `json:"data"`
+
+	// EstablishmentId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	EstablishmentId Id `json:"establishment_id"`
+
+	// EventId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	EventId Id `json:"event_id"`
+
+	// OccurredAt RFC 3339 em UTC com sufixo Z.
+	OccurredAt Timestamp `json:"occurred_at"`
+	Resource   struct {
+		// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+		Id   Id                        `json:"id"`
+		Type EventEnvelopeResourceType `json:"type"`
+
+		// Version Aplicar só se maior que a versão conhecida.
+		Version int `json:"version"`
+	} `json:"resource"`
+	SchemaVersion EventEnvelopeSchemaVersion `json:"schema_version"`
+	Type          EventType                  `json:"type"`
+}
+
+// EventEnvelopeResourceType defines model for EventEnvelope.Resource.Type.
+type EventEnvelopeResourceType string
+
+// EventEnvelopeSchemaVersion defines model for EventEnvelope.SchemaVersion.
+type EventEnvelopeSchemaVersion int
+
+// EventType defines model for EventType.
+type EventType string
 
 // FieldError defines model for FieldError.
 type FieldError struct {
@@ -2354,6 +2523,21 @@ type StaffRole string
 
 // StreamCursor Cursor opaco de eventos SSE (posição pós-commit + época do fluxo).
 type StreamCursor = string
+
+// StreamSnapshot Dados de stream.snapshot.
+type StreamSnapshot struct {
+	DeniedChannels  []AudienceKind       `json:"denied_channels"`
+	GrantedChannels []AudienceKind       `json:"granted_channels"`
+	Loyalty         *LoyaltySummary      `json:"loyalty,omitempty"`
+	Pendencies      *Pendencies          `json:"pendencies,omitempty"`
+	PublicQueues    *[]PublicQueue       `json:"public_queues,omitempty"`
+	Reason          StreamSnapshotReason `json:"reason"`
+	StaffQueues     *[]StaffQueue        `json:"staff_queues,omitempty"`
+	Visit           *Visit               `json:"visit,omitempty"`
+}
+
+// StreamSnapshotReason defines model for StreamSnapshot.Reason.
+type StreamSnapshotReason string
 
 // Timestamp RFC 3339 em UTC com sufixo Z.
 type Timestamp = time.Time

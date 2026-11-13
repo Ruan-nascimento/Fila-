@@ -13,6 +13,7 @@ import (
 	"fila/internal/auditoria"
 	"fila/internal/platform/database"
 	"fila/internal/platform/httpserver"
+	"fila/internal/platform/outbox"
 	"fila/internal/platform/validate"
 )
 
@@ -97,7 +98,14 @@ func revokeSessions(ctx context.Context, q database.Querier, accountID uuid.UUID
 	if err != nil {
 		return 0, fmt.Errorf("revogar sessões: %w", err)
 	}
-	return tag.RowsAffected(), nil
+	return tag.RowsAffected(), notifyRevocation(ctx, q)
+}
+
+// notifyRevocation avisa (no COMMIT) as conexões SSE abertas para reconferirem a sessão agora,
+// em vez de esperar a reconferência periódica. O aviso não leva dado nenhum.
+func notifyRevocation(ctx context.Context, q database.Querier) error {
+	_, err := q.Exec(ctx, `SELECT pg_notify($1, '')`, outbox.ChannelRevocation)
+	return err
 }
 
 // ---------------------------------------------------------------------------------------------

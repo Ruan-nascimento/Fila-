@@ -114,4 +114,14 @@ type PublicTicket struct {
 type QueueActivity interface {
 	StaffEntries(ctx context.Context, q database.Querier, queueIDs []uuid.UUID) (map[uuid.UUID][]StaffEntry, error)
 	PublicSnapshots(ctx context.Context, q database.Querier, queueIDs []uuid.UUID, now time.Time) (map[uuid.UUID]PublicSnapshot, error)
+	// QueueChanged grava na outbox as visões atuais da fila (pública e da equipe), na transação tx.
+	QueueChanged(ctx context.Context, tx pgx.Tx, estID, queueID uuid.UUID) error
+}
+
+// queueChanged grava o evento da fila se o módulo de fila estiver ligado.
+func (s *Service) queueChanged(ctx context.Context, tx pgx.Tx, estID, queueID uuid.UUID) error {
+	if s.Activity == nil {
+		return nil
+	}
+	return s.Activity.QueueChanged(ctx, tx, estID, queueID)
 }

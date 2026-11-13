@@ -147,6 +147,9 @@ func issueCredential(ctx context.Context, tx pgx.Tx, browserID, visitorID, estID
 		WHERE browser_id = $1 AND establishment_id = $2 AND revoked_at IS NULL`, browserID, estID, now); err != nil {
 		return err
 	}
+	if err := notifyRevocation(ctx, tx); err != nil {
+		return err
+	}
 	_, err := tx.Exec(ctx, `
 		INSERT INTO visitor_credential (visitor_id, establishment_id, browser_id, created_at, last_used_at)
 		VALUES ($1, $2, $3, $4, $4)`, visitorID, estID, browserID, now)
@@ -317,6 +320,9 @@ func (s *Service) recoverVisitorSession(w http.ResponseWriter, r *http.Request) 
 			WHERE visitor_id = $1 AND revoked_at IS NULL`, visitorID, now); err != nil {
 			return err
 		}
+		if err := notifyRevocation(ctx, tx); err != nil {
+			return err
+		}
 		browserID, token, err := s.ensureBrowser(ctx, tx, p, now)
 		if err != nil {
 			return err
@@ -366,6 +372,9 @@ func (s *Service) endVisitorSession(w http.ResponseWriter, r *http.Request) erro
 			return err
 		}
 		if _, err := tx.Exec(ctx, `UPDATE visitor_browser SET revoked_at = $2 WHERE id = $1`, *p.BrowserID, now); err != nil {
+			return err
+		}
+		if err := notifyRevocation(ctx, tx); err != nil {
 			return err
 		}
 		for _, v := range p.Visitors {

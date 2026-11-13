@@ -754,10 +754,10 @@ func TestOrderEventsInOutbox(t *testing.T) {
 		t.Fatalf("eventos da comanda criada: %+v", evs)
 	}
 	queueEvs := read(b.filaBeto)
-	if len(queueEvs) != 3 {
+	if len(queueEvs) != 6 { // abrir a fila (preparo) + entrada, 3 audiências cada
 		t.Fatalf("eventos da fila: %d", len(queueEvs))
 	}
-	for _, x := range queueEvs {
+	for _, x := range queueEvs[3:] {
 		if x.audience == "public" && (strings.Contains(string(x.payload), "Pessoa") || strings.Contains(string(x.payload), "Corte") || x.typ != "queue.public.updated") {
 			t.Fatalf("evento público com dado privado: %s", x.payload)
 		}
