@@ -7,7 +7,9 @@
 //   - apagar registros vencidos (contadores de tentativas, respostas de idempotência,
 //     e-mails já entregues).
 //
-//   - publicar a outbox de eventos no event_log e apagar eventos com mais de 24 h (etapa 06).
+//   - publicar a outbox de eventos no event_log e apagar eventos com mais de 24 h (etapa 06);
+//
+//   - processar exclusões de conta e minimizar nicks de visitantes antigos (etapa 07).
 //
 // As demais tarefas entram nas etapas seguintes (reconciliação de pagamentos na 09, expiração de reservas na 10, exclusões na 07).
 //
@@ -25,6 +27,9 @@ import (
 	"syscall"
 	"time"
 
+	"fila/internal/exclusao"
+	"fila/internal/fila"
+	"fila/internal/identidade"
 	"fila/internal/platform/app"
 	"fila/internal/platform/clock"
 	"fila/internal/platform/config"
@@ -94,6 +99,14 @@ func run(ctx context.Context, environ []string, stdout, stderr io.Writer, starte
 			}
 		}
 	})
+
+	// Exclusões de conta: reavalia bloqueios e anonimiza quando livres (retomável); minimiza nicks.
+	ident := identidade.New(identidade.Deps{Pool: rt.Pool, Clock: clk, Ring: ring, Log: log.With("tarefa", "exclusao"),
+		Hasher: identidade.NewHasher(identidade.DefaultPasswordParams, 1),
+		Config: identidade.Config{CookieSecure: cfg.Security.CookieSecure, PublicBaseURL: cfg.Security.PublicBaseURL}})
+	deletion := exclusao.New(exclusao.Deps{Pool: rt.Pool, Clock: clk, Log: log.With("tarefa", "exclusao"), Ring: ring,
+		Identity: ident, Queue: fila.New(fila.Deps{Pool: rt.Pool, Clock: clk, Log: log.With("tarefa", "exclusao")})})
+	wg.Go(func() { deletion.Run(ctx, time.Minute) })
 
 	log.Info("worker pronto")
 	if started != nil {

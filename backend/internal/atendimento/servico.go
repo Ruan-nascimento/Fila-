@@ -41,6 +41,8 @@ type Visits interface {
 	// QueueChanged grava na outbox os eventos da fila depois de mudar serviços de alguém nela
 	// (nomes dos serviços, estimativa e aviso de solicitação pendente).
 	QueueChanged(ctx context.Context, tx pgx.Tx, estID, queueID uuid.UUID) error
+	// Statuses devolve o estado de cada participação (histórico do cliente).
+	Statuses(ctx context.Context, q database.Querier, participationIDs []uuid.UUID) (map[uuid.UUID]string, error)
 }
 
 // Situações de cobrança Pix que impedem corrigir uma comanda fechada (R-CMD-12).
@@ -96,6 +98,8 @@ func (s *Service) Routes() []hs.Route {
 		{Operation: "approveChangeRequest", Method: http.MethodPost, Path: one + "/change-requests/{changeRequestId}/approve", Grants: staff, Handler: s.approveChangeRequest},
 		{Operation: "rejectChangeRequest", Method: http.MethodPost, Path: one + "/change-requests/{changeRequestId}/reject", Grants: staff, Handler: s.rejectChangeRequest},
 		{Operation: "closeInterruptedOrder", Method: http.MethodPost, Path: one + "/close-interruption", Grants: []hs.Grant{hs.GrantOwner}, Handler: s.closeInterruptedOrder},
+		{Operation: "listMyHistory", Method: http.MethodGet, Path: "/v1/me/history",
+			Grants: []hs.Grant{{Actor: "customer", Scope: "self"}}, Handler: s.listMyHistory},
 		{Operation: "adjustClosedOrder", Method: http.MethodPost, Path: one + "/adjustments", Grants: []hs.Grant{hs.GrantOwner}, Handler: s.adjustClosedOrder},
 	}
 }

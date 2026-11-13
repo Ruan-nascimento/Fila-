@@ -63,6 +63,10 @@ type Command struct {
 type Result struct {
 	Status int
 	Body   any
+	// Stored (opcional) é o que fica guardado para repetições no lugar de Body, quando a resposta
+	// ao vivo traz algo que não pode ficar gravado em claro (ex.: protocolo completo da exclusão,
+	// mostrado uma única vez ao titular). A repetição devolve Stored.
+	Stored any
 }
 
 // Run valida a chave, executa fn numa transação e escreve a resposta (nova ou repetida).
@@ -99,10 +103,16 @@ func (rn *Runner) Run(w http.ResponseWriter, r *http.Request, cmd Command, fn fu
 			return fmt.Errorf("serializar resposta: %w", err)
 		}
 		status = res.Status
+		keep := body
+		if res.Stored != nil {
+			if keep, err = json.Marshal(res.Stored); err != nil {
+				return fmt.Errorf("serializar resposta guardada: %w", err)
+			}
+		}
 		_, err = tx.Exec(r.Context(), `
 			UPDATE idempotency_record SET response_status = $4, response_body = $5
 			WHERE actor_key = $1 AND operation = $2 AND idem_key = $3`,
-			cmd.ActorKey, cmd.Operation, key, status, body)
+			cmd.ActorKey, cmd.Operation, key, status, keep)
 		return err
 	})
 	if err != nil {

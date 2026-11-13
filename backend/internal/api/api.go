@@ -15,6 +15,7 @@ import (
 	"fila/internal/atendimento"
 	"fila/internal/catalogo"
 	"fila/internal/estabelecimento"
+	"fila/internal/exclusao"
 	"fila/internal/fila"
 	"fila/internal/fluxo"
 	"fila/internal/identidade"
@@ -43,6 +44,10 @@ type Deps struct {
 	StreamLimits fluxo.Limits
 	// SnapshotHook (só testes): ver fluxo.Deps.
 	SnapshotHook func(stage string)
+	// Benefits encerra pontos e reservas na exclusão de conta (etapa 10). nil = não há benefícios.
+	Benefits exclusao.Benefits
+	// DeletionFault (só testes) simula queda no meio da anonimização.
+	DeletionFault func(step string) error
 }
 
 // API é a aplicação montada.
@@ -50,6 +55,7 @@ type API struct {
 	Identity *identidade.Service
 	Hub      *outbox.Hub
 	Stream   *fluxo.Service
+	Deletion *exclusao.Service
 	routes   []hs.Route
 	mux      *http.ServeMux
 	handler  http.Handler
@@ -97,13 +103,18 @@ func New(d Deps, register func(mux *http.ServeMux)) (*API, error) {
 		Refresh: ident.Refresh, Sources: fl, Limits: d.StreamLimits, TrustForwardedFor: d.Config.Security.TrustForwardedFor,
 		SnapshotHook: d.SnapshotHook})
 
-	a := &API{Identity: ident, Hub: hub, Stream: stream, mux: http.NewServeMux()}
+	deletion := exclusao.New(exclusao.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Ring: ring, Auth: ident,
+		Limiter: ratelimit.New(d.Pool, d.Clock, ring), TrustForwardedFor: d.Config.Security.TrustForwardedFor,
+		Identity: ident, Queue: fl, Benefits: d.Benefits, Fault: d.DeletionFault})
+
+	a := &API{Identity: ident, Hub: hub, Stream: stream, Deletion: deletion, mux: http.NewServeMux()}
 	a.routes = append(a.routes, ident.Routes()...)
 	a.routes = append(a.routes, est.Routes()...)
 	a.routes = append(a.routes, cat.Routes()...)
 	a.routes = append(a.routes, fl.Routes()...)
 	a.routes = append(a.routes, atd.Routes()...)
 	a.routes = append(a.routes, stream.Routes()...)
+	a.routes = append(a.routes, deletion.Routes()...)
 	hs.Mount(a.mux, d.Log, a.routes)
 	if register != nil {
 		register(a.mux)

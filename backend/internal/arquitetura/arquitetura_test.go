@@ -81,6 +81,7 @@ var tableOwners = map[string][]string{
 	"fila":                 {"participation", "participation_transfer", "queue_counter"},
 	"atendimento":          {"service_order", "order_item", "change_request", "change_request_addition", "order_adjustment"},
 	"auditoria":            {"audit_event"},
+	"exclusao":             {"deletion_request", "deletion_request_block"},
 	"platform/ratelimit":   {"rate_limit"},
 	"platform/idempotency": {"idempotency_record"},
 	"platform/mail":        {"mail_outbox"},

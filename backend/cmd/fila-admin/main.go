@@ -19,13 +19,20 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/jackc/pgx/v5"
 	"time"
 	_ "time/tzdata" // fusos horários embutidos (o Windows não traz a base IANA)
 
+	"fila/internal/atendimento"
+	"fila/internal/auditoria"
+	"fila/internal/estabelecimento"
+	"fila/internal/fila"
 	"fila/internal/identidade"
 	"fila/internal/platform/app"
 	"fila/internal/platform/clock"
 	"fila/internal/platform/config"
+	"fila/internal/platform/database"
 	"fila/internal/platform/httpserver"
 	"fila/internal/platform/keys"
 	"fila/internal/platform/outbox"
@@ -38,6 +45,10 @@ comandos:
   bootstrap     cria a loja e envia o convite do dono inicial (uso único, 24 h)
                 opções: -nome "Nome da loja" -slug endereco-da-loja -email dono@exemplo.com
                         [-fuso America/Sao_Paulo] [-motivo "texto para a auditoria"]
+  transfer-owner     convida um novo dono para a loja (transferência da administração, T-OP-02)
+                     opções: -slug endereco-da-loja -email novo-dono@exemplo.com -motivo "texto"
+  close-establishment  encerra a loja (só sem ninguém na fila e sem comanda pendente)
+                     opções: -slug endereco-da-loja -motivo "texto"
   eventos       mostra o atraso da publicação de eventos (outbox) e a posição do fluxo
   nova-epoca    troca a época do fluxo de eventos; use DEPOIS de restaurar um backup
                 (todo navegador recebe um snapshot novo em vez de retomar por um cursor antigo)`
@@ -62,6 +73,8 @@ func run(ctx context.Context, args, environ []string, stdout, stderr io.Writer) 
 		return generateKey(stdout, stderr)
 	case "bootstrap":
 		return bootstrap(ctx, args[1:], environ, stdout, stderr)
+	case "transfer-owner", "close-establishment":
+		return ownerProcess(ctx, args[0], args[1:], environ, stdout, stderr)
 	case "eventos", "nova-epoca":
 		if len(args) != 1 {
 			fmt.Fprintln(stderr, usage)
@@ -106,6 +119,88 @@ func events(ctx context.Context, cmd string, environ []string, stdout, stderr io
 	}
 	fmt.Fprintf(stdout, "eventos esperando publicação: %d (mais antigo há %ds)\n", lag.Pending, int(lag.Oldest.Seconds()))
 	fmt.Fprintf(stdout, "última posição publicada: %d · mais antiga guardada: %d · época: %s\n", head.Last, head.Oldest, head.Epoch)
+	return app.ExitOK
+}
+
+// ownerProcess: processos controlados do dono (T-OP-02, ADR-0013), pedidos ao operador com
+// identidade confirmada fora do sistema. Auditados com ator operator e motivo.
+func ownerProcess(ctx context.Context, cmd string, args, environ []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	slug := fs.String("slug", "", "endereço da loja")
+	email := fs.String("email", "", "e-mail do novo dono (transfer-owner)")
+	motivo := fs.String("motivo", "", "motivo registrado na auditoria")
+	if err := fs.Parse(args); err != nil || fs.NArg() != 0 || *slug == "" || *motivo == "" || (cmd == "transfer-owner" && *email == "") {
+		fmt.Fprintln(stderr, usage)
+		return app.ExitConfigError
+	}
+	rt, code := app.Start("fila-admin", environ, stderr, stderr)
+	if rt == nil {
+		return code
+	}
+	defer rt.Close()
+	if err := rt.CheckDatabase(ctx, rt.Config.Database.ConnectTimeout); err != nil {
+		rt.Log.Error("banco indisponível ou sem migrações", "error", err.Error())
+		return app.ExitFailure
+	}
+	estID, status, err := estabelecimento.BySlug(ctx, rt.Pool, *slug)
+	if err != nil || status != "active" {
+		fmt.Fprintln(stderr, "erro: loja não encontrada ou já encerrada")
+		return app.ExitConfigError
+	}
+	if cmd == "transfer-owner" {
+		ring, err := keys.New([]byte(rt.Config.Security.SecretKey.Reveal()))
+		if err != nil {
+			rt.Log.Error("chave do servidor inválida", "error", err.Error())
+			return app.ExitConfigError
+		}
+		var name string
+		_ = rt.Pool.QueryRow(ctx, `SELECT name FROM establishment WHERE id = $1`, estID).Scan(&name)
+		svc := identidade.New(identidade.Deps{Pool: rt.Pool, Clock: clock.System{}, Ring: ring,
+			Hasher: identidade.NewHasher(identidade.DefaultPasswordParams, 1), Log: rt.Log,
+			Config: identidade.Config{CookieSecure: rt.Config.Security.CookieSecure, PublicBaseURL: rt.Config.Security.PublicBaseURL}})
+		expires, err := svc.OperatorInviteOwner(ctx, estID, name, *email, *motivo)
+		if err != nil {
+			fmt.Fprintln(stderr, "erro:", err.Error())
+			return app.ExitConfigError
+		}
+		fmt.Fprintf(stdout, "convite de dono enviado ao e-mail informado; vale até %s (UTC)\n", expires.Format("02/01/2006 15:04"))
+		fmt.Fprintln(stdout, "depois que o novo dono aceitar, o dono atual pode excluir a própria conta")
+		return app.ExitOK
+	}
+	now := time.Now().UTC()
+	refused := ""
+	err = database.InTx(ctx, rt.Pool, func(tx pgx.Tx) error {
+		if err := estabelecimento.LockAllQueues(ctx, tx, estID); err != nil {
+			return err
+		}
+		active, err := fila.ActiveInEstablishment(ctx, tx, estID)
+		if err != nil {
+			return err
+		}
+		pending, err := atendimento.PendingInEstablishment(ctx, tx, estID)
+		if err != nil {
+			return err
+		}
+		if active > 0 || pending > 0 {
+			refused = fmt.Sprintf("há %d pessoa(s) na fila e %d comanda(s) pendente(s); resolva antes de encerrar", active, pending)
+			return nil
+		}
+		if _, err := estabelecimento.CloseEstablishment(ctx, tx, estID, now); err != nil {
+			return err
+		}
+		return auditoria.Record(ctx, tx, auditoria.Event{EstablishmentID: &estID, OccurredAt: now, ActorKind: auditoria.ActorOperator,
+			Action: "T-OP-02", TargetType: "establishment", TargetID: estID, FromState: "active", ToState: "closed", Reason: *motivo})
+	})
+	if err != nil {
+		rt.Log.Error("encerramento falhou; nada mudou", "error", err.Error())
+		return app.ExitFailure
+	}
+	if refused != "" {
+		fmt.Fprintln(stderr, "erro:", refused)
+		return app.ExitConfigError
+	}
+	fmt.Fprintln(stdout, "loja encerrada")
 	return app.ExitOK
 }
 

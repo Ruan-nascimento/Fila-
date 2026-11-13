@@ -9,6 +9,7 @@ import (
 
 	"fila/internal/atendimento"
 	"fila/internal/estabelecimento"
+	"fila/internal/platform/database"
 	hs "fila/internal/platform/httpserver"
 	"fila/internal/platform/outbox"
 )
@@ -81,3 +82,8 @@ func (s *Service) LockVisit(ctx context.Context, tx pgx.Tx, estID, participation
 }
 
 var _ atendimento.Visits = (*Service)(nil)
+
+// Statuses implementa atendimento.Visits (histórico do cliente).
+func (s *Service) Statuses(ctx context.Context, q database.Querier, ids []uuid.UUID) (map[uuid.UUID]string, error) {
+	return Statuses(ctx, q, ids)
+}

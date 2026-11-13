@@ -107,3 +107,46 @@ func TestEventsStatusAndNewEpoch(t *testing.T) {
 		t.Fatalf("época não mudou: %s → %s", before, after)
 	}
 }
+
+// T-OP-02: convite de novo dono para loja existente e encerramento só sem pendências.
+func TestTransferOwnerAndCloseEstablishment(t *testing.T) {
+	t.Chdir(t.TempDir())
+	pool := testdb.Migrated(t)
+	env := []string{"FILA_ENV=test", "FILA_DATABASE_URL=" + pool.Config().ConnString(), testdb.SecretKeyVar()}
+	ctx := context.Background()
+	var out, errb bytes.Buffer
+	if code := run(ctx, []string{"bootstrap", "-nome", "Loja", "-slug", "loja-op", "-email", "ana@exemplo.com"}, env, &out, &errb); code != 0 {
+		t.Fatalf("bootstrap: %s", errb.String())
+	}
+	if code := run(ctx, []string{"transfer-owner", "-slug", "loja-op", "-email", "bia@exemplo.com"}, env, &out, &errb); code != 2 {
+		t.Fatal("transferência sem motivo deveria falhar")
+	}
+	out.Reset()
+	if code := run(ctx, []string{"transfer-owner", "-slug", "loja-op", "-email", "bia@exemplo.com", "-motivo", "Ana vai sair"}, env, &out, &errb); code != 0 {
+		t.Fatalf("transfer-owner: %d %s", code, errb.String())
+	}
+	var invites, audits int
+	_ = pool.QueryRow(ctx, `SELECT count(*) FROM invite WHERE role = 'owner' AND status = 'pending'`).Scan(&invites)
+	_ = pool.QueryRow(ctx, `SELECT count(*) FROM audit_event WHERE action = 'T-OP-02' AND actor_kind = 'operator' AND reason = 'Ana vai sair'`).Scan(&audits)
+	if invites != 2 || audits != 1 || strings.Contains(out.String(), "bia@") {
+		t.Fatalf("convites=%d auditoria=%d saída=%q", invites, audits, out.String())
+	}
+	// Sem ninguém na fila e sem comanda pendente, encerra (a recusa com pendências é testada em internal/api).
+	var est string
+	_ = pool.QueryRow(ctx, `SELECT id FROM establishment WHERE slug = 'loja-op'`).Scan(&est)
+	if _, err := pool.Exec(ctx, `INSERT INTO professional (establishment_id, display_name, queue_letter, created_at, updated_at) VALUES ($1, 'Beto', 'A', now(), now())`, est); err != nil {
+		t.Fatal(err)
+	}
+	errb.Reset()
+	if code := run(ctx, []string{"close-establishment", "-slug", "loja-op", "-motivo", "loja vendida"}, env, &out, &errb); code != 0 {
+		t.Fatalf("encerrar: %d %s", code, errb.String())
+	}
+	var status string
+	_ = pool.QueryRow(ctx, `SELECT status FROM establishment WHERE id = $1`, est).Scan(&status)
+	if status != "closed" {
+		t.Fatalf("loja: %s", status)
+	}
+	if code := run(ctx, []string{"close-establishment", "-slug", "loja-op", "-motivo", "de novo"}, env, &out, &errb); code != 2 {
+		t.Fatal("encerrar loja já encerrada deveria falhar")
+	}
+}

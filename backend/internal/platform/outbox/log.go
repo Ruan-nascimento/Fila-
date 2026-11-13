@@ -235,3 +235,18 @@ func CurrentCursor(ctx context.Context, q database.Querier) (string, error) {
 	}
 	return Cursor{Epoch: h.Epoch, Position: h.Last}.Encode(), nil
 }
+
+// ForgetAccount apaga os eventos ainda guardados que pertencem à conta (audiências visit e
+// account, com a visão da própria pessoa). Usado na anonimização; eventos da equipe expiram com a
+// retenção de 24 h. Devolve quantos foram apagados.
+func ForgetAccount(ctx context.Context, q database.Querier, accountID uuid.UUID) (int64, error) {
+	a, err := q.Exec(ctx, `DELETE FROM event_log WHERE account_id = $1`, accountID)
+	if err != nil {
+		return 0, err
+	}
+	b, err := q.Exec(ctx, `DELETE FROM outbox WHERE account_id = $1`, accountID)
+	if err != nil {
+		return 0, err
+	}
+	return a.RowsAffected() + b.RowsAffected(), nil
+}

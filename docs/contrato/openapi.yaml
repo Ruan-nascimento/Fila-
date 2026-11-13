@@ -2382,7 +2382,7 @@ paths:
       x-authz: [{ actor: customer, scope: self }, { actor: professional, scope: self }, { actor: owner, scope: self }]
       x-reauth: true
       x-transitions: [T-AC-03, T-P-10, T-O-05, T-RW-06, T-LG-03]
-      x-events: [stream.session_ended, participation.updated, reward_reservation.updated, deletion_request.updated, pendencies.updated]
+      x-events: [stream.session_ended, participation.updated, order.updated, payment.updated, change_request.updated, queue.public.updated, queue.updated, reward_reservation.updated, deletion_request.updated, pendencies.updated]
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
