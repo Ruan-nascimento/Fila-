@@ -151,3 +151,40 @@ func TestAbacatePayQueries(t *testing.T) {
 		t.Fatalf("5xx em consulta (nada foi criado): %v", err)
 	}
 }
+
+// Estorno (POST /transparents/refund): corpo {id, reason}; resposta documentada {data: {id
+// "tran_…", status "COMPLETE", amount}}; já estornada responde 400 (recusa, sem novo estorno).
+func TestAbacatePayRefund(t *testing.T) {
+	var got map[string]any
+	a := adapter(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/v2/transparents/refund" {
+			t.Errorf("rota: %s %s", r.Method, r.URL.Path)
+		}
+		raw, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(raw, &got)
+		if got["id"] == "pix_char_ja" {
+			w.WriteHeader(400)
+			_, _ = io.WriteString(w, `{"data":null,"success":false,"error":"Esta cobrança já foi reembolsada."}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"data":{"id":"tran_abc123xyz","status":"COMPLETE","amount":7500,"reason":"duplicado",`+
+			`"originalId":"pix_char_abc","createdAt":"2026-11-13T14:30:00.000Z"},"error":null,"success":true}`)
+	}, 5*time.Second)
+	res, err := a.RefundPix(context.Background(), "pix_char_abc", strings.Repeat("m", 600))
+	if err != nil || res.ProviderRefundID != "tran_abc123xyz" || res.AmountCents != 7500 || res.Status != "COMPLETE" {
+		t.Fatalf("estorno: %+v %v", res, err)
+	}
+	if got["id"] != "pix_char_abc" || len([]rune(got["reason"].(string))) != 500 || len(got) != 2 {
+		t.Fatalf("corpo enviado: %v", got)
+	}
+	if _, err := a.RefundPix(context.Background(), "pix_char_ja", ""); !errors.Is(err, ErrRejected) {
+		t.Fatalf("já estornada deveria ser recusa: %v", err)
+	}
+	if !a.Capabilities().RefundPix || a.Capabilities().PartialRefund {
+		t.Fatal("capacidades de estorno")
+	}
+	slow := adapter(t, func(w http.ResponseWriter, r *http.Request) { time.Sleep(300 * time.Millisecond) }, 50*time.Millisecond)
+	if _, err := slow.RefundPix(context.Background(), "pix_char_abc", ""); !errors.Is(err, ErrAmbiguous) {
+		t.Fatalf("tempo esgotado no estorno deve ser ambíguo: %v", err)
+	}
+}

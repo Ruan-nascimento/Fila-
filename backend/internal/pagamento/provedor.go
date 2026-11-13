@@ -56,8 +56,17 @@ type Charge struct {
 // Capabilities registra o que o provedor realmente suporta (docs/pagamentos-abacatepay.md).
 type Capabilities struct {
 	CancelPix     bool // há rota para cancelar Pix pendente?
+	RefundPix     bool // há estorno de Pix pela API (integral)?
 	PartialRefund bool
 	MinPixCents   int64
+}
+
+// RefundResult é a resposta do pedido de estorno. Não é a confirmação: o estorno só vale como
+// confirmado quando a cobrança aparece REFUNDED (consulta autenticada ou webhook).
+type RefundResult struct {
+	ProviderRefundID string
+	Status           string
+	AmountCents      int64
 }
 
 // Provider é o adaptador do provedor de Pix (isolado atrás desta interface; testes de contrato
@@ -68,6 +77,9 @@ type Provider interface {
 	GetPix(ctx context.Context, providerID string) (Charge, error)
 	// FindPix procura cobranças criadas com o ExternalID (reconciliar resultado desconhecido).
 	FindPix(ctx context.Context, externalID string) ([]Charge, error)
+	// RefundPix pede o estorno INTEGRAL da cobrança. Repetir para cobrança já estornada não cria
+	// outro estorno (o provedor recusa): seguro repetir depois de resultado desconhecido.
+	RefundPix(ctx context.Context, providerID, reason string) (RefundResult, error)
 	Capabilities() Capabilities
 	// TestMode informa se a chave é de teste (nada é cobrado de verdade).
 	TestMode() bool

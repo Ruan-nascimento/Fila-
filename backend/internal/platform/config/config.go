@@ -54,6 +54,9 @@ type PaymentsConfig struct {
 	ExpiresIn time.Duration
 	// Timeout de cada chamada ao provedor; estourou depois de enviar = resultado desconhecido.
 	Timeout time.Duration
+	// WebhookSecret é o secret do webhook cadastrado no painel da AbacatePay (prova a origem do
+	// aviso). Vazio = webhook desligado: só a consulta do worker confirma pagamentos (ADR-0024).
+	WebhookSecret Secret
 }
 
 // Provedores de Pix.
@@ -171,6 +174,7 @@ const (
 	VarAbacateValidated  = "FILA_ABACATEPAY_PRODUCTION_VALIDATED"
 	VarPixExpiresIn      = "FILA_PIX_EXPIRES_IN"
 	VarAbacateTimeout    = "FILA_ABACATEPAY_TIMEOUT"
+	VarAbacateWebhook    = "FILA_ABACATEPAY_WEBHOOK_SECRET"
 	// VarTestDatabaseURL é lida só pelos testes de integração; aceita aqui para não ser "desconhecida".
 	VarTestDatabaseURL = "FILA_TEST_DATABASE_URL"
 	VarRequireDBTests  = "FILA_REQUIRE_DB_TESTS"
@@ -186,7 +190,7 @@ var knownVars = map[string]bool{
 	VarSecretKey: true, VarAllowedOrigins: true, VarPublicBaseURL: true, VarCookieSecure: true,
 	VarTrustForwardedFor: true, VarMailMode: true, VarMailDir: true,
 	VarPixProvider: true, VarAbacateKey: true, VarAbacateBaseURL: true, VarAbacateValidated: true,
-	VarPixExpiresIn: true, VarAbacateTimeout: true,
+	VarPixExpiresIn: true, VarAbacateTimeout: true, VarAbacateWebhook: true,
 }
 
 // Origens padrão fora de produção: o servidor de desenvolvimento do Vite.
@@ -541,6 +545,11 @@ func (l *loader) payments(prod bool) PaymentsConfig {
 	}
 	key, _ := l.get(VarAbacateKey)
 	c.APIKey = Secret(strings.TrimSpace(key))
+	hook, _ := l.get(VarAbacateWebhook)
+	c.WebhookSecret = Secret(strings.TrimSpace(hook))
+	if s := c.WebhookSecret.Reveal(); s != "" && (len(s) < 32 || len(s) > 256 || strings.ContainsAny(s, " \t&?#/")) {
+		l.fail(VarAbacateWebhook, "use de 32 a 256 caracteres sem espaço nem &?#/ (o mesmo secret cadastrado no webhook da AbacatePay)")
+	}
 	if c.Pix != PixAbacatePay {
 		return c
 	}

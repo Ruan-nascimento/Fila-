@@ -43,7 +43,7 @@ func NewAbacatePay(c config.PaymentsConfig) *AbacatePay {
 
 // Capabilities: o que a documentação oficial confirma.
 func (a *AbacatePay) Capabilities() Capabilities {
-	return Capabilities{CancelPix: false, PartialRefund: false, MinPixCents: 100}
+	return Capabilities{CancelPix: false, RefundPix: true, PartialRefund: false, MinPixCents: 100}
 }
 
 // TestMode informa se a chave é de teste.
@@ -205,6 +205,32 @@ func (a *AbacatePay) GetPix(ctx context.Context, providerID string) (Charge, err
 // FindPix procura as cobranças criadas com o externalId (GET /transparents/list?externalId=…).
 func (a *AbacatePay) FindPix(ctx context.Context, externalID string) ([]Charge, error) {
 	return a.list(ctx, url.Values{"externalId": {externalID}, "method": {"PIX"}, "limit": {"10"}})
+}
+
+// RefundPix pede o estorno integral (POST /transparents/refund {id, reason}). A documentação diz
+// que repetir para cobrança já estornada responde 400 sem criar outro estorno; quem chama
+// confere a situação real pela consulta (REFUNDED) antes de registrar sucesso.
+func (a *AbacatePay) RefundPix(ctx context.Context, providerID, reason string) (RefundResult, error) {
+	body := map[string]any{"id": providerID}
+	if reason != "" {
+		if len([]rune(reason)) > 500 {
+			reason = string([]rune(reason)[:500])
+		}
+		body["reason"] = reason
+	}
+	env, err := a.do(ctx, http.MethodPost, "/transparents/refund", body, false)
+	if err != nil {
+		return RefundResult{}, err
+	}
+	var out struct {
+		ID     string `json:"id"`
+		Status string `json:"status"`
+		Amount int64  `json:"amount"`
+	}
+	if err := json.Unmarshal(env.Data, &out); err != nil || out.ID == "" {
+		return RefundResult{}, fmt.Errorf("%w: estorno sem id", ErrAmbiguous)
+	}
+	return RefundResult{ProviderRefundID: out.ID, Status: out.Status, AmountCents: out.Amount}, nil
 }
 
 var _ Provider = (*AbacatePay)(nil)

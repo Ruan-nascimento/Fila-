@@ -266,13 +266,15 @@ func TestPaymentsConfig(t *testing.T) {
 		"produção sem validação":     {append(append([]string{}, prodBase...), "FILA_ABACATEPAY_API_KEY="+prodKey), VarAbacateValidated},
 		"formato estranho":           {valid("FILA_PIX_PROVIDER=abacatepay", "FILA_ABACATEPAY_API_KEY=sk_live_123"), VarAbacateKey},
 		"validade curta demais":      {valid("FILA_PIX_EXPIRES_IN=1m"), VarPixExpiresIn},
+		"secret do webhook curto":    {valid("FILA_ABACATEPAY_WEBHOOK_SECRET=curtoDemais123"), VarAbacateWebhook}, // gitleaks:allow (valor de teste curto demais de propósito)
 		"produção sem https":         {append(append([]string{}, prodBase...), "FILA_ABACATEPAY_API_KEY="+prodKey, "FILA_ABACATEPAY_PRODUCTION_VALIDATED=true", "FILA_ABACATEPAY_BASE_URL=http://api.exemplo"), VarAbacateBaseURL},
 	} {
 		_, err := Load(c.env)
 		if err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: esperava erro em %s, veio %v", name, c.want, err)
 		}
-		if err != nil && (strings.Contains(err.Error(), "fixtureSemSegredo") || strings.Contains(err.Error(), "sk_live_123")) {
+		if err != nil && (strings.Contains(err.Error(), "fixtureSemSegredo") || strings.Contains(err.Error(), "sk_live_123") ||
+			strings.Contains(err.Error(), "curtoDemais123")) {
 			t.Errorf("%s: mensagem expôs a chave", name)
 		}
 	}
