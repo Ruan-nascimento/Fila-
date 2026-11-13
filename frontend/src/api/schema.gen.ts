@@ -3120,7 +3120,7 @@ export interface operations {
                 content: {
                     "application/json": {
                         data: components["schemas"]["Visit"] | null;
-                        cursor: components["schemas"]["StreamCursor"];
+                        cursor: components["schemas"]["SnapshotCursor"];
                     };
                 };
             };

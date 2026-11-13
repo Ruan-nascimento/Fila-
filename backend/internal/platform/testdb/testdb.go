@@ -11,12 +11,14 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"net/url"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"fila/internal/platform/config"
@@ -64,8 +66,20 @@ func New(t testing.TB) string {
 			return
 		}
 		defer c.Close(ctx)
-		if _, err := c.Exec(ctx, "DROP DATABASE IF EXISTS "+pgx.Identifier{name}.Sanitize()+" WITH (FORCE)"); err != nil {
-			t.Errorf("limpeza: apagar banco %s: %v", name, err)
+		// Um processo do próprio PostgreSQL (ex.: autovacuum, que roda como superusuário) pode
+		// estar no banco temporário; um usuário de teste sem superusuário não consegue encerrá-lo
+		// (SQLSTATE 42501). Esses processos terminam sozinhos em instantes: tentamos de novo.
+		var err2 error
+		for attempt := range 10 {
+			_, err2 = c.Exec(ctx, "DROP DATABASE IF EXISTS "+pgx.Identifier{name}.Sanitize()+" WITH (FORCE)")
+			var pgErr *pgconn.PgError
+			if err2 == nil || !errors.As(err2, &pgErr) || pgErr.Code != "42501" {
+				break
+			}
+			time.Sleep(time.Duration(attempt+1) * 300 * time.Millisecond)
+		}
+		if err2 != nil {
+			t.Errorf("limpeza: apagar banco %s: %v", name, err2)
 		}
 	})
 

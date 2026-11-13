@@ -40,8 +40,9 @@ type Deps struct {
 	Clock clock.Clock
 	Log   *slog.Logger
 	Auth  acesso.Authorizer
-	// Occupancy é opcional até a etapa 04.
+	// Occupancy e Activity vêm do módulo fila (participações). nil = filas vazias.
 	Occupancy Occupancy
+	Activity  QueueActivity
 	// PendingInvites devolve o convite pendente de cada profissional da loja (módulo identidade).
 	PendingInvites func(ctx context.Context, q database.Querier, establishmentID uuid.UUID) (map[uuid.UUID]InviteInfo, error)
 	// AccessRevoked avisa o módulo identidade que estas contas perderam o vínculo de equipe:

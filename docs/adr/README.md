@@ -23,3 +23,4 @@ Para mudar uma decisão, crie um novo ADR que substitua o anterior (não reescre
 | [ADR-0016](0016-fundacao-ferramentas-e-configuracao.md) | Fundação: ferramentas, versões e configuração | Aceita (etapa 01) |
 | [ADR-0017](0017-identidade-sessoes-e-limites.md) | Identidade: senhas, tokens, cookies, e-mail e limites de tentativa | Aceita (etapa 02) |
 | [ADR-0018](0018-loja-equipe-catalogo.md) | Loja, equipe e catálogo: limites entre módulos e dependências de etapas futuras | Aceita (etapa 03) |
+| [ADR-0019](0019-fila-transacional.md) | Fila transacional: travas, ordem FIFO, senhas e estimativa | Aceita (etapa 04) |

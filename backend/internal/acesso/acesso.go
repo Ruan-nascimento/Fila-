@@ -31,6 +31,37 @@ type Actor struct {
 // IsOwner informa se o ator é dono da loja.
 func (a Actor) IsOwner() bool { return a.Role == RoleOwner }
 
+// Tipos de identidade de cliente.
+const (
+	IdentityAccount = "account"
+	IdentityVisitor = "visitor"
+)
+
+// Identity é quem age como cliente numa loja: uma conta (sessão de conta em qualquer contexto)
+// ou um visitante (credencial de visitante desta loja). Vem só dos cookies.
+type Identity struct {
+	Kind      string // IdentityAccount ou IdentityVisitor
+	AccountID uuid.UUID
+	VisitorID uuid.UUID
+	// Name é o nome da conta ou o nick do visitante (exibido à equipe, nunca ao público).
+	Name string
+}
+
+// ID devolve o identificador da identidade (conta ou visitante).
+func (i Identity) ID() uuid.UUID {
+	if i.Kind == IdentityAccount {
+		return i.AccountID
+	}
+	return i.VisitorID
+}
+
+// Customers informa as identidades de cliente do pedido para a loja.
+type Customers interface {
+	// CustomerIdentities devolve a conta (se houver sessão de conta) e o visitante desta loja
+	// (se houver credencial de visitante válida). Ambos podem ser nil.
+	CustomerIdentities(r *http.Request, establishmentID uuid.UUID) (account, visitor *Identity)
+}
+
 // Authorizer autoriza pedidos de equipe. Regras comuns (R-PERM-01/05):
 //   - sem sessão → 401;
 //   - sem vínculo ativo com a loja → 404 (não revela que a loja existe);

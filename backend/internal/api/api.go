@@ -13,11 +13,13 @@ import (
 
 	"fila/internal/catalogo"
 	"fila/internal/estabelecimento"
+	"fila/internal/fila"
 	"fila/internal/identidade"
 	"fila/internal/platform/clock"
 	"fila/internal/platform/config"
 	hs "fila/internal/platform/httpserver"
 	"fila/internal/platform/keys"
+	"fila/internal/platform/ratelimit"
 )
 
 // Deps são as dependências da API.
@@ -28,7 +30,7 @@ type Deps struct {
 	Clock  clock.Clock
 	// PasswordParams permite parâmetros mais leves nos testes; zero = padrão de produção.
 	PasswordParams identidade.PasswordParams
-	// Occupancy informa participações por fila/profissional (módulo fila, etapa 04). nil = nenhuma.
+	// Occupancy substitui a ocupação real das filas (só em testes). nil = módulo fila.
 	Occupancy estabelecimento.Occupancy
 }
 
@@ -63,14 +65,23 @@ func New(d Deps, register func(mux *http.ServeMux)) (*API, error) {
 		},
 	})
 
+	fl := fila.New(fila.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Auth: ident, Customers: ident,
+		Limiter: ratelimit.New(d.Pool, d.Clock, ring), TrustForwardedFor: d.Config.Security.TrustForwardedFor,
+		VisitStarted: ident.VisitStarted, VisitClosed: ident.VisitClosed})
+	ident.SetActiveVisit(fl.VisitorBusy)
+	var occ estabelecimento.Occupancy = fl
+	if d.Occupancy != nil {
+		occ = d.Occupancy // testes da etapa 03 simulam ocupação
+	}
 	est := estabelecimento.New(estabelecimento.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Auth: ident,
-		Occupancy: d.Occupancy, PendingInvites: ident.PendingInvites, AccessRevoked: ident.AccessRevoked})
+		Occupancy: occ, Activity: fl, PendingInvites: ident.PendingInvites, AccessRevoked: ident.AccessRevoked})
 	cat := catalogo.New(catalogo.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Auth: ident})
 
 	a := &API{Identity: ident, mux: http.NewServeMux()}
 	a.routes = append(a.routes, ident.Routes()...)
 	a.routes = append(a.routes, est.Routes()...)
 	a.routes = append(a.routes, cat.Routes()...)
+	a.routes = append(a.routes, fl.Routes()...)
 	hs.Mount(a.mux, d.Log, a.routes)
 	if register != nil {
 		register(a.mux)

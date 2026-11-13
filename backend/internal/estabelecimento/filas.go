@@ -35,14 +35,14 @@ type unavailableSignal struct {
 	Since  *time.Time `json:"since"`
 }
 
-// staffQueueView segue o esquema StaffQueue. As entradas (participações) chegam na etapa 04.
+// staffQueueView segue o esquema StaffQueue. As entradas vêm do módulo fila (QueueActivity).
 type staffQueueView struct {
 	QueueID      uuid.UUID         `json:"queue_id"`
 	Professional queueProfessional `json:"professional"`
 	Status       string            `json:"status"`
 	Version      int64             `json:"version"`
 	Unavailable  unavailableSignal `json:"unavailable_signal"`
-	Entries      []struct{}        `json:"entries"`
+	Entries      []StaffEntry      `json:"entries"`
 }
 
 const queueSelect = `
@@ -56,7 +56,7 @@ func scanQueue(row pgx.Row) (staffQueueView, error) {
 	if errors.Is(err, pgx.ErrNoRows) {
 		return v, httpserver.ErrNotFound()
 	}
-	v.Entries = []struct{}{}
+	v.Entries = []StaffEntry{}
 	return v, err
 }
 
@@ -99,6 +99,9 @@ func (s *Service) listStaffQueues(w http.ResponseWriter, r *http.Request) error 
 	}
 	if list == nil {
 		list = []staffQueueView{}
+	}
+	if err := s.fillEntries(ctx, s.Pool, list); err != nil {
+		return err
 	}
 	httpserver.WriteJSON(w, http.StatusOK, struct {
 		Data   []staffQueueView `json:"data"`
@@ -204,7 +207,11 @@ func (s *Service) changeQueue(w http.ResponseWriter, r *http.Request, op string)
 		if err != nil {
 			return idempotency.Result{}, err
 		}
-		return idempotency.Result{Status: http.StatusOK, Body: httpserver.Data[staffQueueView]{Data: next}}, nil
+		views := []staffQueueView{next}
+		if err := s.fillEntries(ctx, tx, views); err != nil {
+			return idempotency.Result{}, err
+		}
+		return idempotency.Result{Status: http.StatusOK, Body: httpserver.Data[staffQueueView]{Data: views[0]}}, nil
 	})
 }
 
@@ -283,7 +290,11 @@ func (s *Service) signalAvailability(w http.ResponseWriter, r *http.Request) err
 		if err != nil {
 			return idempotency.Result{}, err
 		}
-		return idempotency.Result{Status: http.StatusOK, Body: httpserver.Data[staffQueueView]{Data: next}}, nil
+		views := []staffQueueView{next}
+		if err := s.fillEntries(ctx, tx, views); err != nil {
+			return idempotency.Result{}, err
+		}
+		return idempotency.Result{Status: http.StatusOK, Body: httpserver.Data[staffQueueView]{Data: views[0]}}, nil
 	})
 }
 
@@ -299,14 +310,9 @@ type publicQueueView struct {
 	} `json:"professional"`
 	Status        string         `json:"status"`
 	WaitingCount  int            `json:"waiting_count"`
-	Tickets       []publicTicket `json:"tickets"`
+	Tickets       []PublicTicket `json:"tickets"`
 	EstimatedWait estimate       `json:"estimated_wait"`
 	Version       int64          `json:"version"`
-}
-
-type publicTicket struct {
-	TicketCode string `json:"ticket_code"`
-	Status     string `json:"status"`
 }
 
 type estimate struct {
@@ -338,13 +344,31 @@ func (s *Service) listPublicQueues(w http.ResponseWriter, r *http.Request) error
 	list, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (publicQueueView, error) {
 		var v publicQueueView
 		err := row.Scan(&v.QueueID, &v.Professional.ID, &v.Professional.DisplayName, &v.Status, &v.Version)
-		// Sem participações até a etapa 04: ninguém aguardando, estimativa zero (sempre "estimativa").
-		v.Tickets = []publicTicket{}
+		v.Tickets = []PublicTicket{}
 		v.EstimatedWait = estimate{Kind: "estimate", Minutes: 0, ComputedAt: now}
 		return v, err
 	})
 	if err != nil {
 		return err
+	}
+	if s.Activity != nil && len(list) > 0 {
+		ids := make([]uuid.UUID, len(list))
+		for i := range list {
+			ids[i] = list[i].QueueID
+		}
+		snaps, err := s.Activity.PublicSnapshots(ctx, s.Pool, ids, now)
+		if err != nil {
+			return err
+		}
+		for i := range list {
+			if sn, ok := snaps[list[i].QueueID]; ok {
+				list[i].WaitingCount = sn.WaitingCount
+				if sn.Tickets != nil {
+					list[i].Tickets = sn.Tickets
+				}
+				list[i].EstimatedWait.Minutes = sn.EstimateMinutes
+			}
+		}
 	}
 	if list == nil {
 		list = []publicQueueView{}
@@ -353,5 +377,26 @@ func (s *Service) listPublicQueues(w http.ResponseWriter, r *http.Request) error
 		Data   []publicQueueView `json:"data"`
 		Cursor *string           `json:"cursor"`
 	}{Data: list})
+	return nil
+}
+
+// fillEntries preenche as pessoas de cada fila (módulo fila).
+func (s *Service) fillEntries(ctx context.Context, q database.Querier, views []staffQueueView) error {
+	if s.Activity == nil || len(views) == 0 {
+		return nil
+	}
+	ids := make([]uuid.UUID, len(views))
+	for i := range views {
+		ids[i] = views[i].QueueID
+	}
+	entries, err := s.Activity.StaffEntries(ctx, q, ids)
+	if err != nil {
+		return err
+	}
+	for i := range views {
+		if e, ok := entries[views[i].QueueID]; ok && e != nil {
+			views[i].Entries = e
+		}
+	}
 	return nil
 }
