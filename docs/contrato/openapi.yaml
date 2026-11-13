@@ -12,7 +12,7 @@ info:
     - `x-transitions`: transições da matriz (T-…) que a operação pode executar.
     - `x-events`: tipos de evento SSE gravados na outbox quando a operação muda estado.
     - `x-reauth`: exige reautenticação recente (10 minutos).
-    - `x-external-pending`: detalhe que depende de documentação/conta do provedor (etapas 08/09).
+    - `x-external-pending`: detalhe que depende de documentação/conta do provedor (etapa 09).
 
     Regras gerais: valores em centavos inteiros (BRL); datas RFC 3339 em UTC com sufixo Z;
     identificadores opacos; corpo desconhecido é rejeitado (`additionalProperties: false`);
@@ -1215,6 +1215,11 @@ paths:
       description: |
         201 quando o provedor respondeu com a cobrança. 202 quando o resultado é desconhecido
         (status `unknown`): a interface mostra "verificando pagamento" e não pode criar outra.
+        O worker reconcilia pelo `externalId` (= id da tentativa) antes de qualquer nova tentativa.
+        Mesma `Idempotency-Key` na mesma comanda devolve a mesma tentativa. Pix exige no mínimo
+        R$ 1,00 (`payment_method_not_allowed`). Pix desligado ou recusado pelo provedor: 503
+        `provider_unavailable`, e a comanda segue aguardando pagamento. Provedor: AbacatePay v2
+        (capacidades confirmadas em docs/pagamentos-abacatepay.md).
       security: [{ visitorSession: [], csrfToken: [] }, { accountSession: [], csrfToken: [] }]
       x-authz:
         - { actor: visitor, scope: visit_owner }
@@ -1223,7 +1228,6 @@ paths:
         - { actor: owner, scope: establishment }
       x-transitions: [T-PX-01, T-PX-02, T-PX-03, T-PX-08]
       x-events: [payment.updated]
-      x-external-pending: [api_version, authentication, remote_idempotency, expiration]
       parameters:
         - $ref: '#/components/parameters/EstablishmentId'
         - $ref: '#/components/parameters/OrderId'
@@ -1269,12 +1273,15 @@ paths:
     post:
       operationId: cancelPixCharge
       tags: [pagamento]
-      summary: Tenta cancelar cobrança Pix pendente no provedor (quando suportado).
+      summary: Registra o pedido de cancelamento de um Pix em aberto.
+      description: |
+        A AbacatePay não oferece cancelamento de Pix (a cobrança só expira). O pedido fica
+        registrado (`cancel_requested_at`), a cobrança segue `pending` até expirar e, se for paga
+        mesmo assim, o recebimento entra como `excess` (devolução: etapa 09).
       security: [{ accountSession: [], csrfToken: [] }]
       x-authz: [{ actor: professional, scope: own_attendance }, { actor: owner, scope: establishment }]
       x-transitions: [T-PX-07]
       x-events: [payment.updated, pendencies.updated]
-      x-external-pending: [charge_cancellation]
       parameters:
         - $ref: '#/components/parameters/EstablishmentId'
         - $ref: '#/components/parameters/OrderId'
@@ -3334,7 +3341,7 @@ components:
         acknowledge_active_pix:
           type: boolean
           default: false
-          description: Necessário para sair de Pix com cobrança ativa (gera alerta e tentativa de cancelamento).
+          description: Necessário para sair de Pix com cobrança ativa. Registra o pedido de cancelamento; como a AbacatePay não cancela Pix, ele segue válido até expirar.
     RegisterReceiptRequest:
       type: object
       additionalProperties: false

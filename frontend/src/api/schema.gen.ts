@@ -797,6 +797,11 @@ export interface paths {
          * Cria cobrança Pix do valor devido calculado pelo servidor. Uma tentativa ativa por comanda.
          * @description 201 quando o provedor respondeu com a cobrança. 202 quando o resultado é desconhecido
          *     (status `unknown`): a interface mostra "verificando pagamento" e não pode criar outra.
+         *     O worker reconcilia pelo `externalId` (= id da tentativa) antes de qualquer nova tentativa.
+         *     Mesma `Idempotency-Key` na mesma comanda devolve a mesma tentativa. Pix exige no mínimo
+         *     R$ 1,00 (`payment_method_not_allowed`). Pix desligado ou recusado pelo provedor: 503
+         *     `provider_unavailable`, e a comanda segue aguardando pagamento. Provedor: AbacatePay v2
+         *     (capacidades confirmadas em docs/pagamentos-abacatepay.md).
          */
         post: operations["createPixCharge"];
         delete?: never;
@@ -831,7 +836,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Tenta cancelar cobrança Pix pendente no provedor (quando suportado). */
+        /**
+         * Registra o pedido de cancelamento de um Pix em aberto.
+         * @description A AbacatePay não oferece cancelamento de Pix (a cobrança só expira). O pedido fica
+         *     registrado (`cancel_requested_at`), a cobrança segue `pending` até expirar e, se for paga
+         *     mesmo assim, o recebimento entra como `excess` (devolução: etapa 09).
+         */
         post: operations["cancelPixCharge"];
         delete?: never;
         options?: never;
@@ -1778,7 +1788,7 @@ export interface components {
             expected_version: components["schemas"]["Version"];
             method: components["schemas"]["PaymentMethod"];
             /**
-             * @description Necessário para sair de Pix com cobrança ativa (gera alerta e tentativa de cancelamento).
+             * @description Necessário para sair de Pix com cobrança ativa. Registra o pedido de cancelamento; como a AbacatePay não cancela Pix, ele segue válido até expirar.
              * @default false
              */
             acknowledge_active_pix: boolean;

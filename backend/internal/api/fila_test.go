@@ -239,35 +239,28 @@ func TestPendingOrderBlocksEntry(t *testing.T) {
 	e := newEnv(t)
 	b := e.barbearia(t)
 	maria := e.verifiedCustomer("maria@exemplo.com")
-	p, _ := visitOf(maria.mustStatus(maria.enter(b.id, b.filaBeto, b.corte), 201))
-	finish := func(queue uuid.UUID, orderStatus string) {
-		t.Helper()
-		// Conclusão real (etapa 05): comanda aguardando pagamento com valor fechado.
-		b.owner.serve(b.id, queue, p["id"].(string))
-		if orderStatus == "awaiting_payment" {
-			return
-		}
-		// Recebimento e conferência são das etapas 08/09: simulamos o resultado no banco.
-		closed := "NULL"
-		if orderStatus == "settled" {
-			closed = "now()"
-		}
-		if _, err := e.pool.Exec(context.Background(), `UPDATE service_order SET status = $2, closed_at = `+closed+` WHERE participation_id = $1`, p["id"], orderStatus); err != nil {
-			t.Fatal(err)
-		}
-	}
-	finish(b.filaBeto, "awaiting_payment")
+	p, o0 := visitOf(maria.mustStatus(maria.enter(b.id, b.filaBeto, b.corte), 201))
+	// Conclusão real (etapa 05): comanda aguardando pagamento com valor fechado.
+	b.owner.serve(b.id, b.filaBeto, p["id"].(string))
 	if r := maria.enter(b.id, b.filaBeto, b.corte); r.status != 409 || r.code() != "pending_order_exists" {
 		t.Fatalf("comanda aguardando pagamento: %d %s", r.status, r.raw)
 	}
-	_, _ = e.pool.Exec(context.Background(), `UPDATE service_order SET status = 'settled', closed_at = now() WHERE participation_id = $1`, p["id"])
+	// Recebimento real em dinheiro (etapa 08): comanda paga libera nova entrada.
+	om := maria.order(b.id, o0["id"])
+	b.owner.mustStatus(b.owner.receive(b.id, om, map[string]any{"method": "cash", "amount_cents": due(om), "cash_tendered_cents": due(om)}), 201)
 	p2, _ := visitOf(maria.mustStatus(maria.enter(b.id, b.filaBeto, b.corte), 201))
 
-	// Lia: só falta a conferência da equipe (awaiting_confirmation) → pode entrar de novo.
+	// Lia: Pix confirmado pelo provedor, só falta a conferência da equipe (awaiting_confirmation)
+	// → pode entrar de novo.
 	lia := e.verifiedCustomer("lia@exemplo.com")
-	pl, _ := visitOf(lia.mustStatus(lia.enter(b.id, b.filaCaio, b.corte), 201))
-	p = pl
-	finish(b.filaCaio, "awaiting_confirmation")
+	pl, ol := visitOf(lia.mustStatus(lia.enter(b.id, b.filaCaio, b.corte), 201))
+	b.owner.serve(b.id, b.filaCaio, pl["id"].(string))
+	ch := lia.mustStatus(lia.createPix(b.id, lia.order(b.id, ol["id"]), newIdemKey()), 201).data()
+	e.pix.Set(e.pix.ByExternalID(ch["id"].(string)).ID, "PAID", 0)
+	e.reconcile()
+	if o := lia.order(b.id, ol["id"]); o["status"] != "awaiting_confirmation" {
+		t.Fatalf("Pix pago: %v", o["status"])
+	}
 	lia.mustStatus(lia.enter(b.id, b.filaCaio, b.corte), 201)
 	_ = p2
 }

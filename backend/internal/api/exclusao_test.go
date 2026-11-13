@@ -253,13 +253,12 @@ func TestDeletionWithPendingWork(t *testing.T) {
 	if r := b.betoB.do("GET", estPath(b.id, "/deletion-requests"), nil); r.status != 403 {
 		t.Fatalf("profissional vendo exclusões: %d", r.status)
 	}
-	// Pagamento é da etapa 08: a pendência é resolvida aqui pela equipe registrando o recebimento
-	// (simulado no banco), nunca pela exclusão. A exclusão não cria pagamento nem apaga a dívida.
+	// A pendência é resolvida pela equipe registrando o recebimento (etapa 08), nunca pela exclusão. A exclusão não cria pagamento nem apaga a dívida.
 	o := b.owner.order(b.id, oj["id"])
 	if o["status"] != "awaiting_payment" || total(o) != 4500 {
 		t.Fatalf("comanda depois do pedido de exclusão: %v", o)
 	}
-	_, _ = e.pool.Exec(context.Background(), `UPDATE service_order SET status = 'settled', closed_at = now() WHERE id = $1`, oj["id"])
+	b.betoB.mustStatus(b.betoB.receive(b.id, o, map[string]any{"method": "cash", "amount_cents": 4500, "cash_tendered_cents": 5000}), 201)
 	if e.processDeletions() != 1 {
 		t.Fatal("não concluiu depois de resolvido")
 	}
@@ -424,7 +423,7 @@ func TestHistoryPrivateAndPaginated(t *testing.T) {
 	maria := e.verifiedCustomer("maria@exemplo.com")
 	p1, o1 := visitOf(maria.mustStatus(maria.enter(b.id, b.filaBeto, b.corte, b.barba), 201))
 	b.betoB.serve(b.id, b.filaBeto, p1["id"].(string))
-	_, _ = e.pool.Exec(context.Background(), `UPDATE service_order SET status = 'settled', closed_at = now() WHERE id = $1`, o1["id"]) // pagamento: etapa 08
+	b.betoB.mustStatus(b.betoB.receive(b.id, b.betoB.order(b.id, o1["id"]), map[string]any{"method": "card", "amount_cents": 7500}), 201)
 	e.clock.Advance(time.Hour)
 	_, o2 := visitOf(maria.mustStatus(maria.enter(b.id, b.filaCaio, b.corte), 201))
 	h := maria.mustStatus(maria.do("GET", "/v1/me/history?establishment_id="+b.id.String(), nil), 200)

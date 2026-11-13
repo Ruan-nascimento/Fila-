@@ -25,6 +25,7 @@ import (
 	"fila/internal/api"
 	"fila/internal/estabelecimento"
 	"fila/internal/identidade"
+	"fila/internal/pagamento/pagamentotest"
 	"fila/internal/platform/clock"
 	"fila/internal/platform/config"
 	"fila/internal/platform/database"
@@ -51,6 +52,8 @@ type env struct {
 	logs  *syncBuffer
 	inbox []mail.Message
 	deps  api.Deps
+	// pix simula a API da AbacatePay (o adaptador real fala HTTP com ele).
+	pix *pagamentotest.Fake
 	// ipSeq numera os navegadores simulados; atômico porque testes de concorrência criam
 	// navegadores em várias goroutines ao mesmo tempo.
 	ipSeq atomic.Int64
@@ -97,6 +100,13 @@ func newEnvDeps(t *testing.T, change func(*api.Deps)) *env {
 	logs := &syncBuffer{}
 	log := logging.New(logs, slog.LevelDebug, "json")
 	clk := clock.NewFake(time.Date(2026, 11, 12, 12, 0, 0, 0, time.UTC))
+	// Pix: o adaptador real da AbacatePay falando com o simulador local (chave de teste falsa).
+	const pixKey = "abc_dev_" + "simulador-local" // gitleaks:allow (não é segredo)
+	pix := pagamentotest.New(pixKey, clk.Now)
+	pixSrv := httptest.NewServer(pix)
+	t.Cleanup(pixSrv.Close)
+	cfg.Payments = config.PaymentsConfig{Pix: config.PixAbacatePay, APIKey: config.Secret(pixKey), BaseURL: pixSrv.URL + "/v2",
+		ExpiresIn: 15 * time.Minute, Timeout: time.Second}
 	deps := api.Deps{Config: cfg, Pool: pool, Log: log, Clock: clk, PasswordParams: lightParams}
 	if change != nil {
 		change(&deps)
@@ -110,12 +120,19 @@ func newEnvDeps(t *testing.T, change func(*api.Deps)) *env {
 	go a.Run(hubCtx)
 	// Ordem ao terminar: encerra os fluxos SSE (senão o Close esperaria por eles) e o Hub.
 	t.Cleanup(func() {
+		if t.Failed() { // diagnóstico: erros registrados pela API durante o teste
+			for line := range strings.Lines(logs.String()) {
+				if strings.Contains(line, `"level":"ERROR"`) {
+					t.Log(line)
+				}
+			}
+		}
 		a.Stream.Shutdown()
 		srv.Close()
 		stopHub()
 	})
 	ring, _ := keys.New(master)
-	return &env{t: t, pool: pool, clock: clk, api: a, srv: srv, ring: ring, logs: logs, deps: deps}
+	return &env{t: t, pool: pool, clock: clk, api: a, srv: srv, ring: ring, logs: logs, deps: deps, pix: pix}
 }
 
 // browser simula um navegador: cookies próprios, origem do site e token CSRF em memória.

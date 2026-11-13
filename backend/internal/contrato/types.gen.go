@@ -1505,7 +1505,7 @@ type ChangeRequestStatus string
 
 // ChoosePaymentMethodRequest defines model for ChoosePaymentMethodRequest.
 type ChoosePaymentMethodRequest struct {
-	// AcknowledgeActivePix Necessário para sair de Pix com cobrança ativa (gera alerta e tentativa de cancelamento).
+	// AcknowledgeActivePix Necessário para sair de Pix com cobrança ativa. Registra o pedido de cancelamento; como a AbacatePay não cancela Pix, ele segue válido até expirar.
 	AcknowledgeActivePix *bool `json:"acknowledge_active_pix,omitempty"`
 
 	// ExpectedVersion Versão do agregado; incrementa a cada mudança.

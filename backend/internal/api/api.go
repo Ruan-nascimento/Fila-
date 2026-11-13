@@ -19,6 +19,7 @@ import (
 	"fila/internal/fila"
 	"fila/internal/fluxo"
 	"fila/internal/identidade"
+	"fila/internal/pagamento"
 	"fila/internal/platform/clock"
 	"fila/internal/platform/config"
 	hs "fila/internal/platform/httpserver"
@@ -37,9 +38,12 @@ type Deps struct {
 	PasswordParams identidade.PasswordParams
 	// Occupancy substitui a ocupação real das filas (só em testes). nil = módulo fila.
 	Occupancy estabelecimento.Occupancy
-	// Charges informa cobranças Pix ativas/desconhecidas de uma comanda. As cobranças chegam na
-	// etapa 08; até lá nil = nenhuma cobrança (os testes simulam uma para provar o bloqueio).
+	// Charges (só testes) substitui a consulta de cobranças Pix ativas de uma comanda.
+	// nil = módulo pagamento.
 	Charges atendimento.ChargeGuard
+	// PixProvider (só testes) substitui o provedor Pix. nil = conforme a configuração
+	// (FILA_PIX_PROVIDER: desligado ou AbacatePay).
+	PixProvider pagamento.Provider
 	// StreamLimits troca os limites do SSE (testes usam tempos curtos). Zero = padrão.
 	StreamLimits fluxo.Limits
 	// SnapshotHook (só testes): ver fluxo.Deps.
@@ -56,6 +60,7 @@ type API struct {
 	Hub      *outbox.Hub
 	Stream   *fluxo.Service
 	Deletion *exclusao.Service
+	Payments *pagamento.Service
 	routes   []hs.Route
 	mux      *http.ServeMux
 	handler  http.Handler
@@ -97,6 +102,12 @@ func New(d Deps, register func(mux *http.ServeMux)) (*API, error) {
 	cat := catalogo.New(catalogo.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Auth: ident})
 	atd := atendimento.New(atendimento.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Auth: ident, Customers: ident,
 		Visits: fl, Charges: d.Charges, VisitClosed: ident.VisitClosed})
+	pay := pagamento.New(pagamento.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Orders: atd,
+		Provider: PixProvider(d.Config.Payments, d.PixProvider), ExpiresIn: d.Config.Payments.ExpiresIn,
+		Timeout: d.Config.Payments.Timeout, VisitClosed: ident.VisitClosed})
+	if d.Charges == nil {
+		atd.Charges = pay // correção de comanda fechada respeita o Pix ativo (R-CMD-12)
+	}
 
 	hub := outbox.NewHub(d.Pool, d.Log)
 	stream := fluxo.New(fluxo.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Hub: hub, Auth: ident, Customers: ident,
@@ -107,12 +118,13 @@ func New(d Deps, register func(mux *http.ServeMux)) (*API, error) {
 		Limiter: ratelimit.New(d.Pool, d.Clock, ring), TrustForwardedFor: d.Config.Security.TrustForwardedFor,
 		Identity: ident, Queue: fl, Benefits: d.Benefits, Fault: d.DeletionFault})
 
-	a := &API{Identity: ident, Hub: hub, Stream: stream, Deletion: deletion, mux: http.NewServeMux()}
+	a := &API{Identity: ident, Hub: hub, Stream: stream, Deletion: deletion, Payments: pay, mux: http.NewServeMux()}
 	a.routes = append(a.routes, ident.Routes()...)
 	a.routes = append(a.routes, est.Routes()...)
 	a.routes = append(a.routes, cat.Routes()...)
 	a.routes = append(a.routes, fl.Routes()...)
 	a.routes = append(a.routes, atd.Routes()...)
+	a.routes = append(a.routes, pay.Routes()...)
 	a.routes = append(a.routes, stream.Routes()...)
 	a.routes = append(a.routes, deletion.Routes()...)
 	hs.Mount(a.mux, d.Log, a.routes)
@@ -123,6 +135,19 @@ func New(d Deps, register func(mux *http.ServeMux)) (*API, error) {
 	// Ordem: origem (recusa site de fora) → sessão + CSRF → rota.
 	a.handler = hs.RequireOrigin(d.Config.Security.AllowedOrigins, ident.Middleware(a.mux))
 	return a, nil
+}
+
+// PixProvider escolhe o provedor Pix: override (testes), AbacatePay quando configurado, ou nil
+// (Pix desligado: só dinheiro e cartão). A validação da configuração (chave de teste fora de
+// produção, produção só depois de validada) está em config.
+func PixProvider(c config.PaymentsConfig, override pagamento.Provider) pagamento.Provider {
+	switch {
+	case override != nil:
+		return override
+	case c.Pix == config.PixAbacatePay:
+		return pagamento.NewAbacatePay(c)
+	}
+	return nil
 }
 
 // Run mantém o distribuidor de eventos (LISTEN no banco) até ctx terminar. Sem ele o SSE só

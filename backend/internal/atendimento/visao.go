@@ -44,15 +44,15 @@ type amounts struct {
 	Outstanding Money `json:"outstanding"`
 }
 
-// PaymentView segue OrderPayment. Cobranças e recebimentos chegam nas etapas 08/09: até lá as
-// listas ficam vazias e nada foi recebido. O valor só é devido depois de fechado (conclusão ou
-// revisão da interrupção).
+// PaymentView segue OrderPayment. Cobranças e recebimentos vêm do módulo pagamento (etapa 08);
+// estornos chegam na etapa 09. O valor só é devido depois de fechado (conclusão ou revisão da
+// interrupção). "Em aberto" = devido − recebimentos principais (excesso não abate o devido).
 type PaymentView struct {
 	MethodChoice *string  `json:"method_choice"`
 	Amounts      amounts  `json:"amounts"`
 	Verifying    bool     `json:"verifying"`
-	Charges      []string `json:"charges"`
-	Receipts     []string `json:"receipts"`
+	Charges      any      `json:"charges"`
+	Receipts     any      `json:"receipts"`
 	Refunds      []string `json:"refunds"`
 }
 
@@ -120,12 +120,13 @@ func LoadOrder(ctx context.Context, q database.Querier, estID, orderID uuid.UUID
 	var v OrderView
 	var total int64
 	var eligible bool
+	var method *string
 	err := q.QueryRow(ctx, `
 		SELECT id, establishment_id, participation_id, status, version, total_cents, total_frozen_at,
-		       closure_reason, interrupted_at, review_note, loyalty_eligible, created_at, closed_at
+		       closure_reason, interrupted_at, review_note, loyalty_eligible, created_at, closed_at, payment_method
 		FROM service_order WHERE establishment_id = $1 AND id = $2`, estID, orderID).
 		Scan(&v.ID, &v.EstablishmentID, &v.ParticipationID, &v.Status, &v.Version, &total, &v.TotalFrozenAt,
-			&v.ClosureReason, &v.InterruptedAt, &v.ReviewNote, &eligible, &v.CreatedAt, &v.ClosedAt)
+			&v.ClosureReason, &v.InterruptedAt, &v.ReviewNote, &eligible, &v.CreatedAt, &v.ClosedAt, &method)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return v, err
 	}
@@ -138,8 +139,17 @@ func LoadOrder(ctx context.Context, q database.Querier, estID, orderID uuid.UUID
 		due = total
 	}
 	zero := brl(0)
-	v.Payment = PaymentView{Amounts: amounts{Due: brl(due), Received: zero, Conferred: zero, Refunded: zero, Outstanding: brl(due)},
-		Charges: []string{}, Receipts: []string{}, Refunds: []string{}}
+	v.Payment = PaymentView{MethodChoice: method, Amounts: amounts{Due: brl(due), Received: zero, Conferred: zero, Refunded: zero,
+		Outstanding: brl(due)}, Charges: []any{}, Receipts: []any{}, Refunds: []string{}}
+	if paymentData != nil {
+		pd, err := paymentData(ctx, q, orderID)
+		if err != nil {
+			return v, err
+		}
+		v.Payment.Charges, v.Payment.Receipts, v.Payment.Verifying = pd.Charges, pd.Receipts, pd.Verifying
+		v.Payment.Amounts.Received, v.Payment.Amounts.Conferred = brl(pd.ReceivedCents), brl(pd.ConferredCents)
+		v.Payment.Amounts.Outstanding = brl(max(due-pd.PrincipalCents, 0))
+	}
 
 	rows, err := q.Query(ctx, `
 		SELECT id, service_id, name, unit_price_cents, duration_minutes, points, status, charged, added_at, performed_at,
