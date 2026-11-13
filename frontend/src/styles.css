@@ -375,3 +375,20 @@ form,
   border: 0;
   cursor: pointer;
 }
+
+.entries {
+  display: grid;
+  gap: 12px;
+  margin: 8px 0 0;
+  padding-left: 1.5em;
+}
+
+.select {
+  min-height: 44px;
+  padding: 8px 12px;
+  font: inherit;
+  color: inherit;
+  background: var(--cor-fundo);
+  border: 2px solid var(--cor-borda);
+  border-radius: 6px;
+}

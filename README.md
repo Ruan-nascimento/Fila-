@@ -1,7 +1,7 @@
 # Fila — MVP web para barbearia
 
 Sistema de fila, atendimento, pagamento e fidelidade para barbearia, construído em etapas (veja [REGRAS.md](REGRAS.md)).
-**Situação atual: etapa 03 (estabelecimento, equipe e serviços).** Já funcionam: contas, login de cliente e de equipe, recuperação de senha, convites, dono inicial por comando controlado, visitante com código de recuperação, configuração da loja, profissionais, filas (aberta/pausada/fechada) e catálogo de serviços. Entrada na fila, atendimento e pagamento chegam nas próximas etapas.
+**Situação atual: etapa 04 (fila transacional).** Já funcionam: contas e login de cliente e de equipe, recuperação de senha, convites, dono inicial por comando controlado, visitante com código de recuperação, loja, profissionais, serviços, e a fila: entrar escolhendo profissional e serviços, acompanhar senha, posição e espera estimada, chamar o próximo, iniciar, marcar ausência após 10 minutos, desistir, cancelar e transferir. Conclusão do atendimento, comanda e pagamento chegam nas próximas etapas.
 
 | Pasta | O que tem |
 |---|---|
@@ -125,8 +125,8 @@ Telas desta etapa:
 | `/entrar` | Entrar como **Cliente** ou como **Equipe da barbearia** |
 | `/conta` | Ver a conta, trocar a senha e sair |
 | `/esqueci-senha` | Pedir link para criar senha nova (vale 30 minutos) |
-| `/loja/barbearia-teste` | Página pública da loja (use o `-slug` do passo 5.2): serviços com preço, profissionais e situação das filas; entrar sem conta com um apelido e receber o **código de recuperação**, ou recuperar a visita com o código |
-| `/gestao` | Área da equipe (entre como **Equipe**). Dono: filas (abrir, pausar, fechar), profissionais (cadastrar, convidar, renomear, desativar), serviços (preço, duração, pontos, quem atende) e dados da loja. Profissional: vê a própria fila, avisa indisponibilidade e consulta os serviços |
+| `/loja/barbearia-teste` | Página pública da loja (use o `-slug` do passo 5.2): serviços com preço, profissionais e situação das filas; entrar sem conta com um apelido (e guardar o **código de recuperação**) ou com a conta, **entrar na fila** e acompanhar senha, posição e espera estimada; sair da fila |
+| `/gestao` | Área da equipe (entre como **Equipe**). Dono: filas (abrir, pausar, fechar; chamar o próximo, iniciar, marcar ausência, cancelar com motivo e transferir com a concordância do cliente), profissionais (cadastrar, convidar, renomear, desativar), serviços (preço, duração, pontos, quem atende) e dados da loja. Profissional: vê a própria fila, chama o próximo, inicia, marca ausência, avisa indisponibilidade e consulta os serviços |
 | `/verificar-email`, `/redefinir-senha`, `/convite` | Abertos pelos links dos e-mails |
 
 Use sempre o mesmo endereço (`http://127.0.0.1:5173` ou `http://localhost:5173`) durante o uso: cada um tem seus próprios cookies.

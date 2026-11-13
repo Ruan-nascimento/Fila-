@@ -7,6 +7,7 @@ import { useSession } from "../session/context";
 import { Field, Notice, Submit } from "../ui/ui";
 import { useForm } from "../ui/useForm";
 import { formatCents } from "../money";
+import { MinhaVisita } from "./fila/MinhaVisita";
 
 type PublicEstablishment = components["schemas"]["PublicEstablishment"];
 type VisitorCreated = components["schemas"]["VisitorSessionCreated"];
@@ -54,6 +55,7 @@ function Visitante({ shop }: { shop: PublicEstablishment }) {
 
   if (state.status !== "ready") return <p role="status">Carregando…</p>;
   const current = state.session.visitors.find((v) => v.establishment_id === shop.id);
+  const account = state.session.account;
 
   async function end() {
     setEndError(null);
@@ -69,6 +71,12 @@ function Visitante({ shop }: { shop: PublicEstablishment }) {
   return (
     <>
       {created && <CodigoUmaVez created={created} />}
+      {account && !current && (
+        <p className="card">
+          Você está usando a conta de <strong>{account.name}</strong> nesta loja.
+        </p>
+      )}
+      {(current || account) && <MinhaVisita shopId={shop.id} />}
       {current ? (
         <div className="card">
           <p>
@@ -77,7 +85,6 @@ function Visitante({ shop }: { shop: PublicEstablishment }) {
           <p className="muted">
             Acesso válido até {dateTime.format(new Date(current.expires_at))} (renova a cada uso).
           </p>
-          <p className="muted">A entrada na fila chega numa próxima etapa do sistema.</p>
           {endError && <Notice kind="erro">{endError}</Notice>}
           <button type="button" className="button button--secondary" onClick={() => void end()}>
             Sair deste aparelho
@@ -86,7 +93,7 @@ function Visitante({ shop }: { shop: PublicEstablishment }) {
             Sair não cancela sua visita. Para voltar depois, use o código de recuperação.
           </p>
         </div>
-      ) : (
+      ) : account ? null : (
         <>
           <NovoVisitante
             shopId={shop.id}

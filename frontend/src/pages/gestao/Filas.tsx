@@ -5,6 +5,7 @@ import type { components } from "../../api/schema.gen";
 import { Field, Notice } from "../../ui/ui";
 import { useCommand } from "./comando";
 import { CommandError, type StaffContext } from "./comum";
+import { Entradas } from "./Entradas";
 
 type StaffQueue = components["schemas"]["StaffQueue"];
 
@@ -19,6 +20,12 @@ export function Filas({ ctx }: { ctx: StaffContext }) {
   const [queues, setQueues] = useState<StaffQueue[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const cmd = useCommand();
+  // Relógio da tela para habilitar "Marcar ausência" após a tolerância (o servidor confere de novo).
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 15_000);
+    return () => clearInterval(id);
+  }, []);
 
   const load = useCallback(async () => {
     const out = await call(() =>
@@ -129,6 +136,7 @@ export function Filas({ ctx }: { ctx: StaffContext }) {
                 )}
               </div>
             )}
+            <Entradas ctx={ctx} queue={q} queues={queues} now={now} onDone={load} />
             {ctx.professionalId === q.professional.id && <Sinal ctx={ctx} queue={q} onDone={load} />}
           </li>
         ))}
