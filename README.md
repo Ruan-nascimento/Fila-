@@ -103,7 +103,9 @@ FILA_PIX_PROVIDER=abacatepay
 FILA_ABACATEPAY_API_KEY=abc_dev_sua-chave-de-teste
 ```
 
-A API e o worker leem a mesma configuração: o worker é quem consulta a AbacatePay para saber se o Pix foi pago. Detalhes, limites e o checklist antes de cobrar de verdade estão em [docs/pagamentos-abacatepay.md](docs/pagamentos-abacatepay.md).
+A API e o worker leem a mesma configuração: o worker é quem consulta a AbacatePay para saber se o Pix foi pago e quem processa os estornos.
+
+Opcional: para receber os avisos da AbacatePay (webhook), cadastre no painel deles a URL pública **https** da sua API terminando em `/v1/webhooks/abacatepay`, com um secret de 32+ caracteres, e coloque o mesmo valor em `FILA_ABACATEPAY_WEBHOOK_SECRET`. Sem isso o sistema funciona do mesmo jeito, só que confirma os Pix pela consulta do worker (alguns segundos depois). Detalhes, limites e o checklist antes de cobrar de verdade estão em [docs/pagamentos-abacatepay.md](docs/pagamentos-abacatepay.md).
 
 Ainda não há provedor de e-mail: em desenvolvimento cada e-mail (verificação de conta, redefinição de senha, convite) vira um arquivo `.txt` na pasta `backend\.correio\`. Abra o arquivo e copie o link para o navegador. Essa pasta não vai para o Git.
 
