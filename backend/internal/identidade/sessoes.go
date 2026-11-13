@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"fila/internal/acesso"
 	"fila/internal/auditoria"
 	"fila/internal/estabelecimento"
 	"fila/internal/platform/database"
@@ -274,35 +275,77 @@ func requireAccount(r *http.Request) (*AccountSession, error) {
 	return p.Session, nil
 }
 
-// requireOwner exige sessão de equipe com vínculo de dono na loja da rota.
+// staffActor resolve o ator de equipe da loja (R-PERM-01/05/06): o papel vem só da sessão e
+// dos vínculos ativos, nunca do pedido.
 //   - sem sessão → 401;
 //   - sem vínculo nenhum com a loja → 404 (não revela que a loja existe);
-//   - com vínculo, mas sessão de cliente ou papel de profissional → 403.
-func (s *Service) requireOwner(ctx context.Context, r *http.Request) (*AccountSession, uuid.UUID, error) {
+//   - com vínculo, mas sessão de cliente → 403.
+func (s *Service) staffActor(r *http.Request, estID uuid.UUID) (acesso.Actor, error) {
 	sess, err := requireAccount(r)
 	if err != nil {
-		return nil, uuid.Nil, err
+		return acesso.Actor{}, err
 	}
+	ms, err := estabelecimento.MembershipsIn(r.Context(), s.pool, sess.AccountID, estID)
+	if err != nil {
+		return acesso.Actor{}, err
+	}
+	if len(ms) == 0 {
+		return acesso.Actor{}, httpserver.ErrNotFound()
+	}
+	if sess.Kind != KindStaff {
+		return acesso.Actor{}, httpserver.ErrForbidden("Para esta ação, entre com o acesso de equipe.")
+	}
+	a := acesso.Actor{AccountID: sess.AccountID, EstablishmentID: estID, Role: acesso.RoleProfessional}
+	for _, m := range ms {
+		if m.Role == estabelecimento.RoleOwner {
+			a.Role = acesso.RoleOwner
+		}
+		if m.ProfessionalID != nil {
+			a.ProfessionalID = m.ProfessionalID
+		}
+	}
+	return a, nil
+}
+
+// Owner implementa acesso.Authorizer: dono da loja, com sessão de equipe.
+func (s *Service) Owner(r *http.Request, estID uuid.UUID) (acesso.Actor, error) {
+	a, err := s.staffActor(r, estID)
+	if err != nil {
+		return a, err
+	}
+	if !a.IsOwner() {
+		return acesso.Actor{}, httpserver.ErrForbidden("Somente o dono da loja pode fazer isso.")
+	}
+	return a, nil
+}
+
+// Member implementa acesso.Authorizer: qualquer vínculo ativo de equipe na loja.
+func (s *Service) Member(r *http.Request, estID uuid.UUID) (acesso.Actor, error) {
+	return s.staffActor(r, estID)
+}
+
+// RequireReauth implementa acesso.Authorizer (x-reauth: 10 minutos).
+func (s *Service) RequireReauth(r *http.Request) error {
+	sess, err := requireAccount(r)
+	if err != nil {
+		return err
+	}
+	return s.requireReauth(sess)
+}
+
+var _ acesso.Authorizer = (*Service)(nil)
+
+// requireOwner é o atalho usado pelas rotas deste módulo (loja vem do caminho).
+func (s *Service) requireOwner(_ context.Context, r *http.Request) (*AccountSession, uuid.UUID, error) {
 	estID, err := uuid.Parse(r.PathValue("establishmentId"))
 	if err != nil {
 		return nil, uuid.Nil, httpserver.ErrNotFound()
 	}
-	ms, err := estabelecimento.MembershipsIn(ctx, s.pool, sess.AccountID, estID)
-	if err != nil {
+	if _, err := s.Owner(r, estID); err != nil {
 		return nil, uuid.Nil, err
 	}
-	if len(ms) == 0 {
-		return nil, uuid.Nil, httpserver.ErrNotFound()
-	}
-	if sess.Kind != KindStaff {
-		return nil, uuid.Nil, httpserver.ErrForbidden("Para esta ação, entre com o acesso de equipe.")
-	}
-	for _, m := range ms {
-		if m.Role == estabelecimento.RoleOwner {
-			return sess, estID, nil
-		}
-	}
-	return nil, uuid.Nil, httpserver.ErrForbidden("Somente o dono da loja pode fazer isso.")
+	sess, _ := requireAccount(r)
+	return sess, estID, nil
 }
 
 // requireReauth exige confirmação de identidade nos últimos 10 minutos (x-reauth).

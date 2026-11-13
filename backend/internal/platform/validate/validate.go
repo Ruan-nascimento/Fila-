@@ -68,6 +68,32 @@ func Email(field, s string) (addr, normalized string, fe *httpserver.FieldError)
 	return s, strings.ToLower(s), nil
 }
 
+// Version confere expected_version (obrigatório, inteiro ≥ 1) e devolve o valor.
+func (c *Collector) Version(field string, v *int64) int64 {
+	switch {
+	case v == nil:
+		c.Required(field, true)
+		return 0
+	case *v < 1:
+		c.errs = append(c.errs, httpserver.FieldError{Field: field, Code: httpserver.FieldOutOfRange})
+		return 0
+	}
+	return *v
+}
+
+// IntRange confere um inteiro obrigatório dentro de [minV, maxV].
+func (c *Collector) IntRange(field string, v *int64, minV, maxV int64) int64 {
+	switch {
+	case v == nil:
+		c.Required(field, true)
+		return 0
+	case *v < minV || *v > maxV:
+		c.errs = append(c.errs, httpserver.FieldError{Field: field, Code: httpserver.FieldOutOfRange})
+		return 0
+	}
+	return *v
+}
+
 // Collector junta erros de campo para responder todos de uma vez.
 type Collector struct {
 	errs []httpserver.FieldError

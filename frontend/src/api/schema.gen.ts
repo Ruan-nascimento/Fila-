@@ -1538,6 +1538,12 @@ export interface components {
         Nick: string;
         /** @description Cursor opaco de eventos SSE (posição pós-commit + época do fluxo). */
         StreamCursor: string;
+        /**
+         * @description Cursor do fluxo de eventos para continuar a partir desta leitura (ver eventos-sse.md §6).
+         *     É `null` enquanto o fluxo SSE não existe (até a etapa 06): o cliente então relê a lista ao
+         *     voltar para a aba e após cada comando, sem abrir SSE (ADR-0018).
+         */
+        SnapshotCursor: components["schemas"]["StreamCursor"] | null;
         Estimate: {
             /**
              * @description Sempre estimativa; nunca horário garantido.
@@ -3086,7 +3092,7 @@ export interface operations {
                 content: {
                     "application/json": {
                         data: components["schemas"]["PublicQueue"][];
-                        cursor: components["schemas"]["StreamCursor"];
+                        cursor: components["schemas"]["SnapshotCursor"];
                     };
                 };
             };
@@ -3385,7 +3391,7 @@ export interface operations {
                 content: {
                     "application/json": {
                         data: components["schemas"]["StaffQueue"][];
-                        cursor: components["schemas"]["StreamCursor"];
+                        cursor: components["schemas"]["SnapshotCursor"];
                     };
                 };
             };

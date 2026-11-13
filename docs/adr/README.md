@@ -22,3 +22,4 @@ Para mudar uma decisão, crie um novo ADR que substitua o anterior (não reescre
 | [ADR-0015](0015-minimizacao-e-retencao-de-dados.md) | Separação de perfil e registros, e retenção | Aceita parcialmente (prazos legais pendentes) |
 | [ADR-0016](0016-fundacao-ferramentas-e-configuracao.md) | Fundação: ferramentas, versões e configuração | Aceita (etapa 01) |
 | [ADR-0017](0017-identidade-sessoes-e-limites.md) | Identidade: senhas, tokens, cookies, e-mail e limites de tentativa | Aceita (etapa 02) |
+| [ADR-0018](0018-loja-equipe-catalogo.md) | Loja, equipe e catálogo: limites entre módulos e dependências de etapas futuras | Aceita (etapa 03) |

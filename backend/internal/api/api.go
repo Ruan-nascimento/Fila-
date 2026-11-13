@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"fila/internal/estabelecimento"
 	"fila/internal/identidade"
 	"fila/internal/platform/clock"
 	"fila/internal/platform/config"
@@ -26,6 +27,8 @@ type Deps struct {
 	Clock  clock.Clock
 	// PasswordParams permite parâmetros mais leves nos testes; zero = padrão de produção.
 	PasswordParams identidade.PasswordParams
+	// Occupancy informa participações por fila/profissional (módulo fila, etapa 04). nil = nenhuma.
+	Occupancy estabelecimento.Occupancy
 }
 
 // API é a aplicação montada.
@@ -59,8 +62,12 @@ func New(d Deps, register func(mux *http.ServeMux)) (*API, error) {
 		},
 	})
 
+	est := estabelecimento.New(estabelecimento.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Auth: ident,
+		Occupancy: d.Occupancy, PendingInvites: ident.PendingInvites, AccessRevoked: ident.AccessRevoked})
+
 	a := &API{Identity: ident, mux: http.NewServeMux()}
 	a.routes = append(a.routes, ident.Routes()...)
+	a.routes = append(a.routes, est.Routes()...)
 	hs.Mount(a.mux, d.Log, a.routes)
 	if register != nil {
 		register(a.mux)

@@ -23,9 +23,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"fila/internal/api"
+	"fila/internal/estabelecimento"
 	"fila/internal/identidade"
 	"fila/internal/platform/clock"
 	"fila/internal/platform/config"
+	"fila/internal/platform/database"
 	"fila/internal/platform/httpserver"
 	"fila/internal/platform/keys"
 	"fila/internal/platform/logging"
@@ -70,7 +72,10 @@ func (s *syncBuffer) String() string {
 	return s.b.String()
 }
 
-func newEnv(t *testing.T) *env {
+func newEnv(t *testing.T) *env { t.Helper(); return newEnvWith(t, nil) }
+
+// newEnvWith permite simular participações nas filas (o módulo fila chega na etapa 04).
+func newEnvWith(t *testing.T, occ estabelecimento.Occupancy) *env {
 	t.Helper()
 	pool := testdb.Migrated(t)
 	master := make([]byte, 32)
@@ -85,7 +90,7 @@ func newEnv(t *testing.T) *env {
 	logs := &syncBuffer{}
 	log := logging.New(logs, slog.LevelDebug, "json")
 	clk := clock.NewFake(time.Date(2026, 11, 12, 12, 0, 0, 0, time.UTC))
-	a, err := api.New(api.Deps{Config: cfg, Pool: pool, Log: log, Clock: clk, PasswordParams: lightParams}, nil)
+	a, err := api.New(api.Deps{Config: cfg, Pool: pool, Log: log, Clock: clk, PasswordParams: lightParams, Occupancy: occ}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -302,10 +307,16 @@ func (e *env) shop(slug, ownerEmail string) shop {
 func (e *env) professional(estID uuid.UUID, name string) uuid.UUID {
 	e.t.Helper()
 	var id uuid.UUID
-	err := e.pool.QueryRow(context.Background(), `
-		INSERT INTO professional (establishment_id, display_name, created_at, updated_at)
-		VALUES ($1, $2, $3, $3) RETURNING id`, estID, name, e.clock.Now()).Scan(&id)
+	ctx := context.Background()
+	err := e.pool.QueryRow(ctx, `
+		INSERT INTO professional (establishment_id, display_name, queue_letter, created_at, updated_at)
+		VALUES ($1, $2, chr(65 + (SELECT count(*)::int FROM professional WHERE establishment_id = $1)), $3, $3)
+		RETURNING id`, estID, name, e.clock.Now()).Scan(&id)
 	if err != nil {
+		e.t.Fatal(err)
+	}
+	if _, err := e.pool.Exec(ctx, `INSERT INTO queue (establishment_id, professional_id, created_at, updated_at)
+		VALUES ($1, $2, $3, $3)`, estID, id, e.clock.Now()); err != nil {
 		e.t.Fatal(err)
 	}
 	return id
@@ -321,4 +332,66 @@ var idemSeq int
 func newIdemKey() string {
 	idemSeq++
 	return fmt.Sprintf("chave-teste-%08d", idemSeq)
+}
+
+// cmd envia um comando com Idempotency-Key nova (uma intenção = uma chave).
+func (b *browser) cmd(method, path string, body any) resp {
+	b.e.t.Helper()
+	return b.do(method, path, body, "Idempotency-Key", newIdemKey())
+}
+
+// fakeOccupancy simula participações por fila e por profissional (etapa 04 trará as reais).
+type fakeOccupancy struct {
+	mu      sync.Mutex
+	pending map[uuid.UUID]int
+	active  map[uuid.UUID]int
+}
+
+func newFakeOccupancy() *fakeOccupancy {
+	return &fakeOccupancy{pending: map[uuid.UUID]int{}, active: map[uuid.UUID]int{}}
+}
+
+func (f *fakeOccupancy) set(queueID, profID uuid.UUID, pending, active int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.pending[queueID], f.active[profID] = pending, active
+}
+
+func (f *fakeOccupancy) PendingInQueue(_ context.Context, _ database.Querier, id uuid.UUID) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.pending[id], nil
+}
+
+func (f *fakeOccupancy) ActiveForProfessional(_ context.Context, _ database.Querier, id uuid.UUID) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.active[id], nil
+}
+
+// staffMember convida e ativa o acesso de um profissional e devolve o navegador logado como equipe.
+func (e *env) staffMember(loja shop, profID uuid.UUID, email string) *browser {
+	e.t.Helper()
+	loja.owner.reauth()
+	loja.owner.mustStatus(loja.owner.cmd("POST", "/v1/establishments/"+loja.id.String()+"/professionals/"+profID.String()+"/invites",
+		map[string]any{"email": email}), 201)
+	tok := e.lastToken(email, "Convite")
+	e.browser().mustStatus(e.browser().do("POST", "/v1/auth/invites/accept", map[string]any{"token": tok, "name": "Pro", "password": goodPassword}), 204)
+	b := e.browser()
+	b.mustStatus(b.login(email, goodPassword, "staff"), 200)
+	return b
+}
+
+func (e *env) queueOf(profID uuid.UUID) uuid.UUID {
+	e.t.Helper()
+	var id uuid.UUID
+	if err := e.pool.QueryRow(context.Background(), `SELECT id FROM queue WHERE professional_id = $1`, profID).Scan(&id); err != nil {
+		e.t.Fatal(err)
+	}
+	return id
+}
+
+func num(v any) int64 {
+	f, _ := v.(float64)
+	return int64(f)
 }

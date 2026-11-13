@@ -76,7 +76,8 @@ func TestNoPackageImportsExecutables(t *testing.T) {
 // funções exportadas). A chave é o caminho do pacote sob internal/.
 var tableOwners = map[string][]string{
 	"identidade":           {"account", "account_token", "account_session", "invite", "visitor", "visitor_browser", "visitor_credential"},
-	"estabelecimento":      {"establishment", "professional", "staff_membership"},
+	"estabelecimento":      {"establishment", "professional", "staff_membership", "queue"},
+	"catalogo":             {"service", "service_professional", "service_revision"},
 	"auditoria":            {"audit_event"},
 	"platform/ratelimit":   {"rate_limit"},
 	"platform/idempotency": {"idempotency_record"},

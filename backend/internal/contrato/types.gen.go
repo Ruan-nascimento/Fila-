@@ -2238,6 +2238,11 @@ type SetServiceProfessionalsRequest struct {
 	ProfessionalIds []Id    `json:"professional_ids"`
 }
 
+// SnapshotCursor Cursor do fluxo de eventos para continuar a partir desta leitura (ver eventos-sse.md §6).
+// É `null` enquanto o fluxo SSE não existe (até a etapa 06): o cliente então relê a lista ao
+// voltar para a aba e após cada comando, sem abrir SSE (ADR-0018).
+type SnapshotCursor = StreamCursor
+
 // StaffQueue defines model for StaffQueue.
 type StaffQueue struct {
 	// Entries Aguardando (ordem FIFO), chamado e em atendimento.

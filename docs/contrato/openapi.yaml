@@ -493,7 +493,7 @@ paths:
                   data:
                     type: array
                     items: { $ref: '#/components/schemas/PublicQueue' }
-                  cursor: { $ref: '#/components/schemas/StreamCursor' }
+                  cursor: { $ref: '#/components/schemas/SnapshotCursor' }
         '404': { $ref: '#/components/responses/NotFound' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
         default: { $ref: '#/components/responses/Unexpected' }
@@ -778,7 +778,7 @@ paths:
                   data:
                     type: array
                     items: { $ref: '#/components/schemas/StaffQueue' }
-                  cursor: { $ref: '#/components/schemas/StreamCursor' }
+                  cursor: { $ref: '#/components/schemas/SnapshotCursor' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -2868,6 +2868,14 @@ components:
       type: string
       maxLength: 128
       description: Cursor opaco de eventos SSE (posição pós-commit + época do fluxo).
+    SnapshotCursor:
+      description: |
+        Cursor do fluxo de eventos para continuar a partir desta leitura (ver eventos-sse.md §6).
+        É `null` enquanto o fluxo SSE não existe (até a etapa 06): o cliente então relê a lista ao
+        voltar para a aba e após cada comando, sem abrir SSE (ADR-0018).
+      oneOf:
+        - $ref: '#/components/schemas/StreamCursor'
+        - type: 'null'
     Estimate:
       type: object
       additionalProperties: false
