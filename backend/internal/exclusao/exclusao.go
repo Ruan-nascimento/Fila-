@@ -735,3 +735,11 @@ func (s *Service) Run(ctx context.Context, every time.Duration) {
 		}
 	}
 }
+
+// ProcessingInShop conta as exclusões de conta em processamento com bloqueio nesta loja (painel do dono).
+func ProcessingInShop(ctx context.Context, q database.Querier, estID uuid.UUID) (int, error) {
+	var n int
+	err := q.QueryRow(ctx, `SELECT count(DISTINCT b.request_id) FROM deletion_request_block b
+		JOIN deletion_request d ON d.id = b.request_id WHERE b.establishment_id = $1 AND d.status = 'processing'`, estID).Scan(&n)
+	return n, err
+}

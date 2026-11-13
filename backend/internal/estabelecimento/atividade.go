@@ -125,3 +125,10 @@ func (s *Service) queueChanged(ctx context.Context, tx pgx.Tx, estID, queueID uu
 	}
 	return s.Activity.QueueChanged(ctx, tx, estID, queueID)
 }
+
+// UnavailableSignals conta os profissionais com sinal de indisponibilidade ligado (painel do dono).
+func UnavailableSignals(ctx context.Context, q database.Querier, estID uuid.UUID) (int, error) {
+	var n int
+	err := q.QueryRow(ctx, `SELECT count(*) FROM queue WHERE establishment_id = $1 AND unavailable`, estID).Scan(&n)
+	return n, err
+}

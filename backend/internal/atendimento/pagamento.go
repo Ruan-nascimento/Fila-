@@ -130,6 +130,9 @@ type PaymentData struct {
 	ConferredCents int64
 	PrincipalCents int64 // o que cobre o devido
 	Verifying      bool  // há cobrança com resultado desconhecido
+	Refunds        any
+	RefundedCents  int64    // estornos confirmados
+	OpenIssueKinds []string // pendências financeiras abertas da comanda
 }
 
 var paymentData func(ctx context.Context, q database.Querier, orderID uuid.UUID) (PaymentData, error)
@@ -188,4 +191,22 @@ func (s *Service) AuthorizeOrder(r *http.Request, p PaymentInfo, customer, profe
 func OrderResult(ctx context.Context, q database.Querier, estID, orderID uuid.UUID) (hs.Data[OrderView], error) {
 	v, err := LoadOrder(ctx, q, estID, orderID)
 	return hs.Data[OrderView]{Data: v}, err
+}
+
+// OrderCounts são os contadores de comandas do painel do dono.
+type OrderCounts struct {
+	AwaitingPayment      int
+	AwaitingConfirmation int
+	PendingReview        int
+}
+
+// PendencyCounts conta as comandas da loja que pedem ação (painel do dono).
+func PendencyCounts(ctx context.Context, q database.Querier, estID uuid.UUID) (OrderCounts, error) {
+	var c OrderCounts
+	err := q.QueryRow(ctx, `
+		SELECT count(*) FILTER (WHERE status = 'awaiting_payment'), count(*) FILTER (WHERE status = 'awaiting_confirmation'),
+		       count(*) FILTER (WHERE status = 'pending_review')
+		FROM service_order WHERE establishment_id = $1 AND status IN ('awaiting_payment', 'awaiting_confirmation', 'pending_review')`,
+		estID).Scan(&c.AwaitingPayment, &c.AwaitingConfirmation, &c.PendingReview)
+	return c, err
 }

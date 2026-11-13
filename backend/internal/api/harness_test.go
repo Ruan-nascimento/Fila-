@@ -38,6 +38,9 @@ import (
 
 const origin = "https://fila.teste"
 
+// webhookSecret é o secret do webhook nos testes (não é segredo de nenhum ambiente real).
+const webhookSecret = "secret-do-webhook-de-teste-0123456789" // gitleaks:allow
+
 // lightParams deixa o Argon2id rápido nos testes de fluxo; os parâmetros reais são testados
 // no pacote identidade.
 var lightParams = identidade.PasswordParams{MemoryKiB: 1024, Time: 1, Threads: 1, SaltLen: 16, KeyLen: 32}
@@ -106,7 +109,7 @@ func newEnvDeps(t *testing.T, change func(*api.Deps)) *env {
 	pixSrv := httptest.NewServer(pix)
 	t.Cleanup(pixSrv.Close)
 	cfg.Payments = config.PaymentsConfig{Pix: config.PixAbacatePay, APIKey: config.Secret(pixKey), BaseURL: pixSrv.URL + "/v2",
-		ExpiresIn: 15 * time.Minute, Timeout: time.Second}
+		ExpiresIn: 15 * time.Minute, Timeout: time.Second, WebhookSecret: config.Secret(webhookSecret)}
 	deps := api.Deps{Config: cfg, Pool: pool, Log: log, Clock: clk, PasswordParams: lightParams}
 	if change != nil {
 		change(&deps)

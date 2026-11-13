@@ -85,6 +85,11 @@ func (s *Service) choosePaymentMethod(w http.ResponseWriter, r *http.Request) er
 				if err := s.requestCancel(ctx, tx, lp, cur, who, "troca de meio de pagamento", now); err != nil {
 					return idempotency.Result{}, err
 				}
+				// Alerta à equipe (R-PAG-11): o Pix segue válido até expirar (o provedor não cancela).
+				amt := cur.amount
+				if _, err := s.openIssue(ctx, tx, p.EstablishmentID, p.ID, IssueActivePixSwitch, "pix_charge", cur.ID, &amt, now); err != nil {
+					return idempotency.Result{}, err
+				}
 			}
 		}
 		if lp.Method == nil || *lp.Method != method {
@@ -269,6 +274,16 @@ func (s *Service) conferReceipt(w http.ResponseWriter, r *http.Request) error {
 		}
 		if conferred {
 			return orderOK(ctx, tx, lp, http.StatusOK) // já conferido (outra pessoa ou repetição)
+		}
+		// Estorno em andamento ou confirmado: conferir agora contaria receita devolvida.
+		var refunding int
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM refund WHERE receipt_id = $1 AND status <> 'failed'`, receiptID).
+			Scan(&refunding); err != nil {
+			return idempotency.Result{}, err
+		}
+		if refunding > 0 {
+			return idempotency.Result{}, orderConflict(ctx, tx, lp, "invalid_transition", "Recebimento em estorno",
+				"Este recebimento tem estorno em andamento ou confirmado e não pode ser conferido.")
 		}
 		now := s.Clock.Now()
 		if _, err := tx.Exec(ctx, `

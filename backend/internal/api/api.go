@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"runtime"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"fila/internal/atendimento"
@@ -20,8 +21,10 @@ import (
 	"fila/internal/fluxo"
 	"fila/internal/identidade"
 	"fila/internal/pagamento"
+	"fila/internal/painel"
 	"fila/internal/platform/clock"
 	"fila/internal/platform/config"
+	"fila/internal/platform/database"
 	hs "fila/internal/platform/httpserver"
 	"fila/internal/platform/keys"
 	"fila/internal/platform/outbox"
@@ -104,7 +107,8 @@ func New(d Deps, register func(mux *http.ServeMux)) (*API, error) {
 		Visits: fl, Charges: d.Charges, VisitClosed: ident.VisitClosed})
 	pay := pagamento.New(pagamento.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Orders: atd,
 		Provider: PixProvider(d.Config.Payments, d.PixProvider), ExpiresIn: d.Config.Payments.ExpiresIn,
-		Timeout: d.Config.Payments.Timeout, VisitClosed: ident.VisitClosed})
+		Timeout: d.Config.Payments.Timeout, VisitClosed: ident.VisitClosed, Auth: ident,
+		WebhookSecret: d.Config.Payments.WebhookSecret, Pendencies: painel.Record})
 	if d.Charges == nil {
 		atd.Charges = pay // correção de comanda fechada respeita o Pix ativo (R-CMD-12)
 	}
@@ -112,7 +116,10 @@ func New(d Deps, register func(mux *http.ServeMux)) (*API, error) {
 	hub := outbox.NewHub(d.Pool, d.Log)
 	stream := fluxo.New(fluxo.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Hub: hub, Auth: ident, Customers: ident,
 		Refresh: ident.Refresh, Sources: fl, Limits: d.StreamLimits, TrustForwardedFor: d.Config.Security.TrustForwardedFor,
-		SnapshotHook: d.SnapshotHook})
+		SnapshotHook: d.SnapshotHook, Pendencies: func(ctx context.Context, q database.Querier, estID uuid.UUID) (any, error) {
+			return painel.Count(ctx, q, estID)
+		}})
+	panel := &painel.Service{Pool: d.Pool, Auth: ident}
 
 	deletion := exclusao.New(exclusao.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Ring: ring, Auth: ident,
 		Limiter: ratelimit.New(d.Pool, d.Clock, ring), TrustForwardedFor: d.Config.Security.TrustForwardedFor,
@@ -125,6 +132,7 @@ func New(d Deps, register func(mux *http.ServeMux)) (*API, error) {
 	a.routes = append(a.routes, fl.Routes()...)
 	a.routes = append(a.routes, atd.Routes()...)
 	a.routes = append(a.routes, pay.Routes()...)
+	a.routes = append(a.routes, panel.Routes()...)
 	a.routes = append(a.routes, stream.Routes()...)
 	a.routes = append(a.routes, deletion.Routes()...)
 	hs.Mount(a.mux, d.Log, a.routes)

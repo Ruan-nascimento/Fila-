@@ -2001,8 +2001,11 @@ type OrderPayment struct {
 	} `json:"amounts"`
 	Charges      []PixCharge    `json:"charges"`
 	MethodChoice *PaymentMethod `json:"method_choice"`
-	Receipts     []Receipt      `json:"receipts"`
-	Refunds      []Refund       `json:"refunds"`
+
+	// OpenIssueKinds Pendências financeiras abertas desta comanda (a equipe vê na comanda; o dono trata no painel).
+	OpenIssueKinds []FinancialIssueKind `json:"open_issue_kinds"`
+	Receipts       []Receipt            `json:"receipts"`
+	Refunds        []Refund             `json:"refunds"`
 
 	// Verifying Há cobrança com resultado desconhecido; interface mostra "verificando pagamento".
 	Verifying bool `json:"verifying"`

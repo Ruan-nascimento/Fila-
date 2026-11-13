@@ -72,6 +72,8 @@ type Deps struct {
 	// antes do snapshot) e "in_snapshot" (dentro da leitura do snapshot, depois de fixar a
 	// posição). Prova que um evento publicado nesses intervalos não se perde.
 	SnapshotHook func(stage string)
+	// Pendencies lê os contadores do painel do dono para o snapshot (nil = sem painel).
+	Pendencies func(ctx context.Context, q database.Querier, estID uuid.UUID) (any, error)
 }
 
 // Service atende GET /v1/stream.
@@ -364,6 +366,9 @@ func (s *Service) snapshot(ctx context.Context, tx pgx.Tx, r *http.Request, estI
 	switch {
 	case g.Owner:
 		d.StaffQueues, err = s.Sources.StaffQueues(ctx, tx, estID, nil)
+		if err == nil && s.Pendencies != nil {
+			d.Pendencies, err = s.Pendencies(ctx, tx, estID)
+		}
 	case g.ProfessionalID != nil:
 		d.StaffQueues, err = s.Sources.StaffQueues(ctx, tx, estID, g.ProfessionalID)
 	}

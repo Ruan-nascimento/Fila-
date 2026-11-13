@@ -48,12 +48,14 @@ type amounts struct {
 // estornos chegam na etapa 09. O valor só é devido depois de fechado (conclusão ou revisão da
 // interrupção). "Em aberto" = devido − recebimentos principais (excesso não abate o devido).
 type PaymentView struct {
-	MethodChoice *string  `json:"method_choice"`
-	Amounts      amounts  `json:"amounts"`
-	Verifying    bool     `json:"verifying"`
-	Charges      any      `json:"charges"`
-	Receipts     any      `json:"receipts"`
-	Refunds      []string `json:"refunds"`
+	MethodChoice *string `json:"method_choice"`
+	Amounts      amounts `json:"amounts"`
+	Verifying    bool    `json:"verifying"`
+	Charges      any     `json:"charges"`
+	Receipts     any     `json:"receipts"`
+	Refunds      any     `json:"refunds"`
+	// OpenIssueKinds: pendências financeiras abertas desta comanda (a equipe vê na comanda).
+	OpenIssueKinds []string `json:"open_issue_kinds"`
 }
 
 // AdditionView é um serviço pedido numa solicitação, com o preço visto pelo cliente.
@@ -140,14 +142,16 @@ func LoadOrder(ctx context.Context, q database.Querier, estID, orderID uuid.UUID
 	}
 	zero := brl(0)
 	v.Payment = PaymentView{MethodChoice: method, Amounts: amounts{Due: brl(due), Received: zero, Conferred: zero, Refunded: zero,
-		Outstanding: brl(due)}, Charges: []any{}, Receipts: []any{}, Refunds: []string{}}
+		Outstanding: brl(due)}, Charges: []any{}, Receipts: []any{}, Refunds: []any{}, OpenIssueKinds: []string{}}
 	if paymentData != nil {
 		pd, err := paymentData(ctx, q, orderID)
 		if err != nil {
 			return v, err
 		}
 		v.Payment.Charges, v.Payment.Receipts, v.Payment.Verifying = pd.Charges, pd.Receipts, pd.Verifying
+		v.Payment.Refunds, v.Payment.OpenIssueKinds = pd.Refunds, pd.OpenIssueKinds
 		v.Payment.Amounts.Received, v.Payment.Amounts.Conferred = brl(pd.ReceivedCents), brl(pd.ConferredCents)
+		v.Payment.Amounts.Refunded = brl(pd.RefundedCents)
 		v.Payment.Amounts.Outstanding = brl(max(due-pd.PrincipalCents, 0))
 	}
 

@@ -12,7 +12,7 @@ info:
     - `x-transitions`: transições da matriz (T-…) que a operação pode executar.
     - `x-events`: tipos de evento SSE gravados na outbox quando a operação muda estado.
     - `x-reauth`: exige reautenticação recente (10 minutos).
-    - `x-external-pending`: detalhe que depende de documentação/conta do provedor (etapa 09).
+    - `x-external-pending`: detalhe que depende de documentação/conta do provedor (nenhum pendente desde a etapa 09).
 
     Regras gerais: valores em centavos inteiros (BRL); datas RFC 3339 em UTC com sufixo Z;
     identificadores opacos; corpo desconhecido é rejeitado (`additionalProperties: false`);
@@ -1361,12 +1361,17 @@ paths:
       operationId: requestRefund
       tags: [pagamento]
       summary: Estorno integral de um recebimento (somente dono, com motivo).
+      description: |
+        Registra a intenção (202). Pix: o worker pede o estorno integral à AbacatePay e só confirma
+        quando a cobrança aparece REFUNDED (consulta autenticada ou webhook). Dinheiro/cartão, recusa
+        do provedor ou falta de confirmação: `under_review`, com pendência para o dono documentar.
+        Recebimento principal precisa estar conferido (`refund_not_allowed`); um estorno não-falho
+        por recebimento (`refund_exceeds_available`).
       security: [{ accountSession: [], csrfToken: [] }]
       x-authz: [{ actor: owner, scope: establishment }]
       x-reauth: true
       x-transitions: [T-RF-01, T-RF-02, T-RF-05]
       x-events: [payment.updated, pendencies.updated]
-      x-external-pending: [refund_api]
       parameters:
         - $ref: '#/components/parameters/EstablishmentId'
         - $ref: '#/components/parameters/OrderId'
@@ -1540,26 +1545,41 @@ paths:
     post:
       operationId: receiveAbacatePayWebhook
       tags: [provedor]
-      summary: Notificação do provedor. Autenticidade conforme contrato oficial (etapa 09).
+      summary: Notificação da AbacatePay (webhook v2).
       description: |
-        Sem cookies, sem CSRF. O corpo bruto é persistido e deduplicado antes de responder 2xx.
-        Notificação não autenticável não confirma pagamento: dispara consulta autenticada ao provedor.
+        Sem cookies, sem CSRF. Autenticidade conforme a documentação oficial: o secret do webhook em
+        `X-Webhook-Secret` (ou na query `webhookSecret`), comparado em tempo constante, prova a origem;
+        `X-Webhook-Signature` = base64(HMAC-SHA256(corpo bruto)) com a chave pública da AbacatePay prova
+        a integridade. Falhou → 401 e nada é reconhecido; se o aviso cita uma cobrança nossa em aberto,
+        a consulta autenticada do worker é antecipada. Autenticado: o aviso é deduplicado pelo `id` e o
+        efeito (recebimento, estorno, pendência) é gravado na mesma transação antes do 200. Confere
+        ambiente (`devMode`), cobrança, metadados (pedido e loja), método PIX e valor. Os dados do
+        pagador não são guardados. 404 quando o webhook está desligado (sem secret configurado).
       security: []
       x-authz: [{ actor: provider, scope: provider_signature }]
       x-transitions: [T-PX-05, T-PX-06, T-RC-02, T-RC-04, T-O-09, T-RF-03, T-RF-04, T-LG-02]
       x-events: [payment.updated, order.updated, financial_issue.updated, pendencies.updated, loyalty.updated]
-      x-external-pending: [webhook_authentication, webhook_payload, retry_policy]
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              description: Formato definido pelo provedor; validado na etapa 09.
+              description: Envelope da AbacatePay {id, event, apiVersion, devMode, data}; campos novos são tolerados.
       responses:
-        '200': { description: Notificação persistida (ou duplicata reconhecida). }
+        '200':
+          description: Notificação persistida e aplicada (ou duplicata reconhecida).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [received, duplicate]
+                properties:
+                  received: { type: boolean }
+                  duplicate: { type: boolean }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '413': { $ref: '#/components/responses/PayloadTooLarge' }
         default: { $ref: '#/components/responses/Unexpected' }
 
@@ -3751,7 +3771,7 @@ components:
         decision_reason: { type: [string, 'null'] }
     OrderPayment:
       type: object
-      required: [method_choice, amounts, verifying, charges, receipts, refunds]
+      required: [method_choice, amounts, verifying, charges, receipts, refunds, open_issue_kinds]
       properties:
         method_choice:
           oneOf:
@@ -3776,6 +3796,10 @@ components:
         refunds:
           type: array
           items: { $ref: '#/components/schemas/Refund' }
+        open_issue_kinds:
+          type: array
+          description: Pendências financeiras abertas desta comanda (a equipe vê na comanda; o dono trata no painel).
+          items: { $ref: '#/components/schemas/FinancialIssueKind' }
     PixCharge:
       type: object
       required: [id, order_id, status, amount, created_at]

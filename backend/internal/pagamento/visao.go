@@ -134,6 +134,26 @@ func PaymentData(ctx context.Context, q database.Querier, orderID uuid.UUID) (at
 	if err != nil {
 		return d, err
 	}
+	rfs, err := refunds(ctx, q, orderID)
+	if err != nil {
+		return d, err
+	}
+	refundViews := make([]refundView, 0, len(rfs))
+	for _, rf := range rfs {
+		refundViews = append(refundViews, rf.refundView)
+		if rf.Status != RefundConfirmed {
+			continue
+		}
+		d.RefundedCents += rf.amount
+		for i := range recs {
+			if recs[i].ID == rf.ReceiptID {
+				recs[i].Refunded = brl(recs[i].Refunded.AmountCents + rf.amount)
+			}
+		}
+	}
+	if d.OpenIssueKinds, err = OpenIssueKinds(ctx, q, orderID); err != nil {
+		return d, err
+	}
 	for _, r := range recs {
 		d.ReceivedCents += r.amount
 		if r.ConferredAt != nil {
@@ -146,6 +166,6 @@ func PaymentData(ctx context.Context, q database.Querier, orderID uuid.UUID) (at
 	if recs == nil {
 		recs = []receiptView{}
 	}
-	d.Charges, d.Receipts = views, recs
+	d.Charges, d.Receipts, d.Refunds = views, recs, refundViews
 	return d, nil
 }

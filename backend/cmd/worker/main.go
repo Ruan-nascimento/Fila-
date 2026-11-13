@@ -32,6 +32,7 @@ import (
 	"fila/internal/fila"
 	"fila/internal/identidade"
 	"fila/internal/pagamento"
+	"fila/internal/painel"
 	"fila/internal/platform/app"
 	"fila/internal/platform/clock"
 	"fila/internal/platform/config"
@@ -113,7 +114,7 @@ func run(ctx context.Context, environ []string, stdout, stderr io.Writer, starte
 	// Pagamentos: reconsulta cobranças Pix pendentes ou de resultado desconhecido (R-PAG-09/16).
 	if prov := api.PixProvider(cfg.Payments, nil); prov != nil {
 		pay := pagamento.New(pagamento.Deps{Pool: rt.Pool, Clock: clk, Log: log.With("tarefa", "pagamentos"), Provider: prov,
-			ExpiresIn: cfg.Payments.ExpiresIn, Timeout: cfg.Payments.Timeout})
+			ExpiresIn: cfg.Payments.ExpiresIn, Timeout: cfg.Payments.Timeout, Pendencies: painel.Record})
 		wg.Go(func() { pay.Run(ctx, 2*time.Second) })
 		log.Info("reconciliação de Pix ligada", "provedor", cfg.Payments.Pix, "modo_teste", prov.TestMode())
 	} else {

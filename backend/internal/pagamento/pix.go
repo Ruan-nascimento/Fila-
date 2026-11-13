@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"fila/internal/atendimento"
@@ -277,21 +278,25 @@ func (s *Service) paid(ctx context.Context, tx pgx.Tx, lp atendimento.PaymentInf
 	if lp.Status == atendimento.StatusAwaitingPayment && principal == 0 && amount == lp.DueCents() && amount == c.amount {
 		class = "principal"
 	}
-	tag, err := tx.Exec(ctx, `
+	var receiptID uuid.UUID
+	err := tx.QueryRow(ctx, `
 		INSERT INTO receipt (establishment_id, order_id, method, amount_cents, classification, pix_charge_id, evidence,
 		                     registered_by, registered_at)
-		VALUES ($1, $2, 'pix', $3, $4, $5, $6, 'provider', $7) ON CONFLICT (pix_charge_id) DO NOTHING`,
-		lp.EstablishmentID, lp.ID, amount, class, c.ID, evidence, now)
-	if err != nil {
+		VALUES ($1, $2, 'pix', $3, $4, $5, $6, 'provider', $7) ON CONFLICT (pix_charge_id) DO NOTHING RETURNING id`,
+		lp.EstablishmentID, lp.ID, amount, class, c.ID, evidence, now).Scan(&receiptID)
+	inserted := err == nil
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return err
 	}
+	// Tardio: pago depois de expirar/cancelar/falhar, ou depois do pedido de cancelamento (troca de meio).
+	late := c.CancelRequestedAt != nil || c.Status == ChargeExpired || c.Status == ChargeCancelled || c.Status == ChargeFailed
 	changed := c.Status != ChargePaid
 	if changed {
 		if err := s.markStatus(ctx, tx, c, ChargePaid, "T-PX-05", now); err != nil {
 			return err
 		}
 	}
-	if tag.RowsAffected() == 0 {
+	if !inserted {
 		if changed {
 			return atendimento.RecordPaymentEvents(ctx, tx, lp.EstablishmentID, lp.ID, now, true)
 		}
@@ -299,8 +304,20 @@ func (s *Service) paid(ctx context.Context, tx pgx.Tx, lp atendimento.PaymentInf
 	}
 	action := "T-RC-02"
 	if class == "excess" {
+		// Nada é apagado: o recebimento fica registrado e abre pendência para o dono tratar
+		// (devolução do excesso por estorno ou nota de devolução presencial) — T-RC-04, T-FI-01.
 		action = "T-RC-04"
-		s.Log.Warn("Pix recebido como excesso (tardio, duplicado ou divergente): tratamento na etapa 09", "tentativa", c.ID.String())
+		kind := IssueDuplicate
+		switch {
+		case amount != c.amount || (lp.Status == atendimento.StatusAwaitingPayment && principal == 0 && amount != lp.DueCents()):
+			kind = IssueAmountMismatch
+		case late:
+			kind = IssueLate
+		}
+		amt := amount
+		if _, err := s.openIssue(ctx, tx, lp.EstablishmentID, lp.ID, kind, "receipt", receiptID, &amt, now); err != nil {
+			return err
+		}
 	}
 	if err := auditoria.Record(ctx, tx, auditoria.Event{EstablishmentID: &lp.EstablishmentID, OccurredAt: now, ActorKind: auditoria.ActorSystem,
 		Action: action, TargetType: "pix_charge", TargetID: c.ID, ToState: "registered:" + class}); err != nil {

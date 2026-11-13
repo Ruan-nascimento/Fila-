@@ -68,7 +68,8 @@ func (s *Service) ReconcileOnce(ctx context.Context) (int, error) {
 			s.Log.Error("falha ao reconciliar cobrança Pix", "tentativa", id.String(), "erro", err.Error())
 		}
 	}
-	return len(ids), nil
+	n, err := s.reconcileRefunds(ctx)
+	return len(ids) + n, err
 }
 
 // reconcile consulta o provedor (fora de transação) e aplica o resultado.
@@ -171,8 +172,13 @@ func (s *Service) schedule(ctx context.Context, tx pgx.Tx, c chargeRow, now time
 		next = c.ExpiresAt.Add(30 * time.Second) // confere logo depois de expirar
 	}
 	if c.Status != ChargePending && attempts == unresolvedAfterTries {
+		// Alerta: segue consultando (com espera máxima), mas a dona passa a ver a pendência.
 		s.Log.Error("cobrança Pix continua com resultado desconhecido (charge_outcome_unresolved)", "tentativa", c.ID.String(),
 			"consultas", attempts)
+		amt := c.amount
+		if _, err := s.openIssue(ctx, tx, c.EstablishmentID, c.OrderID, IssueChargeUnresolved, "pix_charge", c.ID, &amt, now); err != nil {
+			return err
+		}
 	}
 	_, err := tx.Exec(ctx, `UPDATE pix_charge SET check_attempts = $2, next_check_at = $3 WHERE id = $1`, c.ID, attempts, next)
 	return err
@@ -185,7 +191,7 @@ func (s *Service) Run(ctx context.Context, every time.Duration) {
 	for {
 		if n, err := s.ReconcileOnce(ctx); err != nil && ctx.Err() == nil {
 			s.Log.Error("reconciliação de pagamentos falhou", "erro", err.Error())
-		} else if n == reconcileBatch {
+		} else if n >= reconcileBatch {
 			continue // há mais na fila: segue sem esperar
 		}
 		select {

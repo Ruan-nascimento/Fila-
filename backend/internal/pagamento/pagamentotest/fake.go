@@ -27,6 +27,16 @@ const (
 	CreateWrongEnv    = "wrong_devmode" // responde como produção (integridade)
 )
 
+// Modos de resposta para o estorno.
+const (
+	RefundOK       = "ok"          // estorna na hora (cobrança REFUNDED) e responde COMPLETE
+	RefundAccepted = "accepted"    // responde COMPLETE, mas a cobrança só vira REFUNDED depois (Set)
+	RefundSlow     = "slow"        // estorna e responde depois de Delay (ambíguo)
+	RefundErrAfter = "error_after" // estorna e responde 500 (ambíguo)
+	RefundReject   = "reject"      // 400 (ex.: saldo insuficiente); nada muda
+	RefundDown     = "down"        // 503 sem estornar
+)
+
 // Charge é a cobrança guardada pelo simulador.
 type Charge struct {
 	ID          string            `json:"id"`
@@ -47,14 +57,17 @@ type Charge struct {
 type Fake struct {
 	Key string
 
-	mu       sync.Mutex
-	charges  []*Charge
-	mode     string
-	delay    time.Duration
-	listDown bool
-	creates  int
-	seq      int
-	now      func() time.Time
+	mu          sync.Mutex
+	charges     []*Charge
+	mode        string
+	delay       time.Duration
+	listDown    bool
+	creates     int
+	seq         int
+	refundMode  string
+	refundDelay time.Duration
+	refunds     int
+	now         func() time.Time
 }
 
 // New cria o simulador com a chave de teste informada.
@@ -62,7 +75,34 @@ func New(key string, now func() time.Time) *Fake {
 	if now == nil {
 		now = time.Now
 	}
-	return &Fake{Key: key, mode: CreateOK, now: now}
+	return &Fake{Key: key, mode: CreateOK, refundMode: RefundOK, now: now}
+}
+
+// SetRefundMode muda a resposta dos próximos estornos.
+func (f *Fake) SetRefundMode(mode string, delay time.Duration) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.refundMode, f.refundDelay = mode, delay
+}
+
+// Refunds conta os estornos efetivamente feitos (cobrança passou a REFUNDED por pedido).
+func (f *Fake) Refunds() int { f.mu.Lock(); defer f.mu.Unlock(); return f.refunds }
+
+// Webhook monta um aviso no formato documentado (inclui dados do pagador, como a AbacatePay
+// envia, para provar que o sistema não os guarda).
+func (f *Fake) Webhook(eventID, event string, c Charge) []byte {
+	body, _ := json.Marshal(map[string]any{"id": eventID, "event": event, "apiVersion": 2, "devMode": c.DevMode,
+		"data": map[string]any{
+			"transparent": map[string]any{"id": c.ID, "externalId": nil, "amount": c.Amount, "customerFee": nil, "paidAmount": nil,
+				"platformFee": c.PlatformFee, "status": c.Status, "items": []any{}, "methods": []any{}, "frequency": "ONE_TIME",
+				"coupons": []any{}, "devMode": c.DevMode, "customerId": "cust_simulado", "createdAt": c.CreatedAt,
+				"updatedAt": c.UpdatedAt, "receiptUrl": "https://app.abacatepay.com/receipt/simulado", "metadata": c.Metadata},
+			"customer": map[string]any{"id": "cust_simulado", "name": "Pagadora Simulada", "email": "pagadora@simulado.test",
+				"taxId": "529.***.247-**"},
+			"payerInformation": map[string]any{"method": "PIX", "utms": map[string]any{},
+				"PIX": map[string]any{"name": "Pagadora Simulada", "taxId": "529.***.247-**", "isSameAsCustomer": true}},
+		}})
+	return body
 }
 
 // SetCreateMode muda a resposta das próximas criações (delay para CreateSlow).
@@ -144,6 +184,8 @@ func (f *Fake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.create(w, r)
 	case r.Method == http.MethodGet && path == "/transparents/list":
 		f.list(w, r)
+	case r.Method == http.MethodPost && path == "/transparents/refund":
+		f.refund(w, r)
 	default:
 		write(w, 404, nil, "Not found")
 	}
@@ -245,4 +287,77 @@ func (f *Fake) list(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"data": out, "success": true, "error": nil,
 		"pagination": map[string]any{"hasMore": false, "next": nil}})
+}
+
+func (f *Fake) refund(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		ID     string `json:"id"`
+		Reason string `json:"reason"`
+	}
+	raw, _ := io.ReadAll(r.Body)
+	if json.Unmarshal(raw, &body) != nil || body.ID == "" || len([]rune(body.Reason)) > 500 {
+		write(w, 400, nil, "Invalid body")
+		return
+	}
+	f.mu.Lock()
+	var c *Charge
+	for _, x := range f.charges {
+		if x.ID == body.ID {
+			c = x
+		}
+	}
+	mode, delay := f.refundMode, f.refundDelay
+	switch {
+	case c == nil:
+		f.mu.Unlock()
+		write(w, 400, nil, "Cobrança não encontrada.")
+		return
+	case c.Status == "REFUNDED":
+		f.mu.Unlock()
+		write(w, 400, nil, "Esta cobrança já foi reembolsada.")
+		return
+	case c.Status != "PAID":
+		f.mu.Unlock()
+		write(w, 400, nil, "Só é possível reembolsar cobranças pagas. O status atual desta cobrança não permite reembolso.")
+		return
+	case mode == RefundReject:
+		f.mu.Unlock()
+		write(w, 400, nil, "Saldo insuficiente para realizar o reembolso.")
+		return
+	case mode == RefundDown:
+		f.mu.Unlock()
+		write(w, 503, nil, "Unavailable")
+		return
+	}
+	if mode != RefundAccepted {
+		c.Status, c.UpdatedAt = "REFUNDED", f.now()
+		f.refunds++
+	}
+	resp := map[string]any{"id": "tran_" + c.ID, "status": "COMPLETE", "amount": c.Amount, "reason": body.Reason,
+		"originalId": c.ID, "createdAt": f.now()}
+	f.mu.Unlock()
+	switch mode {
+	case RefundSlow:
+		select {
+		case <-time.After(delay):
+		case <-r.Context().Done():
+			return
+		}
+	case RefundErrAfter:
+		write(w, 500, nil, "Internal error")
+		return
+	}
+	write(w, 200, resp, "")
+}
+
+// MarkRefunded completa um estorno aceito (modo RefundAccepted) como o provedor faria depois.
+func (f *Fake) MarkRefunded(id string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, c := range f.charges {
+		if c.ID == id && c.Status == "PAID" {
+			c.Status, c.UpdatedAt = "REFUNDED", f.now()
+			f.refunds++
+		}
+	}
 }

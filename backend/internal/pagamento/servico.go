@@ -11,8 +11,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"fila/internal/acesso"
 	"fila/internal/atendimento"
 	"fila/internal/platform/clock"
+	"fila/internal/platform/config"
 	"fila/internal/platform/database"
 	hs "fila/internal/platform/httpserver"
 	"fila/internal/platform/idempotency"
@@ -37,12 +39,17 @@ type Deps struct {
 	Clock  clock.Clock
 	Log    *slog.Logger
 	Orders *atendimento.Service
+	Auth   acesso.Authorizer
 	// Provider é nil quando o Pix está desligado (FILA_PIX_PROVIDER=disabled): só dinheiro e cartão.
 	Provider  Provider
 	ExpiresIn time.Duration
 	// Timeout de cada chamada ao provedor (cobrança "criando" há mais que isso vira desconhecida).
 	Timeout     time.Duration
 	VisitClosed func(ctx context.Context, q database.Querier, visitorID uuid.UUID, at time.Time) error
+	// WebhookSecret do webhook cadastrado na AbacatePay; vazio = webhook desligado (ADR-0024).
+	WebhookSecret config.Secret
+	// Pendencies grava pendencies.updated (contadores do painel do dono) na transação. nil = sem painel.
+	Pendencies func(ctx context.Context, tx pgx.Tx, estID uuid.UUID, now time.Time) error
 }
 
 // Service implementa pagamentos (cobrança Pix, recebimentos e conferência).
@@ -68,6 +75,7 @@ func (s *Service) Routes() []hs.Route {
 	const one = "/v1/establishments/{establishmentId}/orders/{orderId}"
 	visitOwner := []hs.Grant{{Actor: "visitor", Scope: "visit_owner"}, {Actor: "customer", Scope: "visit_owner"}}
 	staff := []hs.Grant{{Actor: "professional", Scope: "own_attendance"}, hs.GrantOwner}
+	owner := []hs.Grant{hs.GrantOwner}
 	all := append(append([]hs.Grant{}, visitOwner...), staff...)
 	return []hs.Route{
 		{Operation: "choosePaymentMethod", Method: http.MethodPost, Path: one + "/payment-method", Grants: all, Handler: s.choosePaymentMethod},
@@ -76,6 +84,17 @@ func (s *Service) Routes() []hs.Route {
 		{Operation: "cancelPixCharge", Method: http.MethodPost, Path: one + "/pix-charges/{chargeId}/cancel", Grants: staff, Handler: s.cancelPixCharge},
 		{Operation: "registerInPersonReceipt", Method: http.MethodPost, Path: one + "/receipts", Grants: staff, Handler: s.registerInPersonReceipt},
 		{Operation: "conferReceipt", Method: http.MethodPost, Path: one + "/receipts/{receiptId}/confer", Grants: staff, Handler: s.conferReceipt},
+		{Operation: "requestRefund", Method: http.MethodPost, Path: one + "/receipts/{receiptId}/refunds", Grants: owner, Handler: s.requestRefund},
+		{Operation: "confirmRefundManually", Method: http.MethodPost, Path: one + "/refunds/{refundId}/confirm", Grants: owner,
+			Handler: s.manualRefund(RefundConfirmed)},
+		{Operation: "markRefundFailed", Method: http.MethodPost, Path: one + "/refunds/{refundId}/mark-failed", Grants: owner,
+			Handler: s.manualRefund(RefundFailed)},
+		{Operation: "listFinancialIssues", Method: http.MethodGet, Path: "/v1/establishments/{establishmentId}/financial-issues",
+			Grants: owner, Handler: s.listFinancialIssues},
+		{Operation: "resolveFinancialIssue", Method: http.MethodPost,
+			Path: "/v1/establishments/{establishmentId}/financial-issues/{issueId}/resolve", Grants: owner, Handler: s.resolveFinancialIssue},
+		{Operation: "receiveAbacatePayWebhook", Method: http.MethodPost, Path: "/v1/webhooks/abacatepay",
+			Grants: []hs.Grant{{Actor: "provider", Scope: "provider_signature"}}, Handler: s.receiveAbacatePayWebhook},
 	}
 }
 

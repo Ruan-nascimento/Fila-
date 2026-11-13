@@ -892,7 +892,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Estorno integral de um recebimento (somente dono, com motivo). */
+        /**
+         * Estorno integral de um recebimento (somente dono, com motivo).
+         * @description Registra a intenção (202). Pix: o worker pede o estorno integral à AbacatePay e só confirma
+         *     quando a cobrança aparece REFUNDED (consulta autenticada ou webhook). Dinheiro/cartão, recusa
+         *     do provedor ou falta de confirmação: `under_review`, com pendência para o dono documentar.
+         *     Recebimento principal precisa estar conferido (`refund_not_allowed`); um estorno não-falho
+         *     por recebimento (`refund_exceeds_available`).
+         */
         post: operations["requestRefund"];
         delete?: never;
         options?: never;
@@ -995,9 +1002,15 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Notificação do provedor. Autenticidade conforme contrato oficial (etapa 09).
-         * @description Sem cookies, sem CSRF. O corpo bruto é persistido e deduplicado antes de responder 2xx.
-         *     Notificação não autenticável não confirma pagamento: dispara consulta autenticada ao provedor.
+         * Notificação da AbacatePay (webhook v2).
+         * @description Sem cookies, sem CSRF. Autenticidade conforme a documentação oficial: o secret do webhook em
+         *     `X-Webhook-Secret` (ou na query `webhookSecret`), comparado em tempo constante, prova a origem;
+         *     `X-Webhook-Signature` = base64(HMAC-SHA256(corpo bruto)) com a chave pública da AbacatePay prova
+         *     a integridade. Falhou → 401 e nada é reconhecido; se o aviso cita uma cobrança nossa em aberto,
+         *     a consulta autenticada do worker é antecipada. Autenticado: o aviso é deduplicado pelo `id` e o
+         *     efeito (recebimento, estorno, pendência) é gravado na mesma transação antes do 200. Confere
+         *     ambiente (`devMode`), cobrança, metadados (pedido e loja), método PIX e valor. Os dados do
+         *     pagador não são guardados. 404 quando o webhook está desligado (sem secret configurado).
          */
         post: operations["receiveAbacatePayWebhook"];
         delete?: never;
@@ -2091,6 +2104,8 @@ export interface components {
             charges: components["schemas"]["PixCharge"][];
             receipts: components["schemas"]["Receipt"][];
             refunds: components["schemas"]["Refund"][];
+            /** @description Pendências financeiras abertas desta comanda (a equipe vê na comanda; o dono trata no painel). */
+            open_issue_kinds: components["schemas"]["FinancialIssueKind"][];
         };
         PixCharge: {
             id: components["schemas"]["Id"];
@@ -4216,15 +4231,21 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Notificação persistida (ou duplicata reconhecida). */
+            /** @description Notificação persistida e aplicada (ou duplicata reconhecida). */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": {
+                        received: boolean;
+                        duplicate: boolean;
+                    };
+                };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
             413: components["responses"]["PayloadTooLarge"];
             default: components["responses"]["Unexpected"];
         };
