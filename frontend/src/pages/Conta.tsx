@@ -5,6 +5,8 @@ import { call, problemMessage } from "../api/problem";
 import { useSession } from "../session/context";
 import { Field, Notice, Submit } from "../ui/ui";
 import { useForm } from "../ui/useForm";
+import { ExcluirConta, ExclusaoSolicitada } from "./exclusao/Exclusao";
+import type { DeletionRequest } from "./exclusao/textos";
 
 const dateTime = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" });
 
@@ -12,7 +14,10 @@ export function Conta() {
   const { state, refresh } = useSession();
   const navigate = useNavigate();
   const [logoutError, setLogoutError] = useState<string | null>(null);
+  // Depois do pedido de exclusão a sessão acaba; o resultado (com o protocolo) fica nesta tela.
+  const [deletion, setDeletion] = useState<DeletionRequest | null>(null);
 
+  if (deletion) return <ExclusaoSolicitada request={deletion} />;
   if (state.status === "loading") return <p role="status">Carregando…</p>;
   if (state.status === "offline")
     return <Notice kind="erro">Sem conexão com o servidor. Verifique a internet e tente de novo.</Notice>;
@@ -77,6 +82,12 @@ export function Conta() {
         </button>
       </p>
       <TrocarSenha onDone={refresh} />
+      <ExcluirConta
+        onRequested={(d) => {
+          setDeletion(d);
+          void refresh();
+        }}
+      />
     </section>
   );
 }

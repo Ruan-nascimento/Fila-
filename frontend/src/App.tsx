@@ -3,6 +3,7 @@ import { ApiStatus } from "./features/status/ApiStatus";
 import { Cadastro, EsqueciSenha, ReenviarVerificacao } from "./pages/Contas";
 import { Conta } from "./pages/Conta";
 import { Entrar } from "./pages/Entrar";
+import { ConsultarExclusao } from "./pages/exclusao/Exclusao";
 import { GestaoInicio, GestaoLoja } from "./pages/gestao/Gestao";
 import { AceitarConvite, RedefinirSenha, VerificarEmail } from "./pages/Links";
 import { Loja } from "./pages/Loja";
@@ -33,6 +34,7 @@ export function App() {
           <Route path="/convite" element={<AceitarConvite />} />
           <Route path="/conta" element={<Conta />} />
           <Route path="/loja/:slug" element={<Loja />} />
+          <Route path="/exclusao" element={<ConsultarExclusao />} />
           <Route path="/gestao" element={<GestaoInicio />} />
           <Route path="/gestao/:estId/*" element={<GestaoLoja />} />
           <Route path="*" element={<NaoEncontrada />} />

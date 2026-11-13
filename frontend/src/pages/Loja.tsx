@@ -9,6 +9,7 @@ import { useForm } from "../ui/useForm";
 import { formatCents } from "../money";
 import { StreamProvider, StreamStatusNotice } from "../stream/StreamProvider";
 import { usePublicQueues } from "./fila/filasPublicas";
+import { Historico } from "./fila/Historico";
 import { MinhaVisita } from "./fila/MinhaVisita";
 
 type PublicEstablishment = components["schemas"]["PublicEstablishment"];
@@ -87,6 +88,7 @@ function Visitante({ shop }: { shop: PublicEstablishment }) {
         </p>
       )}
       {(current || account) && <MinhaVisita shopId={shop.id} />}
+      {account && <Historico shopId={shop.id} />}
       {current ? (
         <div className="card">
           <p>
