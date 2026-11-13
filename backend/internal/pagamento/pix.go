@@ -127,6 +127,9 @@ func (s *Service) createPixCharge(w http.ResponseWriter, r *http.Request) error 
 		return err
 	}
 	if replay {
+		if ch.Status == ChargeFailed {
+			return errProviderUnavailable // mesma resposta da primeira vez; nova tentativa = nova chave
+		}
 		w.Header().Set("Idempotent-Replayed", "true")
 		return respondCharge(w, ch.chargeView)
 	}

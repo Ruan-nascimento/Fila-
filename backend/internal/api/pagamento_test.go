@@ -355,8 +355,13 @@ func TestPixRejectedAllowsNewAttempt(t *testing.T) {
 	e := newEnv(t)
 	b, maria, order := e.payable(t)
 	e.pix.SetCreateMode(pagamentotest.CreateReject, 0)
-	if r := maria.createPix(b.id, order, newIdemKey()); r.status != 503 || r.code() != "provider_unavailable" {
+	key := newIdemKey()
+	if r := maria.createPix(b.id, order, key); r.status != 503 || r.code() != "provider_unavailable" {
 		t.Fatalf("recusa: %d %s", r.status, r.raw)
+	}
+	// Repetir a mesma chave devolve a mesma resposta (sem chamar o provedor de novo).
+	if r := maria.createPix(b.id, order, key); r.status != 503 || e.pix.Creates() != 1 {
+		t.Fatalf("repetição da recusa: %d %s (pedidos %d)", r.status, r.raw, e.pix.Creates())
 	}
 	o := maria.order(b.id, order["id"])
 	ch := payment(o)["charges"].([]any)
