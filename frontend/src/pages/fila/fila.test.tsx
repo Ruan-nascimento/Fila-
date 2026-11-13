@@ -62,6 +62,7 @@ function visit(status: string, version: number) {
         charges: [],
         receipts: [],
         refunds: [],
+        open_issue_kinds: [],
       },
       created_at: "2026-11-12T12:00:00Z",
     },

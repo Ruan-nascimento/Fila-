@@ -6,7 +6,7 @@ import type { Order } from "../comanda/textos";
 import { useCommand } from "../gestao/comando";
 import { CommandError } from "../gestao/comum";
 import { PixAberto, Recebimentos } from "./pix";
-import { activeCharge, methodText, type PaymentMethod } from "./textos";
+import { activeCharge, methodText, refundStatusText, type PaymentMethod } from "./textos";
 
 /**
  * Pagamento visto pelo cliente: escolher o meio, gerar o Pix (valor calculado pelo servidor) e
@@ -41,6 +41,11 @@ export function PagamentoCliente({
       <div role="status">
         <Notice kind="ok">Pago. Obrigado!</Notice>
         <Recebimentos receipts={pay.receipts} />
+        {pay.refunds.map((rf) => (
+          <p key={rf.id}>
+            {refundStatusText[rf.status]}: {formatCents(rf.amount.amount_cents)}
+          </p>
+        ))}
       </div>
     );
   if (order.status !== "awaiting_payment") return null;

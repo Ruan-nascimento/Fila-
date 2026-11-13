@@ -6,7 +6,8 @@ import type { Order } from "../comanda/textos";
 import { useCommand } from "../gestao/comando";
 import { CommandError, type StaffContext } from "../gestao/comum";
 import { Recebimentos } from "./pix";
-import { activeCharge, chargeStatusText, methodText } from "./textos";
+import { Estornos } from "./Estornos";
+import { activeCharge, chargeStatusText, issueText, liveRefund, methodText } from "./textos";
 
 const time = new Intl.DateTimeFormat("pt-BR", { timeStyle: "short" });
 
@@ -30,7 +31,8 @@ export function ReceberPagamento({
   const cmd = useCommand();
   const path = { establishmentId: ctx.estId, orderId: order.id };
   const active = activeCharge(pay.charges);
-  const toConfer = pay.receipts.filter((r) => r.status === "registered");
+  // Recebimento com estorno em andamento/confirmado não é conferido (seria receita devolvida).
+  const toConfer = pay.receipts.filter((r) => r.status === "registered" && !liveRefund(pay.refunds, r.id));
 
   async function confer(receiptId: string) {
     const out = await cmd.run(`conferir:${receiptId}`, (key) =>
@@ -76,7 +78,20 @@ export function ReceberPagamento({
           ))}
         </ul>
       )}
+      {pay.open_issue_kinds.length > 0 && (
+        <div className="notice notice--info" role="note" aria-label="Pendências desta comanda">
+          <p>
+            <strong>Pendência financeira (o dono trata no painel):</strong>
+          </p>
+          <ul>
+            {pay.open_issue_kinds.map((k) => (
+              <li key={k}>{issueText[k]}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       <Recebimentos receipts={pay.receipts} />
+      <Estornos ctx={ctx} order={order} onSaved={onSaved} onConflict={onConflict} />
       <CommandError problem={cmd.problem} offline={cmd.offline} />
       {toConfer.map((r) => (
         <button

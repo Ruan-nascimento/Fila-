@@ -107,6 +107,9 @@ export function Recebimentos({ receipts }: { receipts: Receipt[] }) {
               </>
             )}
             {r.card_reference && <> · ref. {r.card_reference}</>}
+            {(r.refunded?.amount_cents ?? 0) > 0 && (
+              <> · estornado {formatCents(r.refunded?.amount_cents ?? 0)}</>
+            )}
           </span>
           <span className="order__price">{formatCents(r.amount.amount_cents)}</span>
         </li>
