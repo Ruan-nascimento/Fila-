@@ -86,3 +86,24 @@ func TestBootstrapCreatesShopAndOwnerInvite(t *testing.T) {
 		t.Fatalf("faltando opções: %d", code)
 	}
 }
+
+func TestEventsStatusAndNewEpoch(t *testing.T) {
+	t.Chdir(t.TempDir())
+	pool := testdb.Migrated(t)
+	env := []string{"FILA_ENV=test", "FILA_DATABASE_URL=" + pool.Config().ConnString(), testdb.SecretKeyVar()}
+	var before string
+	_ = pool.QueryRow(context.Background(), `SELECT epoch::text FROM event_stream_state`).Scan(&before)
+	var out, errb bytes.Buffer
+	if code := run(context.Background(), []string{"eventos"}, env, &out, &errb); code != 0 || !strings.Contains(out.String(), "esperando publicação: 0") {
+		t.Fatalf("eventos: %d %s %s", code, out.String(), errb.String())
+	}
+	out.Reset()
+	if code := run(context.Background(), []string{"nova-epoca"}, env, &out, &errb); code != 0 || strings.Contains(out.String(), before) {
+		t.Fatalf("nova-epoca: %d %s %s", code, out.String(), errb.String())
+	}
+	var after string
+	_ = pool.QueryRow(context.Background(), `SELECT epoch::text FROM event_stream_state`).Scan(&after)
+	if after == before || !strings.Contains(out.String(), after) {
+		t.Fatalf("época não mudou: %s → %s", before, after)
+	}
+}

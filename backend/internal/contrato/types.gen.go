@@ -2470,8 +2470,9 @@ type SetServiceProfessionalsRequest struct {
 }
 
 // SnapshotCursor Cursor do fluxo de eventos para continuar a partir desta leitura (ver eventos-sse.md §6).
-// É `null` enquanto o fluxo SSE não existe (até a etapa 06): o cliente então relê a lista ao
-// voltar para a aba e após cada comando, sem abrir SSE (ADR-0018).
+// Lido no mesmo instante dos dados (transação REPEATABLE READ): abrir o SSE com este cursor
+// entrega só o que mudou depois desta leitura. Desde a etapa 06 vem sempre preenchido; `null`
+// fica reservado para quando o fluxo não estiver disponível (ADR-0018, ADR-0021).
 type SnapshotCursor = StreamCursor
 
 // StaffQueue defines model for StaffQueue.

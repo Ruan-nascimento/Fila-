@@ -25,3 +25,4 @@ Para mudar uma decisão, crie um novo ADR que substitua o anterior (não reescre
 | [ADR-0018](0018-loja-equipe-catalogo.md) | Loja, equipe e catálogo: limites entre módulos e dependências de etapas futuras | Aceita (etapa 03) |
 | [ADR-0019](0019-fila-transacional.md) | Fila transacional: travas, ordem FIFO, senhas e estimativa | Aceita (etapa 04) |
 | [ADR-0020](0020-comanda-atendimento-e-outbox.md) | Comanda, atendimento e outbox de eventos | Aceita (etapa 05) |
+| [ADR-0021](0021-sse-publicador-hub-e-cursor.md) | SSE: publicador, distribuidor por processo e cursor | Aceita (etapa 06) |

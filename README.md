@@ -1,7 +1,7 @@
 # Fila — MVP web para barbearia
 
 Sistema de fila, atendimento, pagamento e fidelidade para barbearia, construído em etapas (veja [REGRAS.md](REGRAS.md)).
-**Situação atual: etapa 05 (pedido, serviços e atendimento).** Já funcionam: contas e login de cliente e de equipe, recuperação de senha, convites, dono inicial por comando controlado, visitante com código de recuperação, loja, profissionais, serviços, a fila (entrar, acompanhar, chamar, iniciar, ausência, desistir, cancelar, transferir) e a comanda: trocar serviços enquanto aguarda, pedir alteração depois da chamada (o profissional aprova ou recusa), marcar serviço realizado, concluir (fecha o valor e libera a cadeira), interromper (o dono revisa e só cobra o que foi feito por inteiro) e correção do dono com senha. Receber o pagamento (Pix, dinheiro, cartão) e as atualizações em tempo real chegam nas próximas etapas.
+**Situação atual: etapa 06 (atualizações em tempo real).** As telas da loja e da equipe se atualizam sozinhas (SSE), sem precisar clicar em "Atualizar"; se a conexão cair, a tela avisa e reconecta sem perder nada. Já funcionam: contas e login de cliente e de equipe, recuperação de senha, convites, dono inicial por comando controlado, visitante com código de recuperação, loja, profissionais, serviços, a fila (entrar, acompanhar, chamar, iniciar, ausência, desistir, cancelar, transferir) e a comanda: trocar serviços enquanto aguarda, pedir alteração depois da chamada (o profissional aprova ou recusa), marcar serviço realizado, concluir (fecha o valor e libera a cadeira), interromper (o dono revisa e só cobra o que foi feito por inteiro) e correção do dono com senha. Receber o pagamento (Pix, dinheiro, cartão) chega nas próximas etapas.
 
 | Pasta | O que tem |
 |---|---|
@@ -93,6 +93,8 @@ Em **outro terminal**, na raiz do repositório:
 ```powershell
 go -C backend run ./cmd/worker
 ```
+
+O worker também **publica as atualizações em tempo real**: sem ele rodando, as telas não se atualizam sozinhas (os comandos continuam funcionando e nada se perde — ao ligar o worker, tudo é publicado). Para ver se há atraso: `go -C backend run ./cmd/fila-admin eventos`.
 
 Ainda não há provedor de e-mail: em desenvolvimento cada e-mail (verificação de conta, redefinição de senha, convite) vira um arquivo `.txt` na pasta `backend\.correio\`. Abra o arquivo e copie o link para o navegador. Essa pasta não vai para o Git.
 

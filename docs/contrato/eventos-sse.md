@@ -134,3 +134,44 @@ Cliente:
 ## 10. Rastreabilidade
 
 Cada operação do OpenAPI lista em `x-events` os tipos que pode gerar. O script [`docs/tools/verificar_contrato.py`](../tools/verificar_contrato.py) confere que todos os tipos citados existem em `EventType` e que todo `EventType` está neste catálogo.
+
+## 11. Implementação (etapa 06)
+
+Detalhes de como o desenho acima roda; as decisões estão no [ADR-0021](../adr/0021-sse-publicador-hub-e-cursor.md).
+
+| Peça | Onde | O que faz |
+|---|---|---|
+| Outbox | `backend/internal/platform/outbox` (`Record`) | Comando grava um evento por audiência na própria transação e manda o aviso `fila_outbox` (só chega no COMMIT) |
+| Publicador | worker (`Publisher`) | Trava `event_stream_state`, lê da outbox só `xact_id < xmin`, grava no `event_log` com posição densa, apaga da outbox, avisa `fila_eventos` — tudo numa transação |
+| Distribuidor | API (`Hub`, um por processo) | `LISTEN fila_eventos, fila_revogacao`; lê o `event_log` e entrega às conexões da loja; buffer de 256 por conexão |
+| Rota | `backend/internal/fluxo` | `GET /v1/stream`: autorização, snapshot + cursor, replay, ao vivo, heartbeat, reconferência |
+| Navegador | `frontend/src/stream` | `StreamClient` (reconexão) e `StreamProvider` (uma conexão por página) |
+
+Mensagens do próprio fluxo:
+
+- `stream.snapshot`: `id` = cursor do instante do snapshot; `audience` = a mais específica concedida (owner > professional > account > visit > public); `resource` = `{type: "stream", id: <id da conexão>, version: <posição>}`; `data` segue `StreamSnapshot` (`pendencies` e `loyalty` ficam `null` até as etapas 09 e 10).
+- `stream.session_ended`: sem `id` (não muda o cursor); `data` = `{"reason": "session_revoked"}`. O servidor fecha a conexão logo depois; o navegador relê a sessão e abre outro fluxo com os canais que ainda tiver.
+
+Versão de recurso nos eventos de fila: `queue.version` + contador de atividade da fila (as duas só crescem). Depois de um snapshot, o cliente recomeça as versões conhecidas.
+
+Limites deste processo: as 6 conexões por credencial são contadas por processo da API (com N processos, até 6 × N).
+
+Atraso: `xmin` é do **servidor** PostgreSQL inteiro. Uma transação longa em qualquer banco do mesmo servidor segura a publicação até terminar. Monitorar com o aviso do worker (> 10 s) ou `go -C backend run ./cmd/fila-admin eventos`.
+
+Restauração de backup: depois de restaurar, rode `go -C backend run ./cmd/fila-admin nova-epoca` — todo navegador recebe um snapshot novo (`epoch_changed`) em vez de retomar por um cursor que pode apontar para eventos que não existem mais.
+
+Proxy reverso (exemplo nginx):
+
+```nginx
+location /v1/stream {
+    proxy_pass http://api;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_buffering off;          # mensagens chegam na hora
+    proxy_cache off;
+    proxy_read_timeout 60s;       # > 2 × heartbeat (15 s)
+    gzip off;
+}
+```
+
+Em desenvolvimento o proxy do Vite já repassa `/v1/stream` sem segurar as mensagens (testado no E2E da etapa 06).

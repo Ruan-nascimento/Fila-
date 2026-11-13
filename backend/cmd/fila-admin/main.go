@@ -4,6 +4,8 @@
 //
 //	go -C backend run ./cmd/fila-admin gerar-chave
 //	go -C backend run ./cmd/fila-admin bootstrap -nome "Barbearia X" -slug barbearia-x -email dona@exemplo.com
+//	go -C backend run ./cmd/fila-admin eventos
+//	go -C backend run ./cmd/fila-admin nova-epoca
 package main
 
 import (
@@ -17,6 +19,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 	_ "time/tzdata" // fusos horários embutidos (o Windows não traz a base IANA)
 
 	"fila/internal/identidade"
@@ -25,6 +28,7 @@ import (
 	"fila/internal/platform/config"
 	"fila/internal/platform/httpserver"
 	"fila/internal/platform/keys"
+	"fila/internal/platform/outbox"
 )
 
 const usage = `uso: fila-admin <comando> [opções]
@@ -33,7 +37,10 @@ comandos:
   gerar-chave   imprime uma chave secreta nova para FILA_SECRET_KEY
   bootstrap     cria a loja e envia o convite do dono inicial (uso único, 24 h)
                 opções: -nome "Nome da loja" -slug endereco-da-loja -email dono@exemplo.com
-                        [-fuso America/Sao_Paulo] [-motivo "texto para a auditoria"]`
+                        [-fuso America/Sao_Paulo] [-motivo "texto para a auditoria"]
+  eventos       mostra o atraso da publicação de eventos (outbox) e a posição do fluxo
+  nova-epoca    troca a época do fluxo de eventos; use DEPOIS de restaurar um backup
+                (todo navegador recebe um snapshot novo em vez de retomar por um cursor antigo)`
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -55,10 +62,51 @@ func run(ctx context.Context, args, environ []string, stdout, stderr io.Writer) 
 		return generateKey(stdout, stderr)
 	case "bootstrap":
 		return bootstrap(ctx, args[1:], environ, stdout, stderr)
+	case "eventos", "nova-epoca":
+		if len(args) != 1 {
+			fmt.Fprintln(stderr, usage)
+			return app.ExitConfigError
+		}
+		return events(ctx, args[0], environ, stdout, stderr)
 	default:
 		fmt.Fprintln(stderr, usage)
 		return app.ExitConfigError
 	}
+}
+
+// events mostra o atraso da outbox (monitoramento) ou troca a época do fluxo (restauração).
+func events(ctx context.Context, cmd string, environ []string, stdout, stderr io.Writer) int {
+	rt, code := app.Start("fila-admin", environ, stderr, stderr)
+	if rt == nil {
+		return code
+	}
+	defer rt.Close()
+	if err := rt.CheckDatabase(ctx, rt.Config.Database.ConnectTimeout); err != nil {
+		rt.Log.Error("banco indisponível ou sem migrações", "error", err.Error())
+		return app.ExitFailure
+	}
+	if cmd == "nova-epoca" {
+		epoch, err := outbox.NewEpoch(ctx, rt.Pool)
+		if err != nil {
+			rt.Log.Error("não foi possível trocar a época", "error", err.Error())
+			return app.ExitFailure
+		}
+		fmt.Fprintf(stdout, "nova época do fluxo de eventos: %s\n", epoch)
+		return app.ExitOK
+	}
+	lag, err := outbox.MeasureLag(ctx, rt.Pool, time.Now())
+	if err != nil {
+		rt.Log.Error("não foi possível medir o atraso", "error", err.Error())
+		return app.ExitFailure
+	}
+	head, err := outbox.ReadHead(ctx, rt.Pool)
+	if err != nil {
+		rt.Log.Error("não foi possível ler o fluxo", "error", err.Error())
+		return app.ExitFailure
+	}
+	fmt.Fprintf(stdout, "eventos esperando publicação: %d (mais antigo há %ds)\n", lag.Pending, int(lag.Oldest.Seconds()))
+	fmt.Fprintf(stdout, "última posição publicada: %d · mais antiga guardada: %d · época: %s\n", head.Last, head.Oldest, head.Epoch)
+	return app.ExitOK
 }
 
 // generateKey imprime 32 bytes aleatórios em base64url. A chave aparece só na saída do
