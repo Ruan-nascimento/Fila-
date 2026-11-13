@@ -327,11 +327,11 @@ func (b *browser) reauth() {
 	b.mustStatus(b.do("POST", "/v1/auth/reauthenticate", map[string]any{"password": goodPassword}), 200)
 }
 
-var idemSeq int
+// idemSeq é atômico: testes de concorrência geram chaves em várias goroutines ao mesmo tempo.
+var idemSeq atomic.Int64
 
 func newIdemKey() string {
-	idemSeq++
-	return fmt.Sprintf("chave-teste-%08d", idemSeq)
+	return fmt.Sprintf("chave-teste-%08d", idemSeq.Add(1))
 }
 
 // cmd envia um comando com Idempotency-Key nova (uma intenção = uma chave).

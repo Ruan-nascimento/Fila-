@@ -89,7 +89,14 @@ jobs:
       - name: Vulnerabilidades conhecidas (govulncheck)
         run: go tool govulncheck ./...
       - name: Testes com PostgreSQL real e detector de corridas
-        run: go test -race -count=1 ./...
+        run: |
+          set -o pipefail
+          go test -race -count=1 ./... 2>&1 | tee "$RUNNER_TEMP/go-test.log"
+      - name: Resumir falhas dos testes (anotações legíveis sem login)
+        if: failure()
+        run: |
+          grep -E -- '--- FAIL|WARNING: DATA RACE|^panic:|_test\.go:[0-9]+:' "$RUNNER_TEMP/go-test.log" | head -n 30 |
+            sed -e 's/%/%25/g' -e 's/^/::error title=go test::/' || true
       - name: Build dos executáveis
         run: go build -trimpath -o ../bin/ ./cmd/...
 
