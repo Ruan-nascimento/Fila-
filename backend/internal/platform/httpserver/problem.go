@@ -147,6 +147,7 @@ type HandlerFunc func(w http.ResponseWriter, r *http.Request) error
 // Handle converte HandlerFunc em http.Handler, escrevendo o erro devolvido com WriteError.
 func Handle(log *slog.Logger, h HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		RecordRoute(r)
 		if err := h(w, r); err != nil {
 			WriteError(w, r, log, err)
 		}

@@ -12,7 +12,21 @@ import (
 
 type ctxKey int
 
-const requestIDKey ctxKey = 1
+const (
+	requestIDKey ctxKey = 1
+	routeKey     ctxKey = 2
+)
+
+// routeHolder guarda a rota-modelo descoberta pelo roteador. Middlewares que criam uma cópia da
+// requisição (WithContext) fazem o roteador preencher r.Pattern na CÓPIA; o log de acesso lê daqui.
+type routeHolder struct{ pattern string }
+
+// RecordRoute anota a rota-modelo para o log de acesso (chamado pelo adaptador de rotas).
+func RecordRoute(r *http.Request) {
+	if h, ok := r.Context().Value(routeKey).(*routeHolder); ok && r.Pattern != "" {
+		h.pattern = r.Pattern
+	}
+}
 
 // HeaderRequestID devolve ao cliente o identificador da requisição (para suporte e diagnóstico).
 const HeaderRequestID = "X-Request-Id"
@@ -116,8 +130,12 @@ func accessLog(log *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		rec := &statusRecorder{ResponseWriter: w}
-		next.ServeHTTP(rec, r)
-		route := r.Pattern
+		holder := &routeHolder{}
+		next.ServeHTTP(rec, r.WithContext(context.WithValue(r.Context(), routeKey, holder)))
+		route := holder.pattern
+		if route == "" {
+			route = r.Pattern
+		}
 		if route == "" {
 			route = "(sem rota)"
 		}

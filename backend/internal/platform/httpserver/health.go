@@ -46,11 +46,13 @@ type healthBody struct {
 	Status string `json:"status"`
 }
 
-func (h *Health) live(w http.ResponseWriter, _ *http.Request) {
+func (h *Health) live(w http.ResponseWriter, r *http.Request) {
+	RecordRoute(r)
 	WriteJSON(w, http.StatusOK, healthBody{Status: "ok"})
 }
 
 func (h *Health) ready(w http.ResponseWriter, r *http.Request) {
+	RecordRoute(r)
 	if h.draining.Load() {
 		WriteProblem(w, r, http.StatusServiceUnavailable, "service_unavailable",
 			"Serviço encerrando", "O servidor está sendo desligado.")

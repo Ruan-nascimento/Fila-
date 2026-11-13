@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
@@ -102,10 +103,20 @@ func (m *Migrator) Status(ctx context.Context) ([]MigrationStatus, error) {
 // ErrSchemaBehind indica que o banco não tem todas as migrações deste executável.
 var ErrSchemaBehind = errors.New("banco sem todas as migrações; rode: go -C backend run ./cmd/migrate up")
 
-// CheckCurrent confere se o banco está na versão esperada. Não usa a trava de migração,
-// então pode ser chamado com frequência (readiness).
+// CheckCurrent confere se o banco está na versão esperada. Pode ser chamado com frequência
+// (readiness, partida do worker).
+//
+// Lê a tabela de versões diretamente, SEM a trava de migração. Não usamos
+// provider.GetDBVersion porque no goose 3.29 ele pega a trava de sessão (advisory lock) e, se
+// outro processo estiver com ela, só tenta de novo 5 segundos depois: API e worker subindo ao
+// mesmo tempo estouravam o tempo de partida, e cada sonda de readiness disputava a trava.
 func (m *Migrator) CheckCurrent(ctx context.Context) error {
-	v, err := m.provider.GetDBVersion(ctx)
+	var v int64
+	err := m.db.QueryRowContext(ctx, `SELECT coalesce(max(version_id), 0) FROM goose_db_version`).Scan(&v)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "42P01" { // tabela ainda não existe: banco vazio
+		v, err = 0, nil
+	}
 	if err != nil {
 		return errors.New("ler versão do banco: " + Describe(err))
 	}
