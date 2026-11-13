@@ -3,6 +3,7 @@ import { api } from "../../api/client";
 import { call, problemMessage } from "../../api/problem";
 import type { components } from "../../api/schema.gen";
 import { formatCents } from "../../money";
+import { useStreamMessages } from "../../stream/context";
 import { Field, Notice, Submit } from "../../ui/ui";
 import { ItensDaComanda } from "../comanda/comanda";
 import { describeRequest, liveItems, reportedText, type Order } from "../comanda/textos";
@@ -57,6 +58,13 @@ export function Atendimento({
       active = false;
     };
   }, [fetchOrder]);
+
+  // Comanda atualizada por outra pessoa (cliente pediu alteração, outra aba concluiu…).
+  useStreamMessages((m) => {
+    if (m.type !== "order.updated" && m.type !== "payment.updated") return;
+    const next = m.data as Order;
+    setOrder((cur) => (cur && cur.id === next.id && next.version > cur.version ? next : cur));
+  });
 
   if (error) return <Notice kind="erro">{error}</Notice>;
   if (!order) return <p role="status">Carregando comanda…</p>;

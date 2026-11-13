@@ -3,6 +3,7 @@ import { api } from "../../api/client";
 import { call, problemMessage } from "../../api/problem";
 import type { components } from "../../api/schema.gen";
 import { formatCents } from "../../money";
+import { useStreamMessages } from "../../stream/context";
 import { Field, Notice, Submit } from "../../ui/ui";
 import { ItensDaComanda } from "../comanda/comanda";
 import { liveItems, reportedText, type Order } from "../comanda/textos";
@@ -68,6 +69,23 @@ export function Comandas({ ctx }: { ctx: StaffContext }) {
   }
 
   const replace = (o: Order) => setOrders((list) => (list ?? []).map((x) => (x.id === o.id ? o : x)));
+
+  // Fluxo SSE: comanda da lista mudou → troca se for mais nova; comanda nova que entra no filtro
+  // (ex.: interrupção para revisar) ou reconexão com snapshot → relê a lista.
+  useStreamMessages((m) => {
+    if (m.type === "stream.snapshot") {
+      void reload();
+      return;
+    }
+    if (m.type !== "order.updated") return;
+    const o = m.data as Order;
+    const known = orders?.find((x) => x.id === o.id);
+    if (known) {
+      if (o.version > known.version) replace(o);
+    } else if (!filter || o.status === filter) {
+      void reload();
+    }
+  });
 
   return (
     <div>

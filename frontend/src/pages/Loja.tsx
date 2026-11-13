@@ -7,6 +7,8 @@ import { useSession } from "../session/context";
 import { Field, Notice, Submit } from "../ui/ui";
 import { useForm } from "../ui/useForm";
 import { formatCents } from "../money";
+import { StreamProvider, StreamStatusNotice } from "../stream/StreamProvider";
+import { usePublicQueues } from "./fila/filasPublicas";
 import { MinhaVisita } from "./fila/MinhaVisita";
 
 type PublicEstablishment = components["schemas"]["PublicEstablishment"];
@@ -19,6 +21,7 @@ export function Loja() {
   const { slug = "" } = useParams();
   const [shop, setShop] = useState<PublicEstablishment | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { state } = useSession();
 
   useEffect(() => {
     let active = true;
@@ -39,12 +42,19 @@ export function Loja() {
 
   if (error) return <Notice kind="erro">{error}</Notice>;
   if (!shop) return <p role="status">Carregando loja…</p>;
+  // Uma conexão de atualizações para a página: filas públicas e, com visitante ou conta, a visita.
+  const identified =
+    state.status === "ready" &&
+    (state.session.account !== null || state.session.visitors.some((v) => v.establishment_id === shop.id));
   return (
-    <section aria-labelledby="titulo-loja">
-      <h2 id="titulo-loja">{shop.name}</h2>
-      <Visitante shop={shop} />
-      <CatalogoPublico shopId={shop.id} />
-    </section>
+    <StreamProvider estId={shop.id} channels={identified ? ["public", "visit"] : ["public"]}>
+      <section aria-labelledby="titulo-loja">
+        <h2 id="titulo-loja">{shop.name}</h2>
+        <StreamStatusNotice />
+        <Visitante shop={shop} />
+        <CatalogoPublico shopId={shop.id} />
+      </section>
+    </StreamProvider>
   );
 }
 
@@ -241,19 +251,18 @@ const queueStatus: Record<PublicQueue["status"], string> = {
 /** Serviços e filas públicos da loja: só nome, preço, duração, profissional e situação da fila. */
 function CatalogoPublico({ shopId }: { shopId: string }) {
   const [services, setServices] = useState<PublicService[] | null>(null);
-  const [queues, setQueues] = useState<PublicQueue[]>([]);
+  const queues = usePublicQueues(shopId) ?? [];
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
     const path = { establishmentId: shopId };
-    void Promise.all([
-      call(() => api.GET("/v1/public/establishments/{establishmentId}/services", { params: { path } })),
-      call(() => api.GET("/v1/public/establishments/{establishmentId}/queues", { params: { path } })),
-    ]).then(([s, q]) => {
+    // O catálogo de serviços não vem pelo fluxo SSE: é lido ao abrir a tela (eventos-sse.md §4).
+    void call(() =>
+      api.GET("/v1/public/establishments/{establishmentId}/services", { params: { path } }),
+    ).then((s) => {
       if (!active) return;
       if (s.ok) setServices(s.data.data);
       else setError(problemMessage(s.problem, s.offline));
-      if (q.ok) setQueues(q.data.data);
     });
     return () => {
       active = false;

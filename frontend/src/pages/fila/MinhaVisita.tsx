@@ -5,13 +5,14 @@ import type { components } from "../../api/schema.gen";
 import { formatCents } from "../../money";
 import { Notice, Submit } from "../../ui/ui";
 import { ItensDaComanda } from "../comanda/comanda";
+import { useStreamMessages } from "../../stream/context";
 import { useCommand } from "../gestao/comando";
 import { CommandError } from "../gestao/comum";
+import { usePublicQueues } from "./filasPublicas";
 import { Pedido } from "./Pedido";
 
 type Visit = components["schemas"]["Visit"];
 type PublicService = components["schemas"]["PublicService"];
-type PublicQueue = components["schemas"]["PublicQueue"];
 
 const time = new Intl.DateTimeFormat("pt-BR", { timeStyle: "short" });
 
@@ -53,19 +54,36 @@ export function MinhaVisita({ shopId }: { shopId: string }) {
     let active = true;
     void fetchVisit().then((out) => {
       if (!active) return;
-      if (out.ok) setVisit(out.data.data ?? null);
+      if (out.ok) setVisit((cur) => (cur === undefined ? (out.data.data ?? null) : cur));
       else setError(problemMessage(out.problem, out.offline));
     });
-    // Sem atualização em tempo real nesta etapa: relê ao voltar para a aba (R-WEB-03).
-    const onVisible = () => {
-      if (document.visibilityState === "visible") void reload();
-    };
-    document.addEventListener("visibilitychange", onVisible);
     return () => {
       active = false;
-      document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [fetchVisit, reload]);
+  }, [fetchVisit]);
+
+  // Atualizações pelo fluxo SSE: snapshot (ao conectar/reconectar) e eventos da própria visita.
+  // Cada evento traz o recurso completo e a versão; só vale se for mais novo que o da tela.
+  useStreamMessages((m) => {
+    if (m.type === "stream.snapshot") {
+      const d = m.data as { visit?: Visit | null; granted_channels: string[] };
+      if (d.granted_channels.includes("visit")) setVisit(d.visit ?? null);
+      return;
+    }
+    if (m.audience !== "visit") return;
+    if (m.type === "participation.updated") {
+      const p = m.data as Visit["participation"];
+      if (!visit || visit.participation.id !== p.id) {
+        void reload(); // visita nova (outra aba): relê a visita inteira
+      } else if (p.version > visit.participation.version) {
+        setVisit({ ...visit, participation: p });
+      }
+    } else if (m.type === "order.updated" || m.type === "payment.updated") {
+      const o = m.data as Visit["order"];
+      if (visit && visit.order.id === o.id && o.version > visit.order.version)
+        setVisit({ ...visit, order: o });
+    }
+  });
 
   if (error) return <Notice kind="erro">{error}</Notice>;
   if (visit === undefined) return <p role="status">Carregando sua visita…</p>;
@@ -172,7 +190,7 @@ function Acompanhar({
 
 function Entrar({ shopId, onEntered }: { shopId: string; onEntered: (v: Visit) => void }) {
   const [services, setServices] = useState<PublicService[]>([]);
-  const [queues, setQueues] = useState<PublicQueue[]>([]);
+  const queues = (usePublicQueues(shopId) ?? []).filter((x) => x.status === "open");
   const [queueId, setQueueId] = useState("");
   const [chosen, setChosen] = useState<string[]>([]);
   const cmd = useCommand();
@@ -180,13 +198,10 @@ function Entrar({ shopId, onEntered }: { shopId: string; onEntered: (v: Visit) =
   useEffect(() => {
     let active = true;
     const path = { establishmentId: shopId };
-    void Promise.all([
-      call(() => api.GET("/v1/public/establishments/{establishmentId}/services", { params: { path } })),
-      call(() => api.GET("/v1/public/establishments/{establishmentId}/queues", { params: { path } })),
-    ]).then(([s, q]) => {
-      if (!active) return;
-      if (s.ok) setServices(s.data.data);
-      if (q.ok) setQueues(q.data.data.filter((x) => x.status === "open"));
+    void call(() =>
+      api.GET("/v1/public/establishments/{establishmentId}/services", { params: { path } }),
+    ).then((s) => {
+      if (active && s.ok) setServices(s.data.data);
     });
     return () => {
       active = false;

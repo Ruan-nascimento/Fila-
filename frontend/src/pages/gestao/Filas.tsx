@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { api } from "../../api/client";
 import { call, problemMessage } from "../../api/problem";
 import type { components } from "../../api/schema.gen";
+import { useStreamMessages, Versions } from "../../stream/context";
 import { Field, Notice } from "../../ui/ui";
 import { useCommand } from "./comando";
 import { CommandError, type StaffContext } from "./comum";
@@ -19,7 +20,26 @@ const statusText: Record<StaffQueue["status"], { icon: string; text: string }> =
 export function Filas({ ctx }: { ctx: StaffContext }) {
   const [queues, setQueues] = useState<StaffQueue[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const versions = useRef(new Versions());
   const cmd = useCommand();
+  // Atualizações pelo fluxo SSE: snapshot e queue.updated (só versão mais nova vale).
+  useStreamMessages((m) => {
+    if (m.type === "stream.snapshot") {
+      const list = (m.data as { staff_queues?: StaffQueue[] }).staff_queues;
+      if (list) {
+        versions.current.reset();
+        setQueues(list);
+      }
+    } else if (m.type === "queue.updated" && versions.current.newer(m.resource.id, m.resource.version)) {
+      const q = m.data as StaffQueue;
+      setQueues((list) => {
+        const cur = list ?? [];
+        return cur.some((x) => x.queue_id === q.queue_id)
+          ? cur.map((x) => (x.queue_id === q.queue_id ? q : x))
+          : [...cur, q];
+      });
+    }
+  });
   // Relógio da tela para habilitar "Marcar ausência" após a tolerância (o servidor confere de novo).
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -34,6 +54,7 @@ export function Filas({ ctx }: { ctx: StaffContext }) {
       }),
     );
     if (out.ok) {
+      versions.current.reset();
       setQueues(out.data.data);
       setLoadError(null);
     } else setLoadError(problemMessage(out.problem, out.offline));
@@ -47,7 +68,7 @@ export function Filas({ ctx }: { ctx: StaffContext }) {
       }),
     ).then((out) => {
       if (!active) return;
-      if (out.ok) setQueues(out.data.data);
+      if (out.ok) setQueues((cur) => cur ?? out.data.data);
       else setLoadError(problemMessage(out.problem, out.offline));
     });
     return () => {
@@ -81,7 +102,7 @@ export function Filas({ ctx }: { ctx: StaffContext }) {
   return (
     <div>
       <p className="muted">
-        A lista não se atualiza sozinha nesta etapa.{" "}
+        A lista se atualiza sozinha.{" "}
         <button type="button" className="link-button" onClick={() => void load()}>
           Atualizar agora
         </button>
