@@ -72,13 +72,8 @@ type Result struct {
 // Run valida a chave, executa fn numa transação e escreve a resposta (nova ou repetida).
 func (rn *Runner) Run(w http.ResponseWriter, r *http.Request, cmd Command, fn func(tx pgx.Tx) (Result, error)) error {
 	key := r.Header.Get(Header)
-	if key == "" {
-		return &httpserver.Error{Status: 400, Code: "idempotency_key_missing", Title: "Falta a chave de repetição",
-			Detail: "Envie o cabeçalho Idempotency-Key gerado uma vez por ação."}
-	}
-	if !keyFormat.MatchString(key) {
-		return httpserver.ErrValidation(httpserver.FieldError{Field: "/header/Idempotency-Key", Code: httpserver.FieldInvalidFormat,
-			Message: "use de 16 a 128 caracteres entre letras, números, - e _"})
+	if err := CheckKey(key); err != nil {
+		return err
 	}
 	fp := fingerprint(r, cmd.Body)
 	now := rn.clock.Now()
@@ -125,6 +120,19 @@ func (rn *Runner) Run(w http.ResponseWriter, r *http.Request, cmd Command, fn fu
 	}
 	w.WriteHeader(status)
 	_, _ = w.Write(append(body, '\n'))
+	return nil
+}
+
+// CheckKey confere presença e formato da chave (para comandos com idempotência própria).
+func CheckKey(key string) error {
+	if key == "" {
+		return &httpserver.Error{Status: 400, Code: "idempotency_key_missing", Title: "Falta a chave de repetição",
+			Detail: "Envie o cabeçalho Idempotency-Key gerado uma vez por ação."}
+	}
+	if !keyFormat.MatchString(key) {
+		return httpserver.ErrValidation(httpserver.FieldError{Field: "/header/Idempotency-Key", Code: httpserver.FieldInvalidFormat,
+			Message: "use de 16 a 128 caracteres entre letras, números, - e _"})
+	}
 	return nil
 }
 

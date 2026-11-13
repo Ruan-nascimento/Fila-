@@ -38,7 +38,29 @@ type Config struct {
 	Database  DatabaseConfig
 	Security  SecurityConfig
 	Mail      MailConfig
+	Payments  PaymentsConfig
 }
+
+// PaymentsConfig configura o Pix pela AbacatePay (ADR-0007, ADR-0023). A chave só existe no
+// backend. Fora de produção só chave de TESTE (abc_dev_: nada é cobrado de verdade); chave de
+// produção (abc_prod_) só em produção e só depois da validação real (R-PAG-15).
+type PaymentsConfig struct {
+	// Pix: "disabled" (padrão: só dinheiro e cartão presencial) ou "abacatepay".
+	Pix                 string
+	APIKey              Secret
+	BaseURL             string
+	ProductionValidated bool
+	// ExpiresIn é a validade de cada QR Pix (o provedor não cancela cobrança: só expira).
+	ExpiresIn time.Duration
+	// Timeout de cada chamada ao provedor; estourou depois de enviar = resultado desconhecido.
+	Timeout time.Duration
+}
+
+// Provedores de Pix.
+const (
+	PixDisabled   = "disabled"
+	PixAbacatePay = "abacatepay"
+)
 
 // SecurityConfig reúne chave do servidor, origens permitidas e opções de cookie (ADR-0006, ADR-0017).
 type SecurityConfig struct {
@@ -143,6 +165,12 @@ const (
 	VarTrustForwardedFor = "FILA_TRUST_X_FORWARDED_FOR"
 	VarMailMode          = "FILA_MAIL_MODE"
 	VarMailDir           = "FILA_MAIL_DIR"
+	VarPixProvider       = "FILA_PIX_PROVIDER"
+	VarAbacateKey        = "FILA_ABACATEPAY_API_KEY"
+	VarAbacateBaseURL    = "FILA_ABACATEPAY_BASE_URL"
+	VarAbacateValidated  = "FILA_ABACATEPAY_PRODUCTION_VALIDATED"
+	VarPixExpiresIn      = "FILA_PIX_EXPIRES_IN"
+	VarAbacateTimeout    = "FILA_ABACATEPAY_TIMEOUT"
 	// VarTestDatabaseURL é lida só pelos testes de integração; aceita aqui para não ser "desconhecida".
 	VarTestDatabaseURL = "FILA_TEST_DATABASE_URL"
 	VarRequireDBTests  = "FILA_REQUIRE_DB_TESTS"
@@ -157,6 +185,8 @@ var knownVars = map[string]bool{
 	VarTestDatabaseURL: true, VarRequireDBTests: true, VarAPIProxyTarget: true,
 	VarSecretKey: true, VarAllowedOrigins: true, VarPublicBaseURL: true, VarCookieSecure: true,
 	VarTrustForwardedFor: true, VarMailMode: true, VarMailDir: true,
+	VarPixProvider: true, VarAbacateKey: true, VarAbacateBaseURL: true, VarAbacateValidated: true,
+	VarPixExpiresIn: true, VarAbacateTimeout: true,
 }
 
 // Origens padrão fora de produção: o servidor de desenvolvimento do Vite.
@@ -209,6 +239,7 @@ func Load(environ []string) (*Config, error) {
 	if prod && cfg.Mail.Mode == MailFile {
 		l.fail(VarMailMode, "o modo file (arquivos locais) é só para desenvolvimento; em produção use disabled até configurar um provedor")
 	}
+	cfg.Payments = l.payments(prod)
 	l.unknownVars()
 
 	if len(l.problems) > 0 {
@@ -497,4 +528,42 @@ func toMap(environ []string) map[string]string {
 		}
 	}
 	return m
+}
+
+// payments lê a configuração do Pix e aplica as travas de ambiente (R-PAG-15).
+func (l *loader) payments(prod bool) PaymentsConfig {
+	c := PaymentsConfig{
+		Pix:                 l.oneOf(VarPixProvider, PixDisabled, PixDisabled, PixAbacatePay),
+		BaseURL:             l.text(VarAbacateBaseURL, "https://api.abacatepay.com/v2"),
+		ProductionValidated: l.boolean(VarAbacateValidated, false),
+		ExpiresIn:           l.duration(VarPixExpiresIn, 15*time.Minute, 5*time.Minute, 24*time.Hour),
+		Timeout:             l.duration(VarAbacateTimeout, 10*time.Second, time.Second, time.Minute),
+	}
+	key, _ := l.get(VarAbacateKey)
+	c.APIKey = Secret(strings.TrimSpace(key))
+	if c.Pix != PixAbacatePay {
+		return c
+	}
+	k := c.APIKey.Reveal()
+	switch {
+	case k == "":
+		l.fail(VarAbacateKey, "obrigatória com FILA_PIX_PROVIDER=abacatepay (crie no painel da AbacatePay; nunca no código nem no frontend)")
+	case strings.HasPrefix(k, "abc_dev_"):
+		if prod {
+			l.fail(VarAbacateKey, "em produção não se usa chave de teste (abc_dev_): os pagamentos seriam simulados")
+		}
+	case strings.HasPrefix(k, "abc_prod_"):
+		if !prod {
+			l.fail(VarAbacateKey, "chave de produção (abc_prod_) só no ambiente de produção; para testar use a chave de teste (abc_dev_)")
+		} else if !c.ProductionValidated {
+			l.fail(VarAbacateValidated, "a cobrança real está desligada até a validação da integração (ver docs/pagamentos-abacatepay.md); depois use true")
+		}
+	default:
+		l.fail(VarAbacateKey, "formato não reconhecido (esperado abc_dev_... ou abc_prod_...)")
+	}
+	u, err := url.Parse(c.BaseURL)
+	if err != nil || u.Host == "" || (prod && u.Scheme != "https") || (u.Scheme != "https" && u.Scheme != "http") {
+		l.fail(VarAbacateBaseURL, "endereço inválido (em produção precisa ser https)")
+	}
+	return c
 }

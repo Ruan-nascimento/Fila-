@@ -238,3 +238,46 @@ func TestEffectiveEnvironExplicitFileMustExist(t *testing.T) {
 		t.Fatalf("arquivo explícito ausente deveria falhar claramente: %v", err)
 	}
 }
+
+// Pix: desligado por padrão; fora de produção só chave de teste; produção só com chave real e
+// validação marcada; a chave nunca aparece em mensagem de erro (R-PAG-15).
+func TestPaymentsConfig(t *testing.T) {
+	cfg, err := Load(valid())
+	if err != nil || cfg.Payments.Pix != PixDisabled || cfg.Payments.ExpiresIn != 15*time.Minute {
+		t.Fatalf("padrão: %+v %v", cfg.Payments, err)
+	}
+	testKey := "abc_dev_" + "fixtureSemSegredo"  // gitleaks:allow
+	prodKey := "abc_prod_" + "fixtureSemSegredo" // gitleaks:allow
+	cfg, err = Load(valid("FILA_PIX_PROVIDER=abacatepay", "FILA_ABACATEPAY_API_KEY="+testKey))
+	if err != nil || cfg.Payments.APIKey.Reveal() != testKey || fmt.Sprint(cfg.Payments.APIKey) != "[OCULTO]" {
+		t.Fatalf("chave de teste em desenvolvimento: %v", err)
+	}
+	prodBase := []string{"FILA_ENV=production",
+		"FILA_DATABASE_URL=postgres://fila:Xk29-forte@db.interno:5432/fila?sslmode=verify-full",
+		"FILA_ALLOWED_ORIGINS=https://fila.exemplo.com.br", "FILA_PUBLIC_BASE_URL=https://fila.exemplo.com.br",
+		"FILA_MAIL_MODE=disabled", "FILA_PIX_PROVIDER=abacatepay"}
+	for name, c := range map[string]struct {
+		env  []string
+		want string
+	}{
+		"sem chave":                  {valid("FILA_PIX_PROVIDER=abacatepay"), VarAbacateKey},
+		"chave de produção em dev":   {valid("FILA_PIX_PROVIDER=abacatepay", "FILA_ABACATEPAY_API_KEY="+prodKey), VarAbacateKey},
+		"chave de teste em produção": {append(append([]string{}, prodBase...), "FILA_ABACATEPAY_API_KEY="+testKey), VarAbacateKey},
+		"produção sem validação":     {append(append([]string{}, prodBase...), "FILA_ABACATEPAY_API_KEY="+prodKey), VarAbacateValidated},
+		"formato estranho":           {valid("FILA_PIX_PROVIDER=abacatepay", "FILA_ABACATEPAY_API_KEY=sk_live_123"), VarAbacateKey},
+		"validade curta demais":      {valid("FILA_PIX_EXPIRES_IN=1m"), VarPixExpiresIn},
+		"produção sem https":         {append(append([]string{}, prodBase...), "FILA_ABACATEPAY_API_KEY="+prodKey, "FILA_ABACATEPAY_PRODUCTION_VALIDATED=true", "FILA_ABACATEPAY_BASE_URL=http://api.exemplo"), VarAbacateBaseURL},
+	} {
+		_, err := Load(c.env)
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: esperava erro em %s, veio %v", name, c.want, err)
+		}
+		if err != nil && (strings.Contains(err.Error(), "fixtureSemSegredo") || strings.Contains(err.Error(), "sk_live_123")) {
+			t.Errorf("%s: mensagem expôs a chave", name)
+		}
+	}
+	cfg, err = Load(append(append([]string{}, prodBase...), "FILA_ABACATEPAY_API_KEY="+prodKey, "FILA_ABACATEPAY_PRODUCTION_VALIDATED=true"))
+	if err != nil || !cfg.Payments.ProductionValidated {
+		t.Fatalf("produção validada deveria carregar: %v", err)
+	}
+}
