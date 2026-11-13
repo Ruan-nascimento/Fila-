@@ -7,6 +7,8 @@
 package pagamentotest
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -67,6 +69,7 @@ type Fake struct {
 	refundMode  string
 	refundDelay time.Duration
 	refunds     int
+	run         string // prefixo aleatório: ids únicos mesmo se o simulador reiniciar
 	now         func() time.Time
 }
 
@@ -75,7 +78,9 @@ func New(key string, now func() time.Time) *Fake {
 	if now == nil {
 		now = time.Now
 	}
-	return &Fake{Key: key, mode: CreateOK, refundMode: RefundOK, now: now}
+	run := make([]byte, 4)
+	_, _ = rand.Read(run)
+	return &Fake{Key: key, mode: CreateOK, refundMode: RefundOK, now: now, run: hex.EncodeToString(run)}
 }
 
 // SetRefundMode muda a resposta dos próximos estornos.
@@ -234,7 +239,7 @@ func (f *Fake) create(w http.ResponseWriter, r *http.Request) {
 		if exp == 0 {
 			exp = 86400
 		}
-		c = &Charge{ID: fmt.Sprintf("pix_char_fake%06d", f.seq), Amount: body.Data.Amount, Status: "PENDING", DevMode: true,
+		c = &Charge{ID: fmt.Sprintf("pix_char_fake%s%06d", f.run, f.seq), Amount: body.Data.Amount, Status: "PENDING", DevMode: true,
 			BRCode:    "00020101021226950014br.gov.bcb.pix2573fake.teste/" + strconv.Itoa(f.seq) + "5204000053039865802BR6304ABCD",
 			BRCodeB64: "data:image/png;base64,ZmFrZQ==", PlatformFee: 80, CreatedAt: now, UpdatedAt: now,
 			ExpiresAt: now.Add(time.Duration(exp) * time.Second), Metadata: body.Data.Metadata, externalID: body.Data.ExternalID}
