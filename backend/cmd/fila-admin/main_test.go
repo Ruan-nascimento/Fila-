@@ -131,7 +131,7 @@ func TestTransferOwnerAndCloseEstablishment(t *testing.T) {
 	if invites != 2 || audits != 1 || strings.Contains(out.String(), "bia@") {
 		t.Fatalf("convites=%d auditoria=%d saída=%q", invites, audits, out.String())
 	}
-	// Sem ninguém na fila e sem comanda pendente, encerra (a recusa com pendências é testada em internal/api).
+	// Sem ninguém na fila e sem comanda pendente, encerra. (A recusa com pendências ainda não tem teste automatizado.)
 	var est string
 	_ = pool.QueryRow(ctx, `SELECT id FROM establishment WHERE slug = 'loja-op'`).Scan(&est)
 	if _, err := pool.Exec(ctx, `INSERT INTO professional (establishment_id, display_name, queue_letter, created_at, updated_at) VALUES ($1, 'Beto', 'A', now(), now())`, est); err != nil {
