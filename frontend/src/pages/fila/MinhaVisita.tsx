@@ -9,6 +9,7 @@ import { useStreamMessages } from "../../stream/context";
 import { useCommand } from "../gestao/comando";
 import { CommandError } from "../gestao/comum";
 import { usePublicQueues } from "./filasPublicas";
+import { PagamentoCliente } from "../pagamento/PagamentoCliente";
 import { Pedido } from "./Pedido";
 
 type Visit = components["schemas"]["Visit"];
@@ -153,12 +154,7 @@ function Acompanhar({
         </p>
       )}
       <ItensDaComanda order={o} />
-      {o.status === "awaiting_payment" && (
-        <p>
-          <strong>Valor a pagar: {formatCents(o.payment.amounts.due.amount_cents)}</strong>. Combine o
-          pagamento com a equipe da loja.
-        </p>
-      )}
+      <PagamentoCliente shopId={shopId} order={o} onReload={onReload} />
       {o.status === "pending_review" && (
         <p>O dono da loja vai revisar o que foi feito. Só serviços feitos por inteiro são cobrados.</p>
       )}

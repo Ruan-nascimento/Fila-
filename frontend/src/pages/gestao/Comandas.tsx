@@ -7,17 +7,18 @@ import { useStreamMessages } from "../../stream/context";
 import { Field, Notice, Submit } from "../../ui/ui";
 import { ItensDaComanda } from "../comanda/comanda";
 import { liveItems, reportedText, type Order } from "../comanda/textos";
+import { ReceberPagamento } from "../pagamento/ReceberPagamento";
 import { useCommand } from "./comando";
 import { CommandError, type StaffContext } from "./comum";
 
 type Service = components["schemas"]["Service"];
-type Filter = "pending_review" | "awaiting_payment" | "";
+type Filter = "pending_review" | "awaiting_payment" | "awaiting_confirmation" | "";
 
 const when = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" });
 
 /**
  * Comandas da loja (dono) ou dos próprios atendimentos (profissional). O dono revisa
- * interrupções e corrige valores fechados; o pagamento em si chega nas próximas etapas.
+ * interrupções e corrige valores fechados; a equipe recebe na loja e confere o Pix (etapa 08).
  */
 export function Comandas({ ctx }: { ctx: StaffContext }) {
   const [filter, setFilter] = useState<Filter>(ctx.isOwner ? "pending_review" : "");
@@ -98,6 +99,7 @@ export function Comandas({ ctx }: { ctx: StaffContext }) {
       >
         <option value="pending_review">Interrompidas para revisar</option>
         <option value="awaiting_payment">Aguardando pagamento</option>
+        <option value="awaiting_confirmation">Aguardando conferência</option>
         <option value="">Todas</option>
       </select>
       {error && <Notice kind="erro">{error}</Notice>}
@@ -111,6 +113,11 @@ export function Comandas({ ctx }: { ctx: StaffContext }) {
             <ItensDaComanda order={o} showRemoved />
             {ctx.isOwner && o.status === "pending_review" && (
               <Revisar ctx={ctx} order={o} onSaved={replace} onConflict={reload} />
+            )}
+            {(o.status === "awaiting_payment" ||
+              o.status === "awaiting_confirmation" ||
+              o.payment.receipts.length > 0) && (
+              <ReceberPagamento ctx={ctx} order={o} onSaved={replace} onConflict={reload} />
             )}
             {ctx.isOwner && o.status === "awaiting_payment" && (
               <Corrigir ctx={ctx} order={o} onSaved={replace} onConflict={reload} />
