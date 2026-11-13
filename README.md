@@ -96,6 +96,15 @@ go -C backend run ./cmd/worker
 
 O worker também **conclui as exclusões de conta** (quando não há pendência) e remove nicks antigos de visitantes, e **publica as atualizações em tempo real**: sem ele rodando, as telas não se atualizam sozinhas (os comandos continuam funcionando e nada se perde — ao ligar o worker, tudo é publicado). Para ver se há atraso: `go -C backend run ./cmd/fila-admin eventos`.
 
+**Pix (opcional, etapa 08).** Sem configurar nada, o Pix fica desligado e a equipe recebe em dinheiro ou cartão. Para testar o Pix da AbacatePay, coloque no `.env` uma chave de **teste** (`abc_dev_...`, criada no painel da AbacatePay), que nunca cobra de verdade:
+
+```
+FILA_PIX_PROVIDER=abacatepay
+FILA_ABACATEPAY_API_KEY=abc_dev_sua-chave-de-teste
+```
+
+A API e o worker leem a mesma configuração: o worker é quem consulta a AbacatePay para saber se o Pix foi pago. Detalhes, limites e o checklist antes de cobrar de verdade estão em [docs/pagamentos-abacatepay.md](docs/pagamentos-abacatepay.md).
+
 Ainda não há provedor de e-mail: em desenvolvimento cada e-mail (verificação de conta, redefinição de senha, convite) vira um arquivo `.txt` na pasta `backend\.correio\`. Abra o arquivo e copie o link para o navegador. Essa pasta não vai para o Git.
 
 ### 5.2 Criar a loja e o dono inicial (uma vez)

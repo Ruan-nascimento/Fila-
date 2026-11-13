@@ -27,3 +27,4 @@ Para mudar uma decisão, crie um novo ADR que substitua o anterior (não reescre
 | [ADR-0020](0020-comanda-atendimento-e-outbox.md) | Comanda, atendimento e outbox de eventos | Aceita (etapa 05) |
 | [ADR-0021](0021-sse-publicador-hub-e-cursor.md) | SSE: publicador, distribuidor por processo e cursor | Aceita (etapa 06) |
 | [ADR-0022](0022-exclusao-de-conta-e-historico.md) | Exclusão de conta e histórico | Aceita (etapa 07) |
+| [ADR-0023](0023-pagamentos-pix-reconciliacao.md) | Pagamentos: Pix em duas fases, reconciliação por externalId e recebimento presencial | Aceita (etapa 08) |

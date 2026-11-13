@@ -18,6 +18,7 @@ Pagamento é o ponto de maior risco: a rede pode falhar no meio da criação da 
 - Estorno: integral por recebimento; sucesso só com evidência; parcial/desconhecido/presencial em revisão documentada pelo dono.
 - Chave da API só no backend, via segredo externo; integração de produção desligada por configuração até validação em sandbox. Adaptador do provedor isolado atrás de interface, com testes de contrato usando fixtures sem segredos.
 - Capacidades da AbacatePay **não** são presumidas: cada uma está marcada `x-external-pending` e será confirmada na documentação oficial na etapa 08.
+  - Atualização (etapa 08): confirmadas em docs/pagamentos-abacatepay.md. Não há cancelamento de Pix nem cabeçalho de idempotência; a garantia remota é o `externalId` (ver ADR-0023).
 
 ## Alternativas consideradas
 
