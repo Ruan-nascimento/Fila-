@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it } from "vitest";
 import { setCsrfToken } from "../../api/client";
 import { centsToInput, formatCents, parseCents } from "../../money";
@@ -35,6 +35,10 @@ function staffSession(role: "owner" | "professional") {
   };
 }
 
+function Where() {
+  return <output data-testid="endereco">{useLocation().pathname}</output>;
+}
+
 function renderGestao(path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
@@ -42,6 +46,7 @@ function renderGestao(path: string) {
         <Routes>
           <Route path="/gestao/:estId/*" element={<GestaoLoja />} />
         </Routes>
+        <Where />
       </SessionProvider>
     </MemoryRouter>,
   );
@@ -199,5 +204,35 @@ describe("Profissionais", () => {
     const calls = requests.filter((r) => r.path.endsWith("/deactivate"));
     expect(calls[0]?.headers.get("Idempotency-Key")).toBe(calls[1]?.headers.get("Idempotency-Key"));
     expect(calls[1]?.body).toEqual({ expected_version: 1, reason: "Saiu da equipe" });
+  });
+});
+
+describe("Abas da gestão", () => {
+  it("cada aba leva ao seu endereço, sem acumular /filas/filas…", async () => {
+    fakeApi({ "GET /v1/session": () => Response.json(staffSession("owner")) });
+    renderGestao(`/gestao/${EST}/filas`);
+    const endereco = () => screen.getByTestId("endereco").textContent;
+    for (const [aba, caminho] of [
+      ["Profissionais", "profissionais"],
+      ["Comandas", "comandas"],
+      ["Serviços", "servicos"],
+      ["Loja", "loja"],
+      ["Filas", "filas"],
+    ] as const) {
+      fireEvent.click(await screen.findByRole("link", { name: aba }));
+      await waitFor(() => expect(endereco()).toBe(`/gestao/${EST}/${caminho}`));
+    }
+  });
+
+  it("endereço desconhecido volta para as filas uma vez só", async () => {
+    fakeApi({ "GET /v1/session": () => Response.json(staffSession("professional")) });
+    renderGestao(`/gestao/${EST}/filas/profissionais`);
+    await waitFor(() => expect(screen.getByTestId("endereco").textContent).toBe(`/gestao/${EST}/filas`));
+  });
+
+  it("profissional que abre a aba do dono volta para as filas", async () => {
+    fakeApi({ "GET /v1/session": () => Response.json(staffSession("professional")) });
+    renderGestao(`/gestao/${EST}/profissionais`);
+    await waitFor(() => expect(screen.getByTestId("endereco").textContent).toBe(`/gestao/${EST}/filas`));
   });
 });

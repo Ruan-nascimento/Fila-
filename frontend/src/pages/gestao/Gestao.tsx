@@ -49,27 +49,30 @@ export function GestaoLoja() {
     isOwner: mine.some((m) => m.role === "owner"),
     professionalId: mine.find((m) => m.professional_id)?.professional_id ?? null,
   };
+  // Endereços completos: dentro de uma rota "/gestao/:estId/*", um caminho relativo é somado ao
+  // endereço atual (react-router 7), e "filas" a partir de /filas/x viraria /filas/x/filas…
+  const base = `/gestao/${estId}`;
   return (
     <section aria-labelledby="titulo-loja-gestao">
       <h2 id="titulo-loja-gestao">{ctx.estName}</h2>
       <nav aria-label="Seções da gestão">
         <ul className="tabs">
           <li>
-            <NavLink to="filas">Filas</NavLink>
+            <NavLink to={`${base}/filas`}>Filas</NavLink>
           </li>
           <li>
-            <NavLink to="comandas">Comandas</NavLink>
+            <NavLink to={`${base}/comandas`}>Comandas</NavLink>
           </li>
           <li>
-            <NavLink to="servicos">Serviços</NavLink>
+            <NavLink to={`${base}/servicos`}>Serviços</NavLink>
           </li>
           {ctx.isOwner && (
             <>
               <li>
-                <NavLink to="profissionais">Profissionais</NavLink>
+                <NavLink to={`${base}/profissionais`}>Profissionais</NavLink>
               </li>
               <li>
-                <NavLink to="loja">Loja</NavLink>
+                <NavLink to={`${base}/loja`}>Loja</NavLink>
               </li>
             </>
           )}
@@ -81,13 +84,13 @@ export function GestaoLoja() {
         <Route path="servicos" element={<Servicos ctx={ctx} />} />
         <Route
           path="profissionais"
-          element={ctx.isOwner ? <Profissionais ctx={ctx} /> : <Navigate to="../filas" replace />}
+          element={ctx.isOwner ? <Profissionais ctx={ctx} /> : <Navigate to={`${base}/filas`} replace />}
         />
         <Route
           path="loja"
-          element={ctx.isOwner ? <LojaConfig ctx={ctx} /> : <Navigate to="../filas" replace />}
+          element={ctx.isOwner ? <LojaConfig ctx={ctx} /> : <Navigate to={`${base}/filas`} replace />}
         />
-        <Route path="*" element={<Navigate to="filas" replace />} />
+        <Route path="*" element={<Navigate to={`${base}/filas`} replace />} />
       </Routes>
     </section>
   );
