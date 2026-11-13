@@ -1,7 +1,7 @@
 # Fila — MVP web para barbearia
 
 Sistema de fila, atendimento, pagamento e fidelidade para barbearia, construído em etapas (veja [REGRAS.md](REGRAS.md)).
-**Situação atual: etapa 06 (atualizações em tempo real).** As telas da loja e da equipe se atualizam sozinhas (SSE), sem precisar clicar em "Atualizar"; se a conexão cair, a tela avisa e reconecta sem perder nada. Já funcionam: contas e login de cliente e de equipe, recuperação de senha, convites, dono inicial por comando controlado, visitante com código de recuperação, loja, profissionais, serviços, a fila (entrar, acompanhar, chamar, iniciar, ausência, desistir, cancelar, transferir) e a comanda: trocar serviços enquanto aguarda, pedir alteração depois da chamada (o profissional aprova ou recusa), marcar serviço realizado, concluir (fecha o valor e libera a cadeira), interromper (o dono revisa e só cobra o que foi feito por inteiro) e correção do dono com senha. Receber o pagamento (Pix, dinheiro, cartão) chega nas próximas etapas.
+**Situação atual: etapa 07 (histórico e exclusão).** A conta vê o próprio histórico em cada loja e pode pedir a exclusão (com protocolo e situação real); a dona acompanha as exclusões que dependem da loja. Antes: **etapa 06 (atualizações em tempo real).** As telas da loja e da equipe se atualizam sozinhas (SSE), sem precisar clicar em "Atualizar"; se a conexão cair, a tela avisa e reconecta sem perder nada. Já funcionam: contas e login de cliente e de equipe, recuperação de senha, convites, dono inicial por comando controlado, visitante com código de recuperação, loja, profissionais, serviços, a fila (entrar, acompanhar, chamar, iniciar, ausência, desistir, cancelar, transferir) e a comanda: trocar serviços enquanto aguarda, pedir alteração depois da chamada (o profissional aprova ou recusa), marcar serviço realizado, concluir (fecha o valor e libera a cadeira), interromper (o dono revisa e só cobra o que foi feito por inteiro) e correção do dono com senha. Receber o pagamento (Pix, dinheiro, cartão) chega nas próximas etapas.
 
 | Pasta | O que tem |
 |---|---|
@@ -94,7 +94,7 @@ Em **outro terminal**, na raiz do repositório:
 go -C backend run ./cmd/worker
 ```
 
-O worker também **publica as atualizações em tempo real**: sem ele rodando, as telas não se atualizam sozinhas (os comandos continuam funcionando e nada se perde — ao ligar o worker, tudo é publicado). Para ver se há atraso: `go -C backend run ./cmd/fila-admin eventos`.
+O worker também **conclui as exclusões de conta** (quando não há pendência) e remove nicks antigos de visitantes, e **publica as atualizações em tempo real**: sem ele rodando, as telas não se atualizam sozinhas (os comandos continuam funcionando e nada se perde — ao ligar o worker, tudo é publicado). Para ver se há atraso: `go -C backend run ./cmd/fila-admin eventos`.
 
 Ainda não há provedor de e-mail: em desenvolvimento cada e-mail (verificação de conta, redefinição de senha, convite) vira um arquivo `.txt` na pasta `backend\.correio\`. Abra o arquivo e copie o link para o navegador. Essa pasta não vai para o Git.
 
@@ -107,6 +107,19 @@ go -C backend run ./cmd/fila-admin bootstrap -nome "Barbearia Teste" -slug barbe
 ```
 
 Com o worker rodando, o convite aparece em `backend\.correio\`. Abra o link, defina nome e senha, e entre escolhendo **Equipe**. O convite vale 24 horas e só funciona uma vez.
+
+### 5.3 Trocar o dono ou encerrar a loja (processo controlado)
+
+Uma loja nunca fica sem dono: se você for a única pessoa dona, a exclusão da sua conta é recusada (`sole_owner`) até outra pessoa assumir ou a loja ser encerrada. Quem roda estes comandos é o operador, depois de confirmar o pedido com o dono fora do sistema:
+
+```powershell
+# convida um novo dono (ele recebe o e-mail e aceita); depois o dono antigo pode excluir a conta
+go -C backend run ./cmd/fila-admin transfer-owner -slug barbearia-teste -email novo-dono@exemplo.com -motivo "Ana vendeu a loja"
+# encerra a loja (só sem ninguém na fila e sem comanda pendente)
+go -C backend run ./cmd/fila-admin close-establishment -slug barbearia-teste -motivo "loja fechou"
+```
+
+O que o sistema guarda e por quanto tempo está em [docs/retencao.md](docs/retencao.md) (prazos legais ainda precisam de validação antes de produção).
 
 ## 6. Rodar o frontend
 
@@ -129,6 +142,9 @@ Telas desta etapa:
 | `/esqueci-senha` | Pedir link para criar senha nova (vale 30 minutos) |
 | `/loja/barbearia-teste` | Página pública da loja (use o `-slug` do passo 5.2): serviços com preço, profissionais e situação das filas; entrar sem conta com um apelido (e guardar o **código de recuperação**) ou com a conta, **entrar na fila** e acompanhar senha, posição e espera estimada; sair da fila; ver a **comanda item a item**, trocar serviços enquanto aguarda, pedir alteração depois de chamado e ver o valor a pagar |
 | `/gestao` | Área da equipe (entre como **Equipe**). Dono: filas (abrir, pausar, fechar; chamar o próximo, iniciar, marcar ausência, cancelar com motivo e transferir com a concordância do cliente), profissionais (cadastrar, convidar, renomear, desativar), serviços (preço, duração, pontos, quem atende) e dados da loja. Profissional: vê a própria fila, chama o próximo, inicia, marca ausência, avisa indisponibilidade e consulta os serviços. Na fila, cada pessoa tem a **comanda**: aprovar/recusar pedido do cliente, marcar serviço realizado, alterar serviços (com motivo), **concluir** ou **interromper**. Aba **Comandas**: lista; o dono revisa interrupções e corrige valor fechado (pede a senha de novo) |
+| `/conta` → "Excluir conta" | Mostra os efeitos, pede a senha de novo e dá um **protocolo** (também por e-mail). Atendimento em andamento ou pagamento pendente ficam com a loja: a exclusão aparece "em processamento" até resolver |
+| `/exclusao` | Consultar a situação da exclusão pelo protocolo |
+| `/gestao` → aba **Exclusões** (dono) | Exclusões que dependem da loja e o que falta resolver; destaque perto da meta operacional de 30 dias |
 | `/verificar-email`, `/redefinir-senha`, `/convite` | Abertos pelos links dos e-mails |
 
 Use sempre o mesmo endereço (`http://127.0.0.1:5173` ou `http://localhost:5173`) durante o uso: cada um tem seus próprios cookies.

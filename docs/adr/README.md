@@ -26,3 +26,4 @@ Para mudar uma decisão, crie um novo ADR que substitua o anterior (não reescre
 | [ADR-0019](0019-fila-transacional.md) | Fila transacional: travas, ordem FIFO, senhas e estimativa | Aceita (etapa 04) |
 | [ADR-0020](0020-comanda-atendimento-e-outbox.md) | Comanda, atendimento e outbox de eventos | Aceita (etapa 05) |
 | [ADR-0021](0021-sse-publicador-hub-e-cursor.md) | SSE: publicador, distribuidor por processo e cursor | Aceita (etapa 06) |
+| [ADR-0022](0022-exclusao-de-conta-e-historico.md) | Exclusão de conta e histórico | Aceita (etapa 07) |
