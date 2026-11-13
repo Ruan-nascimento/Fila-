@@ -11,6 +11,11 @@
 
 -- +goose Up
 
+-- A FK participação↔comanda é adiada (DEFERRABLE): sem isto, o UPDATE de comandas existentes
+-- deixa eventos de gatilho pendentes e o ALTER TABLE seguinte falha (SQLSTATE 55006) em bancos
+-- que já têm comandas da etapa 04. Vale só para a transação desta migração.
+SET CONSTRAINTS ALL IMMEDIATE;
+
 -- Comanda ----------------------------------------------------------------------------------------
 
 -- Profissional do atendimento (escopo own_attendance): o da fila na entrada; muda junto com a
@@ -181,6 +186,7 @@ CREATE TABLE outbox (
 CREATE INDEX outbox_xact_idx ON outbox (xact_id, id);
 
 -- +goose Down
+SET CONSTRAINTS ALL IMMEDIATE;
 DROP TABLE outbox;
 ALTER TABLE queue_counter DROP COLUMN activity_seq;
 DROP TABLE order_adjustment;
