@@ -48,6 +48,10 @@ export const issueText: Record<IssueKind, string> = {
   refund_under_review: "Estorno em revisão: confirme com evidência ou registre que não ocorreu.",
   active_pix_on_method_switch: "Troca de meio com Pix em aberto: o Pix segue válido até expirar.",
   adjustment_excess: "Correção deixou valor recebido a mais: devolva o excesso.",
+  restored_orphan_charge:
+    "Pix pago que o backup restaurado não conhecia (a comanda não existe mais): localize pela referência no painel da AbacatePay e devolva ou registre o atendimento.",
+  restored_refund_unrecorded:
+    "Estorno feito na AbacatePay depois do backup e que o sistema não tinha: registre o estorno de novo na comanda.",
 };
 
 /** Estorno que ainda conta como ativo ou feito (não falhou). */

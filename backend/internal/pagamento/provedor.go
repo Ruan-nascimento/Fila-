@@ -77,6 +77,9 @@ type Provider interface {
 	GetPix(ctx context.Context, providerID string) (Charge, error)
 	// FindPix procura cobranças criadas com o ExternalID (reconciliar resultado desconhecido).
 	FindPix(ctx context.Context, externalID string) ([]Charge, error)
+	// ListPixSince lista as cobranças Pix com o status dado criadas desde o dia de `since`
+	// (conciliação depois de restaurar um backup). Erro se não conseguir ler TODAS as páginas.
+	ListPixSince(ctx context.Context, since time.Time, status string) ([]Charge, error)
 	// RefundPix pede o estorno INTEGRAL da cobrança. Repetir para cobrança já estornada não cria
 	// outro estorno (o provedor recusa): seguro repetir depois de resultado desconhecido.
 	RefundPix(ctx context.Context, providerID, reason string) (RefundResult, error)

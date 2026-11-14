@@ -188,3 +188,50 @@ func TestAbacatePayRefund(t *testing.T) {
 		t.Fatalf("tempo esgotado no estorno deve ser ambíguo: %v", err)
 	}
 }
+
+// Listagem paginada (conciliação pós-restauração): method=PIX, status, startDate no fuso de
+// São Paulo (dia inteiro, inclusivo) e cursor `after` vindo de pagination.next.
+func TestAbacatePayListPixSincePaginates(t *testing.T) {
+	item := func(id string) string {
+		return strings.TrimSuffix(strings.TrimPrefix(fixtureCharge(id, 4500, "PAID", true, "t-"+id), `{"data":`), `,"error":null,"success":true}`)
+	}
+	var calls int
+	a := adapter(t, func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		q := r.URL.Query()
+		// 2026-11-14 01:30 UTC = 2026-11-13 22:30 em São Paulo: o dia certo é 13.
+		if q.Get("method") != "PIX" || q.Get("status") != "PAID" || q.Get("startDate") != "2026-11-13" || q.Get("limit") != "100" {
+			t.Errorf("filtros: %v", q)
+		}
+		switch q.Get("after") {
+		case "":
+			_, _ = io.WriteString(w, `{"data":[`+item("pix_a")+`,`+item("pix_b")+`],"pagination":{"hasMore":true,"next":"c2","before":null},"error":null,"success":true}`)
+		case "c2":
+			_, _ = io.WriteString(w, `{"data":[`+item("pix_c")+`],"pagination":{"hasMore":false,"next":null,"before":"c1"},"error":null,"success":true}`)
+		default:
+			t.Errorf("cursor inesperado %q", q.Get("after"))
+		}
+	}, time.Second)
+	list, err := a.ListPixSince(context.Background(), time.Date(2026, 11, 14, 1, 30, 0, 0, time.UTC), ProviderPaid)
+	if err != nil || len(list) != 3 || list[2].ProviderID != "pix_c" || calls != 2 {
+		t.Fatalf("lista: %v %v (%d chamadas)", list, err, calls)
+	}
+	// Página que falha no meio: erro (nunca uma visão parcial).
+	b := adapter(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("after") == "" {
+			_, _ = io.WriteString(w, `{"data":[`+item("pix_a")+`],"pagination":{"hasMore":true,"next":"c1"},"error":null,"success":true}`)
+			return
+		}
+		w.WriteHeader(503)
+	}, time.Second)
+	if _, err := b.ListPixSince(context.Background(), time.Now(), ProviderPaid); !errors.Is(err, ErrNotSent) {
+		t.Fatalf("falha no meio deve virar erro: %v", err)
+	}
+	// Sem fim (cursor sempre presente): para no limite de páginas com erro.
+	c := adapter(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `{"data":[],"pagination":{"hasMore":true,"next":"x"},"error":null,"success":true}`)
+	}, time.Second)
+	if _, err := c.ListPixSince(context.Background(), time.Now(), ProviderPaid); err == nil {
+		t.Fatal("deveria parar no limite de páginas")
+	}
+}

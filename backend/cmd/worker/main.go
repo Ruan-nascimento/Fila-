@@ -1,17 +1,13 @@
 // Comando worker: processo de tarefas em segundo plano (mesmo código da API, executável separado).
 //
-// Tarefas desta etapa:
+// Tarefas: entregar e-mails; limpeza técnica; publicar a outbox de eventos e aplicar a retenção
+// do event_log; processar exclusões de conta, minimizar nicks e gravar o diário de exclusões;
+// vencer reservas de prêmio; reconciliar Pix e processar estornos.
 //
-//   - entregar os e-mails da caixa de saída (verificação, redefinição de senha, convites);
-//
-//   - apagar registros vencidos (contadores de tentativas, respostas de idempotência,
-//     e-mails já entregues).
-//
-//   - publicar a outbox de eventos no event_log e apagar eventos com mais de 24 h (etapa 06);
-//
-//   - processar exclusões de conta e minimizar nicks de visitantes antigos (etapa 07).
-//
-// As demais tarefas entram nas etapas seguintes (reconciliação de pagamentos na 09, expiração de reservas na 10, exclusões na 07).
+// Etapa 12: todas as tarefas rodam sob o supervisor de operação. Com a trava ativa (manutenção
+// ou banco restaurado, detectado sozinho) nenhuma tarefa roda até o operador liberar
+// (fila-admin manutencao / restauracao). Os indicadores de negócio são lidos a cada 15 s,
+// mesmo travado, e servidos em FILA_METRICS_ADDR.
 //
 // Uso (a partir da raiz do repositório):
 //
@@ -21,8 +17,10 @@ package main
 import (
 	"context"
 	"io"
+	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -32,14 +30,17 @@ import (
 	"fila/internal/fidelidade"
 	"fila/internal/fila"
 	"fila/internal/identidade"
+	"fila/internal/operacao"
 	"fila/internal/pagamento"
 	"fila/internal/painel"
 	"fila/internal/platform/app"
 	"fila/internal/platform/clock"
 	"fila/internal/platform/config"
+	"fila/internal/platform/database"
 	"fila/internal/platform/keys"
 	"fila/internal/platform/mail"
 	"fila/internal/platform/maintenance"
+	"fila/internal/platform/metrics"
 	"fila/internal/platform/outbox"
 )
 
@@ -71,15 +72,59 @@ func run(ctx context.Context, environ []string, stdout, stderr io.Writer, starte
 	}
 	clk := clock.System{}
 
+	// Métricas (FILA_METRICS_ADDR, endereço interno) e indicadores de negócio a cada 15 s. Os
+	// indicadores rodam SEMPRE, mesmo com o worker travado: é assim que o alerta da trava aparece.
+	reg := metrics.NewRegistry()
+	database.RegisterRuntimeMetrics(reg, rt.Pool)
+	gauges := operacao.NewGauges(reg)
+	if cfg.Ops.MetricsAddr != "" {
+		go func() {
+			if err := metrics.Serve(ctx, cfg.Ops.MetricsAddr, reg, log); err != nil {
+				log.Error("servidor de métricas parou", "error", err.Error())
+			}
+		}()
+	}
 	var wg sync.WaitGroup
-	switch cfg.Mail.Mode {
-	case config.MailFile:
+	wg.Go(func() { collectIndicators(ctx, rt, gauges, log) })
+
+	if cfg.Mail.Mode != config.MailFile {
+		log.Warn("envio de e-mail desativado: verificação, redefinição de senha e convites não chegarão às pessoas")
+	}
+	if cfg.Ops.DeletionJournalDir == "" && cfg.Env == config.EnvProduction {
+		log.Warn("diário de exclusões desligado (FILA_DELETION_JOURNAL_DIR): exclusões pedidas depois do último backup não poderão ser reaplicadas após uma restauração")
+	}
+	prov := api.PixProvider(cfg.Payments, nil)
+	if prov != nil {
+		log.Info("reconciliação de Pix ligada", "provedor", cfg.Payments.Pix, "modo_teste", prov.TestMode())
+	} else {
+		log.Info("Pix desligado: só dinheiro e cartão presencial")
+	}
+
+	// Todas as tarefas rodam sob o supervisor: com a trava (manutenção ou banco restaurado) nada
+	// roda; ao soltar, tudo volta. Cada tarefa é retomável e idempotente.
+	sup := &operacao.Supervisor{Pool: rt.Pool, Clock: clk, Log: log.With("tarefa", "supervisor"), Every: 10 * time.Second,
+		Start: func(ctx context.Context) { runJobs(ctx, rt, ring, clk, prov) }}
+	wg.Go(func() { sup.Run(ctx) })
+
+	log.Info("worker pronto")
+	if started != nil {
+		close(started)
+	}
+	<-ctx.Done()
+	wg.Wait()
+	log.Info("worker encerrado")
+	return app.ExitOK
+}
+
+// runJobs roda as tarefas até ctx terminar (o supervisor cancela ctx ao travar).
+func runJobs(ctx context.Context, rt *app.Runtime, ring *keys.Ring, clk clock.Clock, prov pagamento.Provider) {
+	log, cfg := rt.Log, rt.Config
+	var wg sync.WaitGroup
+	if cfg.Mail.Mode == config.MailFile {
 		d := &mail.Dispatcher{Pool: rt.Pool, Ring: ring, Sender: mail.FileSender{Dir: cfg.Mail.Dir},
 			Clock: clk, Log: log.With("tarefa", "email"), MaxAttempts: 8, BatchSize: 20}
 		wg.Go(func() { d.Run(ctx, 2*time.Second) })
 		log.Info("e-mails serão gravados como arquivos (somente desenvolvimento)", "pasta", cfg.Mail.Dir)
-	default:
-		log.Warn("envio de e-mail desativado: verificação, redefinição de senha e convites não chegarão às pessoas")
 	}
 	cleaner := &maintenance.Cleaner{Pool: rt.Pool, Clock: clk, Log: log.With("tarefa", "limpeza")}
 	wg.Go(func() { cleaner.Run(ctx, 10*time.Minute) })
@@ -108,30 +153,62 @@ func run(ctx context.Context, environ []string, stdout, stderr io.Writer, starte
 	ident := identidade.New(identidade.Deps{Pool: rt.Pool, Clock: clk, Ring: ring, Log: log.With("tarefa", "exclusao"),
 		Hasher: identidade.NewHasher(identidade.DefaultPasswordParams, 1),
 		Config: identidade.Config{CookieSecure: cfg.Security.CookieSecure, PublicBaseURL: cfg.Security.PublicBaseURL}})
+	loyalty := fidelidade.New(fidelidade.Deps{Pool: rt.Pool, Clock: clk, Log: log.With("tarefa", "fidelidade")})
 	deletion := exclusao.New(exclusao.Deps{Pool: rt.Pool, Clock: clk, Log: log.With("tarefa", "exclusao"), Ring: ring,
-		Identity: ident, Queue: fila.New(fila.Deps{Pool: rt.Pool, Clock: clk, Log: log.With("tarefa", "exclusao")})})
+		Identity: ident, Queue: fila.New(fila.Deps{Pool: rt.Pool, Clock: clk, Log: log.With("tarefa", "exclusao")}), Benefits: loyalty})
 	wg.Go(func() { deletion.Run(ctx, time.Minute) })
+	// Diário de exclusões fora do banco (reaplicado depois de restaurar um backup).
+	if dir := cfg.Ops.DeletionJournalDir; dir != "" {
+		j := &exclusao.Journal{Dir: dir}
+		wg.Go(func() { deletion.RunJournal(ctx, j, 5*time.Second) })
+	}
 
 	// Fidelidade: vence reservas de prêmio (24 h) e libera pontos e unidade uma vez (T-RW-03).
-	loyalty := fidelidade.New(fidelidade.Deps{Pool: rt.Pool, Clock: clk, Log: log.With("tarefa", "fidelidade")})
 	wg.Go(func() { loyalty.Run(ctx, 30*time.Second) })
 
 	// Pagamentos: reconsulta cobranças Pix pendentes ou de resultado desconhecido (R-PAG-09/16).
-	if prov := api.PixProvider(cfg.Payments, nil); prov != nil {
+	if prov != nil {
 		pay := pagamento.New(pagamento.Deps{Pool: rt.Pool, Clock: clk, Log: log.With("tarefa", "pagamentos"), Provider: prov, Loyalty: loyalty,
 			ExpiresIn: cfg.Payments.ExpiresIn, Timeout: cfg.Payments.Timeout, Pendencies: painel.Record})
 		wg.Go(func() { pay.Run(ctx, 2*time.Second) })
-		log.Info("reconciliação de Pix ligada", "provedor", cfg.Payments.Pix, "modo_teste", prov.TestMode())
-	} else {
-		log.Info("Pix desligado: só dinheiro e cartão presencial")
 	}
-
-	log.Info("worker pronto")
-	if started != nil {
-		close(started)
-	}
-	<-ctx.Done()
 	wg.Wait()
-	log.Info("worker encerrado")
-	return app.ExitOK
+}
+
+// collectIndicators lê os indicadores a cada 15 s para as métricas e registra os alertas no log
+// quando mudam (para quem não tem Prometheus, o log já mostra o problema).
+func collectIndicators(ctx context.Context, rt *app.Runtime, g *operacao.Gauges, log *slog.Logger) {
+	t := time.NewTicker(15 * time.Second)
+	defer t.Stop()
+	last := ""
+	for {
+		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		ind, err := operacao.Collect(cctx, rt.Pool, time.Now())
+		cancel()
+		if err != nil {
+			if ctx.Err() == nil {
+				g.Failed()
+				log.Warn("indicadores: leitura falhou", "error", database.Describe(err))
+			}
+		} else {
+			g.Update(ind)
+			var names []string
+			for _, a := range operacao.Evaluate(ind) {
+				names = append(names, a.Name)
+			}
+			if cur := strings.Join(names, ","); cur != last {
+				last = cur
+				if cur == "" {
+					log.Info("alertas internos: nenhum ativo")
+				} else {
+					log.Warn("alertas internos ativos (detalhes: fila-admin verificar)", "alertas", cur)
+				}
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
 }

@@ -246,4 +246,45 @@ describe("Painel de pendências do dono", () => {
     expect(await screen.findByText(/Resolvida em .*: devolvido em dinheiro/)).toBeInTheDocument();
     expect(bodies).toEqual([{ resolution_note: "devolvido em dinheiro" }]);
   });
+
+  it("pendência da restauração de backup: sem comanda, com a referência do provedor", async () => {
+    fakeApi({
+      [`GET /v1/establishments/${EST}/pendencies`]: () =>
+        Response.json({
+          data: {
+            orders_awaiting_payment: 0,
+            orders_awaiting_confirmation: 0,
+            interruptions_to_review: 0,
+            charges_unknown: 0,
+            open_financial_issues: 1,
+            refunds_under_review: 0,
+            deletion_requests_processing: 0,
+            unavailable_signals: 0,
+          },
+          cursor: "c1",
+        }),
+      [`GET /v1/establishments/${EST}/financial-issues`]: () =>
+        Response.json({
+          data: [
+            {
+              id: ISSUE,
+              order_id: null,
+              provider_reference: "pix_char_abc123",
+              kind: "restored_orphan_charge",
+              status: "open",
+              amount: brl(3000),
+              created_at: "2026-11-14T10:00:00Z",
+              resolved_at: null,
+              resolution_note: null,
+            },
+          ],
+          page: { next_cursor: null, has_more: false },
+        }),
+    });
+    render(<Pendencias ctx={owner} />);
+    expect(await screen.findByText(/backup restaurado não conhecia/)).toBeInTheDocument();
+    const card = screen.getByText(/sem comanda/);
+    expect(card).toHaveTextContent(/referência na AbacatePay pix_char_abc123/);
+    expect(card).toHaveTextContent(/valor R\$\s*30,00/);
+  });
 });

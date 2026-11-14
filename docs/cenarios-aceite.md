@@ -995,7 +995,7 @@ Então `docs/evidencias.md` lista navegador, versão, sistema e aparelho de cada
 ## Operação
 
 ### C-OPS-01 — Restauração reconcilia pagamentos antes de religar o worker
-- Regras: R-SEG-09, R-SEG-08 · Contrato: `stream.snapshot` · Tipo: manual (etapa 12)
+- Regras: R-SEG-09, R-SEG-08 · Transições: T-OP-03, T-OP-04 · Contrato: `stream.snapshot` · Tipo: integração (TestRestoreReconcilesBeforeWorkerResumes, TestGateDetectsCopiedDatabaseAndRequiresReconciliation, TestOperatorMaintenanceAndRestoreCommands) + exercício real em homologação local (docs/operacao/evidencias.md)
 
 Dado um backup restaurado em ambiente isolado
 Quando a aplicação sobe

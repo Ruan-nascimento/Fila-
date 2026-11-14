@@ -88,6 +88,7 @@ var tableOwners = map[string][]string{
 	"platform/idempotency": {"idempotency_record"},
 	"platform/mail":        {"mail_outbox"},
 	"platform/outbox":      {"outbox", "event_log", "event_stream_state"},
+	"operacao":             {"operation_state"},
 }
 
 // Pacotes que podem tocar tabelas da plataforma para manutenção técnica.

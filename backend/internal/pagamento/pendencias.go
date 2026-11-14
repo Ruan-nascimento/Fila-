@@ -32,24 +32,26 @@ const (
 
 // issueView segue FinancialIssue.
 type issueView struct {
-	ID             uuid.UUID  `json:"id"`
-	OrderID        uuid.UUID  `json:"order_id"`
-	Kind           string     `json:"kind"`
-	Status         string     `json:"status"`
-	Amount         any        `json:"amount"`
-	CreatedAt      time.Time  `json:"created_at"`
-	ResolvedAt     *time.Time `json:"resolved_at"`
-	ResolutionNote *string    `json:"resolution_note"`
-	establishment  uuid.UUID
+	ID                uuid.UUID  `json:"id"`
+	OrderID           *uuid.UUID `json:"order_id"`
+	ProviderReference *string    `json:"provider_reference"`
+	Kind              string     `json:"kind"`
+	Status            string     `json:"status"`
+	Amount            any        `json:"amount"`
+	CreatedAt         time.Time  `json:"created_at"`
+	ResolvedAt        *time.Time `json:"resolved_at"`
+	ResolutionNote    *string    `json:"resolution_note"`
+	establishment     uuid.UUID
 }
 
-const issueSelect = `SELECT id, order_id, kind, status, amount_cents, created_at, resolved_at, resolution_note, establishment_id
-	FROM financial_issue`
+const issueSelect = `SELECT id, order_id, kind, status, amount_cents, created_at, resolved_at, resolution_note, establishment_id,
+	provider_reference FROM financial_issue`
 
 func scanIssue(r pgx.Row) (issueView, error) {
 	var v issueView
 	var amount *int64
-	err := r.Scan(&v.ID, &v.OrderID, &v.Kind, &v.Status, &amount, &v.CreatedAt, &v.ResolvedAt, &v.ResolutionNote, &v.establishment)
+	err := r.Scan(&v.ID, &v.OrderID, &v.Kind, &v.Status, &amount, &v.CreatedAt, &v.ResolvedAt, &v.ResolutionNote, &v.establishment,
+		&v.ProviderReference)
 	if amount != nil {
 		v.Amount = brl(*amount)
 	}
@@ -60,11 +62,18 @@ func scanIssue(r pgx.Row) (issueView, error) {
 // dono. Repetir (aviso duplicado, worker de novo) não abre outra. Devolve se abriu agora.
 func (s *Service) openIssue(ctx context.Context, tx pgx.Tx, estID, orderID uuid.UUID, kind, sourceType string, sourceID uuid.UUID,
 	amount *int64, now time.Time) (bool, error) {
+	return s.openIssueRef(ctx, tx, estID, &orderID, kind, sourceType, sourceID, amount, nil, now)
+}
+
+// openIssueRef é openIssue com comanda opcional (só a cobrança órfã pós-restauração fica sem) e
+// referência do provedor.
+func (s *Service) openIssueRef(ctx context.Context, tx pgx.Tx, estID uuid.UUID, orderID *uuid.UUID, kind, sourceType string,
+	sourceID uuid.UUID, amount *int64, providerRef *string, now time.Time) (bool, error) {
 	var id uuid.UUID
 	err := tx.QueryRow(ctx, `
-		INSERT INTO financial_issue (establishment_id, order_id, kind, amount_cents, source_type, source_id, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (kind, source_id) DO NOTHING RETURNING id`,
-		estID, orderID, kind, amount, sourceType, sourceID, now).Scan(&id)
+		INSERT INTO financial_issue (establishment_id, order_id, kind, amount_cents, source_type, source_id, created_at, provider_reference)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (kind, source_id) DO NOTHING RETURNING id`,
+		estID, orderID, kind, amount, sourceType, sourceID, now, providerRef).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}

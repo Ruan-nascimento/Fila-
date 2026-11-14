@@ -30,3 +30,4 @@ Para mudar uma decisão, crie um novo ADR que substitua o anterior (não reescre
 | [ADR-0023](0023-pagamentos-pix-reconciliacao.md) | Pagamentos: Pix em duas fases, reconciliação por externalId e recebimento presencial | Aceita (etapa 08) |
 | [ADR-0024](0024-webhook-estorno-pendencias.md) | Webhook autenticado, estorno em três momentos e pendências financeiras | Aceita (etapa 09) |
 | [ADR-0025](0025-fidelidade-extrato-reservas.md) | Fidelidade: extrato materializado pelo banco, crédito na liquidação e reservas de 24 h | Aceita (etapa 10) |
+| [ADR-0026](0026-operacao-trava-restauracao-metricas.md) | Operação: trava do worker, conciliação pós-restauração, diário de exclusões e métricas internas | Aceita (etapa 12) |

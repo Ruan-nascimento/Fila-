@@ -57,7 +57,10 @@ type env struct {
 	inbox  []mail.Message
 	deps   api.Deps
 	// pix simula a API da AbacatePay (o adaptador real fala HTTP com ele).
-	pix *pagamentotest.Fake
+	pix    *pagamentotest.Fake
+	pixURL string
+	// stop desliga esta instância da API (idempotente).
+	stop func()
 	// ipSeq numera os navegadores simulados; atômico porque testes de concorrência criam
 	// navegadores em várias goroutines ao mesmo tempo.
 	ipSeq atomic.Int64
@@ -94,6 +97,22 @@ func newEnvDeps(t *testing.T, change func(*api.Deps)) *env {
 	pool := testdb.Migrated(t)
 	master := make([]byte, 32)
 	_, _ = rand.Read(master)
+	clk := clock.NewFake(time.Date(2026, 11, 12, 12, 0, 0, 0, time.UTC))
+	// Pix: o adaptador real da AbacatePay falando com o simulador local (chave de teste falsa).
+	pix := pagamentotest.New(pixKey, clk.Now)
+	pixSrv := httptest.NewServer(pix)
+	t.Cleanup(pixSrv.Close)
+	return buildEnv(t, pool, master, clk, pix, pixSrv.URL, change)
+}
+
+const pixKey = "abc_dev_" + "simulador-local" // gitleaks:allow (não é segredo)
+
+// buildEnv sobe a API sobre um banco já existente (com relógio e simulador de Pix dados): usado
+// também para "religar" a aplicação sobre outro banco (restauração de backup, etapa 12). O
+// simulador de Pix é o mundo lá fora: ele NÃO volta no tempo quando o banco é restaurado.
+func buildEnv(t *testing.T, pool *pgxpool.Pool, master []byte, clk *clock.Fake, pix *pagamentotest.Fake, pixURL string,
+	change func(*api.Deps)) *env {
+	t.Helper()
 	cfg := &config.Config{Security: config.SecurityConfig{
 		SecretKey:         config.Secret(master),
 		AllowedOrigins:    []string{origin},
@@ -103,13 +122,7 @@ func newEnvDeps(t *testing.T, change func(*api.Deps)) *env {
 	}}
 	logs := &syncBuffer{}
 	log := logging.New(logs, slog.LevelDebug, "json")
-	clk := clock.NewFake(time.Date(2026, 11, 12, 12, 0, 0, 0, time.UTC))
-	// Pix: o adaptador real da AbacatePay falando com o simulador local (chave de teste falsa).
-	const pixKey = "abc_dev_" + "simulador-local" // gitleaks:allow (não é segredo)
-	pix := pagamentotest.New(pixKey, clk.Now)
-	pixSrv := httptest.NewServer(pix)
-	t.Cleanup(pixSrv.Close)
-	cfg.Payments = config.PaymentsConfig{Pix: config.PixAbacatePay, APIKey: config.Secret(pixKey), BaseURL: pixSrv.URL + "/v2",
+	cfg.Payments = config.PaymentsConfig{Pix: config.PixAbacatePay, APIKey: config.Secret(pixKey), BaseURL: pixURL + "/v2",
 		ExpiresIn: 15 * time.Minute, Timeout: time.Second, WebhookSecret: config.Secret(webhookSecret)}
 	deps := api.Deps{Config: cfg, Pool: pool, Log: log, Clock: clk, PasswordParams: lightParams}
 	if change != nil {
@@ -121,8 +134,15 @@ func newEnvDeps(t *testing.T, change func(*api.Deps)) *env {
 	}
 	srv := httptest.NewTLSServer(httpserver.Chain(a.Handler(), log))
 	hubCtx, stopHub := context.WithCancel(context.Background())
-	go a.Run(hubCtx)
+	hubDone := make(chan struct{})
+	go func() { a.Run(hubCtx); close(hubDone) }()
 	// Ordem ao terminar: encerra os fluxos SSE (senão o Close esperaria por eles) e o Hub.
+	stop := sync.OnceFunc(func() {
+		a.Stream.Shutdown()
+		srv.Close()
+		stopHub()
+		<-hubDone
+	})
 	t.Cleanup(func() {
 		if t.Failed() { // diagnóstico: erros registrados pela API durante o teste
 			for line := range strings.Lines(logs.String()) {
@@ -131,12 +151,11 @@ func newEnvDeps(t *testing.T, change func(*api.Deps)) *env {
 				}
 			}
 		}
-		a.Stream.Shutdown()
-		srv.Close()
-		stopHub()
+		stop()
 	})
 	ring, _ := keys.New(master)
-	return &env{t: t, pool: pool, clock: clk, api: a, srv: srv, ring: ring, master: master, logs: logs, deps: deps, pix: pix}
+	return &env{t: t, pool: pool, clock: clk, api: a, srv: srv, ring: ring, master: master, logs: logs, deps: deps, pix: pix,
+		pixURL: pixURL, stop: stop}
 }
 
 // browser simula um navegador: cookies próprios, origem do site e token CSRF em memória.

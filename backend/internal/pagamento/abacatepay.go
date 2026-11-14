@@ -50,9 +50,13 @@ func (a *AbacatePay) Capabilities() Capabilities {
 func (a *AbacatePay) TestMode() bool { return a.test }
 
 type envelope struct {
-	Data    json.RawMessage `json:"data"`
-	Success bool            `json:"success"`
-	Error   *string         `json:"error"`
+	Data       json.RawMessage `json:"data"`
+	Success    bool            `json:"success"`
+	Error      *string         `json:"error"`
+	Pagination *struct {
+		HasMore bool    `json:"hasMore"`
+		Next    *string `json:"next"`
+	} `json:"pagination"`
 }
 
 type pixQRCode struct {
@@ -168,10 +172,25 @@ func (a *AbacatePay) check(c Charge, amount int64, externalID string) error {
 }
 
 func (a *AbacatePay) list(ctx context.Context, q url.Values) ([]Charge, error) {
+	out, _, err := a.listPage(ctx, q)
+	return out, err
+}
+
+// listPage lê uma página e devolve o cursor da próxima ("" = última).
+func (a *AbacatePay) listPage(ctx context.Context, q url.Values) ([]Charge, string, error) {
 	env, err := a.do(ctx, http.MethodGet, "/transparents/list?"+q.Encode(), nil, true)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
+	next := ""
+	if env.Pagination != nil && env.Pagination.HasMore && env.Pagination.Next != nil {
+		next = *env.Pagination.Next
+	}
+	items, err := a.decodeList(env)
+	return items, next, err
+}
+
+func (a *AbacatePay) decodeList(env *envelope) ([]Charge, error) {
 	var items []pixQRCode
 	if err := json.Unmarshal(env.Data, &items); err != nil {
 		return nil, fmt.Errorf("%w: lista ilegível", ErrNotSent)
@@ -200,6 +219,39 @@ func (a *AbacatePay) GetPix(ctx context.Context, providerID string) (Charge, err
 		}
 	}
 	return Charge{}, ErrNotFound
+}
+
+// MaxListPages limita a varredura de ListPixSince (100 páginas × 100 = 10 000 cobranças). Acima
+// disso a conciliação para com erro em vez de concluir com uma visão parcial.
+const MaxListPages = 100
+
+// ListPixSince lista as cobranças Pix com o status dado criadas a partir do dia de `since`
+// (GET /transparents/list?method=PIX&status=…&startDate=AAAA-MM-DD, paginado por `after`). A
+// documentação diz que startDate é interpretado no fuso America/Sao_Paulo e é inclusivo; por isso
+// a data é calculada nesse fuso (pega o dia inteiro, nunca menos).
+func (a *AbacatePay) ListPixSince(ctx context.Context, since time.Time, status string) ([]Charge, error) {
+	q := url.Values{"method": {"PIX"}, "status": {status}, "limit": {"100"},
+		"startDate": {since.In(saoPaulo()).Format("2006-01-02")}}
+	var out []Charge
+	for range MaxListPages {
+		page, next, err := a.listPage(ctx, q)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, page...)
+		if next == "" {
+			return out, nil
+		}
+		q.Set("after", next)
+	}
+	return nil, fmt.Errorf("%w: mais de %d páginas; use uma data inicial mais recente", ErrNotSent, MaxListPages)
+}
+
+func saoPaulo() *time.Location {
+	if loc, err := time.LoadLocation("America/Sao_Paulo"); err == nil {
+		return loc
+	}
+	return time.FixedZone("BRT", -3*60*60) // sem horário de verão desde 2019
 }
 
 // FindPix procura as cobranças criadas com o externalId (GET /transparents/list?externalId=…).

@@ -14,6 +14,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -284,15 +285,47 @@ func (f *Fake) list(w http.ResponseWriter, r *http.Request) {
 		if st := q.Get("status"); st != "" && c.Status != st {
 			continue
 		}
+		if m := q.Get("method"); m != "" && m != "PIX" {
+			continue
+		}
+		// startDate: dia inicial (inclusivo) no fuso America/Sao_Paulo, como a documentação diz.
+		if sd := q.Get("startDate"); sd != "" && c.CreatedAt.In(spLoc).Format("2006-01-02") < sd {
+			continue
+		}
 		out = append(out, *c)
 	}
-	if l, err := strconv.Atoi(q.Get("limit")); err == nil && l > 0 && len(out) > l {
-		out = out[:l]
+	// Paginação por cursor opaco (after = posição), como pagination.next da AbacatePay.
+	start := 0
+	if after := q.Get("after"); after != "" {
+		n, err := strconv.Atoi(strings.TrimPrefix(after, "cur_"))
+		if err != nil || n < 0 || n > len(out) {
+			write(w, 400, nil, "invalid cursor")
+			return
+		}
+		start = n
+	}
+	limit := 100
+	if l, err := strconv.Atoi(q.Get("limit")); err == nil && l > 0 && l < limit {
+		limit = l
+	}
+	out = out[start:]
+	var next any
+	hasMore := len(out) > limit
+	if hasMore {
+		out = out[:limit]
+		next = fmt.Sprintf("cur_%d", start+limit)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"data": out, "success": true, "error": nil,
-		"pagination": map[string]any{"hasMore": false, "next": nil}})
+		"pagination": map[string]any{"hasMore": hasMore, "next": next}})
 }
+
+var spLoc = func() *time.Location {
+	if l, err := time.LoadLocation("America/Sao_Paulo"); err == nil {
+		return l
+	}
+	return time.FixedZone("BRT", -3*60*60)
+}()
 
 func (f *Fake) refund(w http.ResponseWriter, r *http.Request) {
 	var body struct {

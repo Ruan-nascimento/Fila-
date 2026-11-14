@@ -126,8 +126,9 @@ export function Pendencias({ ctx }: { ctx: StaffContext }) {
             </p>
             <p className="muted">
               Aberta em {when.format(new Date(i.created_at))}
-              {i.amount && <> · valor {formatCents(i.amount.amount_cents)}</>} · comanda{" "}
-              {i.order_id.slice(-6)}
+              {i.amount && <> · valor {formatCents(i.amount.amount_cents)}</>}
+              {i.order_id ? <> · comanda {i.order_id.slice(-6)}</> : <> · sem comanda</>}
+              {i.provider_reference && <> · referência na AbacatePay {i.provider_reference}</>}
             </p>
             {i.status === "resolved" ? (
               <p>

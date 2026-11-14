@@ -50,8 +50,18 @@ comandos:
   close-establishment  encerra a loja (só sem ninguém na fila e sem comanda pendente)
                      opções: -slug endereco-da-loja -motivo "texto"
   eventos       mostra o atraso da publicação de eventos (outbox) e a posição do fluxo
-  nova-epoca    troca a época do fluxo de eventos; use DEPOIS de restaurar um backup
-                (todo navegador recebe um snapshot novo em vez de retomar por um cursor antigo)`
+  nova-epoca    troca a época do fluxo de eventos (a conciliação da restauração já faz isso)
+  verificar     indicadores e alertas (saída 0 = sem alerta, 3 = alerta ativo)
+                opções: [-backups /pasta/dos/backups] [-json]
+  manutencao iniciar -motivo "texto"   trava o worker (nenhuma tarefa roda) para manutenção
+  manutencao encerrar                  solta a trava de manutenção
+  restauracao status                   mostra a trava e a conciliação
+  restauracao travar -motivo "texto"   trava o worker por restauração de backup
+  restauracao reconciliar [-desde AAAA-MM-DD] (-diario /pasta | -sem-diario) [-sem-pix]
+                concilia o banco restaurado com o provedor de Pix, encerra sessões, troca a época
+                do fluxo e reaplica as exclusões do diário
+  restauracao liberar                  solta a trava (só depois de reconciliar)
+  (passo a passo: docs/operacao/backup-restauracao.md)`
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -75,6 +85,12 @@ func run(ctx context.Context, args, environ []string, stdout, stderr io.Writer) 
 		return bootstrap(ctx, args[1:], environ, stdout, stderr)
 	case "transfer-owner", "close-establishment":
 		return ownerProcess(ctx, args[0], args[1:], environ, stdout, stderr)
+	case "verificar":
+		return verify(ctx, args[1:], environ, stdout, stderr)
+	case "manutencao":
+		return maintenance(ctx, args[1:], environ, stdout, stderr)
+	case "restauracao":
+		return restore(ctx, args[1:], environ, stdout, stderr)
 	case "eventos", "nova-epoca":
 		if len(args) != 1 {
 			fmt.Fprintln(stderr, usage)

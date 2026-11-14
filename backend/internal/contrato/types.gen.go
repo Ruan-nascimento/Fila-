@@ -601,13 +601,15 @@ func (e FieldErrorCode) Valid() bool {
 
 // Defines values for FinancialIssueKind.
 const (
-	ActivePixOnMethodSwitch FinancialIssueKind = "active_pix_on_method_switch"
-	AdjustmentExcess        FinancialIssueKind = "adjustment_excess"
-	AmountMismatch          FinancialIssueKind = "amount_mismatch"
-	ChargeOutcomeUnresolved FinancialIssueKind = "charge_outcome_unresolved"
-	DuplicateReceipt        FinancialIssueKind = "duplicate_receipt"
-	LateReceipt             FinancialIssueKind = "late_receipt"
-	RefundUnderReview       FinancialIssueKind = "refund_under_review"
+	ActivePixOnMethodSwitch  FinancialIssueKind = "active_pix_on_method_switch"
+	AdjustmentExcess         FinancialIssueKind = "adjustment_excess"
+	AmountMismatch           FinancialIssueKind = "amount_mismatch"
+	ChargeOutcomeUnresolved  FinancialIssueKind = "charge_outcome_unresolved"
+	DuplicateReceipt         FinancialIssueKind = "duplicate_receipt"
+	LateReceipt              FinancialIssueKind = "late_receipt"
+	RefundUnderReview        FinancialIssueKind = "refund_under_review"
+	RestoredOrphanCharge     FinancialIssueKind = "restored_orphan_charge"
+	RestoredRefundUnrecorded FinancialIssueKind = "restored_refund_unrecorded"
 )
 
 // Valid indicates whether the value is a known member of the FinancialIssueKind enum.
@@ -626,6 +628,10 @@ func (e FinancialIssueKind) Valid() bool {
 	case LateReceipt:
 		return true
 	case RefundUnderReview:
+		return true
+	case RestoredOrphanCharge:
+		return true
+	case RestoredRefundUnrecorded:
 		return true
 	default:
 		return false
@@ -1747,11 +1753,14 @@ type FinancialIssue struct {
 	Id   Id                 `json:"id"`
 	Kind FinancialIssueKind `json:"kind"`
 
-	// OrderId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
-	OrderId        Id                   `json:"order_id"`
-	ResolutionNote *string              `json:"resolution_note,omitempty"`
-	ResolvedAt     *Timestamp           `json:"resolved_at,omitempty"`
-	Status         FinancialIssueStatus `json:"status"`
+	// OrderId Comanda da pendência. Nulo só em `restored_orphan_charge` (cobrança paga no provedor cuja comanda não existe no banco restaurado; etapa 12).
+	OrderId *Id `json:"order_id"`
+
+	// ProviderReference Id da cobrança no provedor (para localizar no painel do provedor), quando a pendência veio da conciliação pós-restauração.
+	ProviderReference *string              `json:"provider_reference,omitempty"`
+	ResolutionNote    *string              `json:"resolution_note,omitempty"`
+	ResolvedAt        *Timestamp           `json:"resolved_at,omitempty"`
+	Status            FinancialIssueStatus `json:"status"`
 }
 
 // FinancialIssueKind defines model for FinancialIssueKind.

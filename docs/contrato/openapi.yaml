@@ -3056,7 +3056,7 @@ components:
       enum: [requested, processing, unknown, under_review, confirmed, failed]
     FinancialIssueKind:
       type: string
-      enum: [duplicate_receipt, late_receipt, amount_mismatch, charge_outcome_unresolved, refund_under_review, active_pix_on_method_switch, adjustment_excess]
+      enum: [duplicate_receipt, late_receipt, amount_mismatch, charge_outcome_unresolved, refund_under_review, active_pix_on_method_switch, adjustment_excess, restored_orphan_charge, restored_refund_unrecorded]
     FinancialIssueStatus:
       type: string
       enum: [open, resolved]
@@ -3848,7 +3848,12 @@ components:
       required: [id, order_id, kind, status, created_at]
       properties:
         id: { $ref: '#/components/schemas/Id' }
-        order_id: { $ref: '#/components/schemas/Id' }
+        order_id:
+          description: Comanda da pendência. Nulo só em `restored_orphan_charge` (cobrança paga no provedor cuja comanda não existe no banco restaurado; etapa 12).
+          oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }]
+        provider_reference:
+          description: Id da cobrança no provedor (para localizar no painel do provedor), quando a pendência veio da conciliação pós-restauração.
+          type: [string, 'null']
         kind: { $ref: '#/components/schemas/FinancialIssueKind' }
         status: { $ref: '#/components/schemas/FinancialIssueStatus' }
         amount: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }] }
