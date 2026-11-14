@@ -120,8 +120,10 @@ Cliente:
 | Vida máxima da conexão | 30 min; servidor encerra e o cliente reconecta com cursor |
 | Buffer por conexão | 256 eventos; estourou → conexão encerrada (cliente lento reconecta com cursor) |
 | Conexões por credencial | Máximo de 6 simultâneas; acima disso → 429 |
+| Conexões por IP (etapa 12) | 100 simultâneas por processo (`FILA_SSE_MAX_PER_IP`); acima → 429. Generoso: vários celulares podem sair pelo mesmo Wi-Fi da loja |
+| Conexões por processo (etapa 12) | 2000 (`FILA_SSE_MAX_CONNECTIONS`); acima → 503 com `Retry-After` (servidor cheio; o cliente tenta de novo) |
 | Timeout de escrita | Por mensagem (5 s); o `WriteTimeout` global do servidor HTTP não se aplica a esta rota |
-| Proxy reverso | `proxy_buffering off`, `proxy_read_timeout` > 2 × heartbeat, HTTP/2 recomendado |
+| Proxy reverso | `proxy_buffering off`, `proxy_read_timeout` > 2 × heartbeat, HTTP/2 recomendado. Configuração usada na etapa 12: `deploy/caddy/Caddyfile` (Caddy repassa `text/event-stream` sem buffer) |
 | Retenção do `event_log` | 24 h (limpeza pelo worker) |
 
 ## 9. Segurança

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"testing"
@@ -37,6 +38,17 @@ func TestInvalidConfigFailsClearly(t *testing.T) {
 	}
 }
 
+func freeAddr(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := ln.Addr().String()
+	_ = ln.Close()
+	return addr
+}
+
 func get(t *testing.T, url string) int {
 	t.Helper()
 	resp, err := http.Get(url)
@@ -58,7 +70,10 @@ func TestAPIAgainstRealDatabase(t *testing.T) {
 	var logs bytes.Buffer
 	listening := make(chan string, 1)
 	done := make(chan int, 1)
-	go func() { done <- run(ctx, environ(dbURL), &logs, &logs, listening) }()
+	metricsAddr := freeAddr(t)
+	go func() {
+		done <- run(ctx, append(environ(dbURL), "FILA_METRICS_ADDR="+metricsAddr), &logs, &logs, listening)
+	}()
 
 	var base string
 	select {
@@ -87,6 +102,22 @@ func TestAPIAgainstRealDatabase(t *testing.T) {
 	}
 	if c := get(t, base+"/healthz/ready"); c != 200 {
 		t.Fatalf("ready após migrar deveria ser 200, veio %d", c)
+	}
+	// Métricas: só no endereço interno separado, nunca na porta pública da API.
+	if c := get(t, base+"/metrics"); c != 404 {
+		t.Fatalf("/metrics não pode existir na porta da API: %d", c)
+	}
+	res, err := http.Get("http://" + metricsAddr + "/metrics")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	for _, want := range []string{`fila_http_requests_total{route="GET /healthz/ready",method="GET",status="200"} 1`,
+		"fila_sse_connections 0", "fila_db_pool_max_connections", "fila_http_request_duration_seconds_bucket"} {
+		if !strings.Contains(string(body), want) {
+			t.Fatalf("métricas sem %q: %s", want, body)
+		}
 	}
 
 	cancel()

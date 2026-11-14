@@ -45,8 +45,11 @@ func newRequestID() string {
 
 // Chain aplica os middlewares da plataforma na ordem correta.
 // O ID é sempre gerado pelo servidor: um valor enviado pelo cliente não é confiável nem reaproveitado.
-func Chain(h http.Handler, log *slog.Logger) http.Handler {
-	return requestID(accessLog(log, recoverer(log, securityHeaders(h))))
+func Chain(h http.Handler, log *slog.Logger) http.Handler { return ChainWith(h, log, Options{}) }
+
+// ChainWith é Chain com as proteções e a observação de Options (limite geral por IP, métricas).
+func ChainWith(h http.Handler, log *slog.Logger, o Options) http.Handler {
+	return requestID(accessLog(log, o.Observe, recoverer(log, limitByIP(o, securityHeaders(h)))))
 }
 
 func requestID(next http.Handler) http.Handler {
@@ -126,7 +129,7 @@ func (s *statusRecorder) Unwrap() http.ResponseWriter { return s.ResponseWriter 
 
 // accessLog registra método, rota-modelo, status e duração. Não registra query string, corpo,
 // cabeçalhos nem cookies (podem conter dados pessoais ou segredos).
-func accessLog(log *slog.Logger, next http.Handler) http.Handler {
+func accessLog(log *slog.Logger, observe func(route, method string, status int, d time.Duration), next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		rec := &statusRecorder{ResponseWriter: w}
@@ -138,6 +141,9 @@ func accessLog(log *slog.Logger, next http.Handler) http.Handler {
 		}
 		if route == "" {
 			route = "(sem rota)"
+		}
+		if observe != nil {
+			observe(route, r.Method, rec.status, time.Since(start))
 		}
 		level := slog.LevelInfo
 		if r.URL.Path == "/healthz/live" || r.URL.Path == "/healthz/ready" {

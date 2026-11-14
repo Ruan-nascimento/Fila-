@@ -4,9 +4,12 @@ import (
 	"context"
 	"crypto/rand"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"fila/internal/api"
+	"fila/internal/fluxo"
 	"fila/internal/platform/config"
 	"fila/internal/platform/httpserver"
 	"fila/internal/platform/keys"
@@ -79,4 +82,34 @@ func TestSecretKeyRotationKeepsIssuedCredentials(t *testing.T) {
 	if tok := clara.session()["csrf_token"]; tok == "" {
 		t.Fatal("sessão sem token")
 	}
+}
+
+// Tetos de conexão SSE (etapa 12): por IP (429, abuso de um cliente) e por processo (503,
+// servidor cheio). Fechar uma conexão libera a vaga.
+func TestStreamConnectionCaps(t *testing.T) {
+	e := newEnvDeps(t, func(d *api.Deps) { d.StreamLimits = fluxo.Limits{PerIP: 2, MaxTotal: 3} })
+	b := e.barbearia(t)
+	open := func(ip string) *sseStream {
+		return openStream(t, e.srv.Client(), e.srv.URL, b.id, "public", "", "X-Forwarded-For", ip)
+	}
+	s1, s2 := open("198.51.100.1"), open("198.51.100.1")
+	s1.expect("stream.snapshot")
+	s2.expect("stream.snapshot")
+	if s := open("198.51.100.1"); s.status != 429 || !strings.Contains(string(s.body), "rate_limited") {
+		t.Fatalf("3ª do mesmo IP: %d %s", s.status, s.body)
+	}
+	s3 := open("198.51.100.2")
+	s3.expect("stream.snapshot")
+	if e.api.Stream.Active() != 3 {
+		t.Fatalf("ativas: %d", e.api.Stream.Active())
+	}
+	if s := open("198.51.100.3"); s.status != 503 || !strings.Contains(string(s.body), "service_unavailable") {
+		t.Fatalf("acima do teto do processo: %d %s", s.status, s.body)
+	}
+	s1.close()
+	deadline := time.Now().Add(3 * time.Second)
+	for e.api.Stream.Active() != 2 && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	open("198.51.100.3").expect("stream.snapshot")
 }

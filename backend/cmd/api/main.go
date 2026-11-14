@@ -20,6 +20,7 @@ import (
 	"fila/internal/platform/clock"
 	"fila/internal/platform/database"
 	"fila/internal/platform/httpserver"
+	"fila/internal/platform/metrics"
 )
 
 func main() {
@@ -56,7 +57,25 @@ func run(ctx context.Context, environ []string, stdout, stderr io.Writer, listen
 	if !cfg.Security.CookieSecure {
 		log.Warn("cookies sem Secure (somente desenvolvimento com http://); em produção FILA_COOKIE_SECURE é obrigatório")
 	}
-	srv := httpserver.New(cfg.HTTP, httpserver.Chain(a.Handler(), log), log)
+	// Métricas (FILA_METRICS_ADDR, endereço separado e interno) e limite geral por IP.
+	reg := metrics.NewRegistry()
+	database.RegisterRuntimeMetrics(reg, rt.Pool)
+	hm := httpserver.NewHTTPMetrics(reg)
+	reg.NewGaugeFunc("fila_sse_connections", "Conexões SSE abertas neste processo.", func() float64 { return float64(a.Stream.Active()) })
+	if cfg.Ops.MetricsAddr != "" {
+		go func() {
+			if err := metrics.Serve(ctx, cfg.Ops.MetricsAddr, reg, log); err != nil {
+				log.Error("servidor de métricas parou", "error", err.Error())
+			}
+		}()
+	}
+	handler := httpserver.ChainWith(a.Handler(), log, httpserver.Options{
+		Limiter:           httpserver.NewIPLimiter(cfg.Ops.RequestsPerMinute),
+		TrustForwardedFor: cfg.Security.TrustForwardedFor,
+		Observe:           hm.Observe,
+		Limited:           hm.Limited,
+	})
+	srv := httpserver.New(cfg.HTTP, handler, log)
 	// Ao parar, encerra as conexões SSE (senão o desligamento esperaria por elas); os navegadores
 	// reconectam com o cursor e não perdem eventos.
 	srv.RegisterOnShutdown(a.Stream.Shutdown)

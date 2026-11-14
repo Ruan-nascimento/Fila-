@@ -49,7 +49,16 @@ type Limits struct {
 	WriteTimeout  time.Duration // prazo de cada mensagem (cliente parado → conexão cai)
 	Buffer        int           // eventos esperando envio; estourou → conexão encerrada
 	PerCredential int           // conexões simultâneas por credencial (neste processo)
+	PerIP         int           // conexões simultâneas por IP (neste processo); 0 = padrão
+	MaxTotal      int           // conexões simultâneas no processo; 0 = padrão
 }
+
+// Padrões dos tetos por IP e por processo (FILA_SSE_MAX_PER_IP, FILA_SSE_MAX_CONNECTIONS).
+// Por IP é generoso porque uma barbearia pode ter vários celulares atrás do mesmo Wi-Fi.
+const (
+	DefaultPerIP    = 100
+	DefaultMaxTotal = 2000
+)
 
 // DefaultLimits são os valores iniciais do contrato.
 var DefaultLimits = Limits{Heartbeat: 15 * time.Second, Revalidate: 30 * time.Second, MaxLifetime: 30 * time.Minute,
@@ -83,16 +92,33 @@ type Service struct {
 	Deps
 	mu       sync.Mutex
 	perCred  map[string]int
+	perIP    map[string]int
+	total    int
 	shutdown chan struct{}
 	once     sync.Once
 }
 
 // New cria o serviço.
 func New(d Deps) *Service {
-	if d.Limits == (Limits{}) {
+	if d.Limits.Heartbeat == 0 {
+		perIP, total := d.Limits.PerIP, d.Limits.MaxTotal
 		d.Limits = DefaultLimits
+		d.Limits.PerIP, d.Limits.MaxTotal = perIP, total
 	}
-	return &Service{Deps: d, perCred: map[string]int{}, shutdown: make(chan struct{})}
+	if d.Limits.PerIP <= 0 {
+		d.Limits.PerIP = DefaultPerIP
+	}
+	if d.Limits.MaxTotal <= 0 {
+		d.Limits.MaxTotal = DefaultMaxTotal
+	}
+	return &Service{Deps: d, perCred: map[string]int{}, perIP: map[string]int{}, shutdown: make(chan struct{})}
+}
+
+// Active devolve quantas conexões SSE estão abertas neste processo (métrica).
+func (s *Service) Active() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.total
 }
 
 // Shutdown encerra as conexões abertas (o servidor está parando); os clientes reconectam com o
@@ -166,22 +192,34 @@ func (s *Service) grantsFor(r *http.Request, estID uuid.UUID, requested []string
 	return g, denied, key, nil
 }
 
-func (s *Service) acquire(key string) bool {
+// acquire reserva uma vaga: por credencial e por IP (429, abuso de um cliente) e no processo
+// (503: servidor cheio; o cliente tenta de novo e o balanceador pode mandar a outro processo).
+func (s *Service) acquire(key, ip string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.perCred[key] >= s.Limits.PerCredential {
-		return false
+	if s.total >= s.Limits.MaxTotal {
+		return &hs.Error{Status: 503, Code: "service_unavailable", Title: "Servidor ocupado",
+			Detail: "Muitas conexões abertas agora. A tela tenta de novo sozinha.", RetryAfter: 10 * time.Second}
+	}
+	if s.perCred[key] >= s.Limits.PerCredential || s.perIP[ip] >= s.Limits.PerIP {
+		return hs.ErrRateLimited(5 * time.Second)
 	}
 	s.perCred[key]++
-	return true
+	s.perIP[ip]++
+	s.total++
+	return nil
 }
 
-func (s *Service) release(key string) {
+func (s *Service) release(key, ip string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.perCred[key]--; s.perCred[key] <= 0 {
 		delete(s.perCred, key)
 	}
+	if s.perIP[ip]--; s.perIP[ip] <= 0 {
+		delete(s.perIP, ip)
+	}
+	s.total--
 }
 
 // parseRequest valida establishment_id, channels e cursor (query ou Last-Event-ID).
@@ -276,10 +314,11 @@ func (s *Service) openEventStream(w http.ResponseWriter, r *http.Request) error 
 	if err != nil {
 		return err
 	}
-	if !s.acquire(key) {
-		return hs.ErrRateLimited(5 * time.Second)
+	ip := hs.ClientIP(r, s.TrustForwardedFor)
+	if err := s.acquire(key, ip); err != nil {
+		return err
 	}
-	defer s.release(key)
+	defer s.release(key, ip)
 
 	// 1. Registrar no Hub ANTES do snapshot: o que for publicado daqui em diante chega por sub.C.
 	sub, err := s.Hub.Subscribe(ctx, estID, s.Limits.Buffer)

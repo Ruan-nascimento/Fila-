@@ -119,7 +119,7 @@ func New(d Deps, register func(mux *http.ServeMux)) (*API, error) {
 
 	hub := outbox.NewHub(d.Pool, d.Log)
 	stream := fluxo.New(fluxo.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Hub: hub, Auth: ident, Customers: ident,
-		Refresh: ident.Refresh, Sources: fl, Limits: d.StreamLimits, TrustForwardedFor: d.Config.Security.TrustForwardedFor,
+		Refresh: ident.Refresh, Sources: fl, Limits: streamLimits(d), TrustForwardedFor: d.Config.Security.TrustForwardedFor,
 		SnapshotHook: d.SnapshotHook, Pendencies: func(ctx context.Context, q database.Querier, estID uuid.UUID) (any, error) {
 			return painel.Count(ctx, q, estID)
 		}, Loyalty: loyalty.Snapshot})
@@ -154,6 +154,18 @@ func New(d Deps, register func(mux *http.ServeMux)) (*API, error) {
 	// Ordem: origem (recusa site de fora) → sessão + CSRF → rota.
 	a.handler = hs.RequireOrigin(d.Config.Security.AllowedOrigins, ident.Middleware(a.mux))
 	return a, nil
+}
+
+// streamLimits aplica os tetos de conexão da configuração (FILA_SSE_*) aos limites do SSE.
+func streamLimits(d Deps) fluxo.Limits {
+	l := d.StreamLimits
+	if l.PerIP == 0 {
+		l.PerIP = d.Config.Ops.SSEPerIP
+	}
+	if l.MaxTotal == 0 {
+		l.MaxTotal = d.Config.Ops.SSEMaxConnections
+	}
+	return l
 }
 
 // PixProvider escolhe o provedor Pix: override (testes), AbacatePay quando configurado, ou nil
