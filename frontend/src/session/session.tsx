@@ -13,11 +13,13 @@ function fetchSession(): Promise<Outcome<{ data: SessionView }>> {
  */
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<SessionState>({ status: "loading" });
+  const [expired, setExpired] = useState(false);
 
   const apply = useCallback((out: Outcome<{ data: SessionView }>) => {
     if (out.ok) {
       setCsrfToken(out.data.data.csrf_token ?? null);
       setState({ status: "ready", session: out.data.data });
+      if (out.data.data.account) setExpired(false); // entrou de novo
     } else {
       setState({ status: "offline" });
     }
@@ -44,6 +46,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     };
   }, [apply]);
 
-  const value = useMemo(() => ({ state, refresh }), [state, refresh]);
+  const markExpired = useCallback(() => setExpired(true), []);
+  const value = useMemo(
+    () => ({ state, refresh, expired, markExpired }),
+    [state, refresh, expired, markExpired],
+  );
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

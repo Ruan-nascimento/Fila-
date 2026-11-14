@@ -2,6 +2,7 @@ import { Link, NavLink, Navigate, Route, Routes, useParams } from "react-router"
 import { useSession } from "../../session/context";
 import { StreamProvider, StreamStatusNotice } from "../../stream/StreamProvider";
 import { Notice } from "../../ui/ui";
+import { Auditoria } from "./Auditoria";
 import { Comandas } from "./Comandas";
 import { Exclusoes } from "./Exclusoes";
 import type { StaffContext } from "./comum";
@@ -90,6 +91,9 @@ export function GestaoLoja() {
                 <li>
                   <NavLink to={`${base}/exclusoes`}>Exclusões</NavLink>
                 </li>
+                <li>
+                  <NavLink to={`${base}/auditoria`}>Auditoria</NavLink>
+                </li>
               </>
             )}
           </ul>
@@ -114,6 +118,10 @@ export function GestaoLoja() {
           <Route
             path="exclusoes"
             element={ctx.isOwner ? <Exclusoes ctx={ctx} /> : <Navigate to={`${base}/filas`} replace />}
+          />
+          <Route
+            path="auditoria"
+            element={ctx.isOwner ? <Auditoria ctx={ctx} /> : <Navigate to={`${base}/filas`} replace />}
           />
           <Route path="*" element={<Navigate to={`${base}/filas`} replace />} />
         </Routes>

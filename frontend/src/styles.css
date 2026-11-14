@@ -90,7 +90,11 @@ body {
 .menu a {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   min-height: 44px;
+  /* Alvo de toque de pelo menos 44×44 mesmo para palavras curtas ("Loja", "Filas"). */
+  min-width: 44px;
+  padding: 0 4px;
   color: var(--cor-link);
 }
 
@@ -351,7 +355,11 @@ form,
 .tabs a {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   min-height: 44px;
+  /* Alvo de toque de pelo menos 44×44 mesmo para palavras curtas ("Loja", "Filas"). */
+  min-width: 44px;
+  padding: 0 4px;
   color: var(--cor-link);
 }
 
@@ -374,6 +382,11 @@ form,
   background: none;
   border: 0;
   cursor: pointer;
+}
+
+/* Ação com linha própria (não cola no texto anterior). */
+.link-button--bloco {
+  display: block;
 }
 
 .entries {

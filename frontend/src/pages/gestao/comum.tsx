@@ -1,6 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { api } from "../../api/client";
 import { call, problemMessage, type Problem } from "../../api/problem";
+import { SessaoExpirada } from "../../ui/estados";
 import { Field, Notice, Submit } from "../../ui/ui";
 
 export type StaffContext = {
@@ -25,6 +26,7 @@ export function CommandError({
 }): ReactNode {
   if (!problem && !offline) return null;
   if (problem?.code === "reauthentication_required" && onRetry) return <Reauth onDone={onRetry} />;
+  if (problem?.code === "unauthenticated") return <SessaoExpirada />;
   return <Notice kind="erro">{problemMessage(problem, offline)}</Notice>;
 }
 

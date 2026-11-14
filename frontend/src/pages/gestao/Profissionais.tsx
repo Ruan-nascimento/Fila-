@@ -184,6 +184,28 @@ function ProfissionalCard({
               {p.pending_invite ? "Reenviar convite" : "Convidar"}
             </button>
           )}
+          {p.pending_invite && !p.has_access && (
+            <button
+              type="button"
+              className="button button--secondary"
+              disabled={cmd.busy !== null}
+              onClick={() => {
+                const invite = p.pending_invite;
+                if (!invite) return;
+                void act(`revogar-convite:${invite.id}`, (key) =>
+                  api.POST("/v1/establishments/{establishmentId}/invites/{inviteId}/revoke", {
+                    params: {
+                      path: { establishmentId: ctx.estId, inviteId: invite.id },
+                      header: { "Idempotency-Key": key },
+                    },
+                    body: {},
+                  }),
+                );
+              }}
+            >
+              Cancelar convite
+            </button>
+          )}
           {p.status === "active" ? (
             <button type="button" className="button button--secondary" onClick={() => setMode("desativar")}>
               Desativar

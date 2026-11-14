@@ -8,8 +8,9 @@ import { GestaoInicio, GestaoLoja } from "./pages/gestao/Gestao";
 import { AceitarConvite, RedefinirSenha, VerificarEmail } from "./pages/Links";
 import { Loja } from "./pages/Loja";
 import { useSession } from "./session/context";
+import { AvisoSemInternet, AvisoSessaoEncerrada } from "./ui/estados";
 
-// Etapa 02: acesso (conta, sessão, convite e visitante). Fila, comanda e pagamento chegam nas etapas 03–11.
+// Jornadas de visitante, cliente, profissional e dono (etapas 02–11), no navegador e no celular.
 export function App() {
   return (
     <div className="layout">
@@ -23,6 +24,8 @@ export function App() {
         <Menu />
       </header>
       <main id="conteudo" className="layout__main">
+        <AvisoSemInternet />
+        <AvisoSessaoEncerrada />
         <Routes>
           <Route path="/" element={<Inicio />} />
           <Route path="/entrar" element={<Entrar />} />

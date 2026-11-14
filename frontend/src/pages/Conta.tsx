@@ -1,11 +1,13 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router";
 import { api } from "../api/client";
-import { call, problemMessage } from "../api/problem";
+import { call, fieldErrors, problemMessage } from "../api/problem";
 import { useSession } from "../session/context";
 import { Field, Notice, Submit } from "../ui/ui";
 import { useForm } from "../ui/useForm";
 import { ExcluirConta, ExclusaoSolicitada } from "./exclusao/Exclusao";
+import { useCommand } from "./gestao/comando";
+import { CommandError } from "./gestao/comum";
 import type { DeletionRequest } from "./exclusao/textos";
 
 const dateTime = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" });
@@ -81,6 +83,7 @@ export function Conta() {
           Sair desta conta
         </button>
       </p>
+      <MeuNome current={account.name} onDone={refresh} />
       <TrocarSenha onDone={refresh} />
       <ExcluirConta
         onRequested={(d) => {
@@ -89,6 +92,44 @@ export function Conta() {
         }}
       />
     </section>
+  );
+}
+
+/** Nome exibido: muda para as próximas visitas (as já feitas guardam o nome da época). */
+function MeuNome({ current, onDone }: { current: string; onDone: () => Promise<void> }) {
+  const [name, setName] = useState(current);
+  const [done, setDone] = useState(false);
+  const cmd = useCommand();
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    setDone(false);
+    if (name.trim() === "" || name.trim() === current) return;
+    const out = await cmd.run(`nome:${name.trim()}`, (key) =>
+      api.PATCH("/v1/me", { params: { header: { "Idempotency-Key": key } }, body: { name: name.trim() } }),
+    );
+    if (out.ok) {
+      setDone(true);
+      await onDone();
+    }
+  }
+  const errors = fieldErrors(cmd.problem);
+  return (
+    <form onSubmit={onSubmit} noValidate aria-labelledby="titulo-nome">
+      <h3 id="titulo-nome">Meu nome</h3>
+      {!cmd.problem?.errors?.length && <CommandError problem={cmd.problem} offline={cmd.offline} />}
+      {done && <Notice kind="ok">Nome atualizado.</Notice>}
+      <Field
+        label="Nome exibido"
+        autoComplete="name"
+        required
+        maxLength={80}
+        hint="Aparece para a equipe nas próximas visitas."
+        value={name}
+        error={errors.name}
+        onChange={(e) => setName(e.target.value)}
+      />
+      <Submit busy={cmd.busy !== null}>Salvar nome</Submit>
+    </form>
   );
 }
 

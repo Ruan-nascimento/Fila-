@@ -12,7 +12,9 @@ function SentNotice({ sent }: { sent: Sent }) {
   return (
     <Notice kind="ok">
       <p>{sent.message}</p>
-      <p>Em desenvolvimento, os e-mails ficam na pasta backend/.correio (veja o README).</p>
+      {import.meta.env.DEV && (
+        <p>Em desenvolvimento, os e-mails ficam na pasta backend/.correio (veja o README).</p>
+      )}
     </Notice>
   );
 }

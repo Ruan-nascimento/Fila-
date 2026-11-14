@@ -132,7 +132,7 @@ export function Entradas({
                   ) : (
                     <button
                       type="button"
-                      className="link-button"
+                      className="link-button link-button--bloco"
                       onClick={() => setShown(e.participation_id)}
                     >
                       Ver comanda de {e.ticket_code}
