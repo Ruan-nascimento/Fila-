@@ -29,8 +29,46 @@ func Resolve(environ []string) (*Config, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
+	environ, err = secretFiles(environ, os.ReadFile)
+	if err != nil {
+		return nil, "", err
+	}
 	cfg, err := Load(environ)
 	return cfg, used, err
+}
+
+// secretFiles troca NOME_FILE=/caminho pelo conteúdo do arquivo em NOME (segredos externos da
+// plataforma, montados como arquivo). Vale também em produção. Erros citam a variável e nunca o
+// conteúdo. Quebra de linha no fim do arquivo é ignorada.
+func secretFiles(environ []string, read readFileFunc) ([]string, error) {
+	proc := toMap(environ)
+	var problems []Problem
+	out := append([]string(nil), environ...)
+	for _, name := range FileVars {
+		path := strings.TrimSpace(proc[name+"_FILE"])
+		if path == "" {
+			continue
+		}
+		if strings.TrimSpace(proc[name]) != "" {
+			problems = append(problems, Problem{Var: name + "_FILE", Message: "use " + name + " OU " + name + "_FILE, não os dois"})
+			continue
+		}
+		data, err := read(path)
+		if err != nil {
+			problems = append(problems, Problem{Var: name + "_FILE", Message: "não foi possível ler o arquivo do segredo (confira o caminho e a permissão de leitura)"})
+			continue
+		}
+		val := strings.TrimRight(string(data), "\r\n")
+		if val == "" || len(val) > 4096 {
+			problems = append(problems, Problem{Var: name + "_FILE", Message: "arquivo do segredo vazio ou grande demais"})
+			continue
+		}
+		out = append(out, name+"="+val)
+	}
+	if len(problems) > 0 {
+		return nil, &ValidationError{Problems: problems}
+	}
+	return out, nil
 }
 
 type readFileFunc func(string) ([]byte, error)

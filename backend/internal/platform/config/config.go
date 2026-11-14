@@ -39,7 +39,27 @@ type Config struct {
 	Security  SecurityConfig
 	Mail      MailConfig
 	Payments  PaymentsConfig
+	Ops       OpsConfig
 }
+
+// OpsConfig reúne opções de operação (etapa 12, ADR-0026).
+type OpsConfig struct {
+	// MetricsAddr: endereço do servidor de métricas (formato Prometheus). Vazio = desligado.
+	// Nunca publicar esse endereço na internet: só a rede interna do monitoramento.
+	MetricsAddr string
+	// RequestsPerMinute: limite geral de requisições por IP por minuto, por processo da API
+	// (primeira linha contra abuso; os limites de senha/código/cadastro ficam no banco).
+	RequestsPerMinute int
+	// SSEMaxConnections: conexões SSE simultâneas por processo; SSEPerIP: por IP.
+	SSEMaxConnections int
+	SSEPerIP          int
+	// DeletionJournalDir: pasta do diário de exclusões (fora do banco), usado para reaplicar
+	// exclusões depois de restaurar um backup. Vazio = diário desligado.
+	DeletionJournalDir string
+}
+
+// OfficialAbacatePayHost é o único endereço aceito para o Pix em produção (nunca um simulador).
+const OfficialAbacatePayHost = "api.abacatepay.com"
 
 // PaymentsConfig configura o Pix pela AbacatePay (ADR-0007, ADR-0023). A chave só existe no
 // backend. Fora de produção só chave de TESTE (abc_dev_: nada é cobrado de verdade); chave de
@@ -70,6 +90,9 @@ type SecurityConfig struct {
 	// SecretKey é a chave mestra (bytes já decodificados). Vazia quando não configurada;
 	// os executáveis que precisam dela chamam RequireSecretKey.
 	SecretKey Secret
+	// PreviousSecretKeys: chaves anteriores (troca de chave). Só RECONHECEM o que já foi emitido
+	// (códigos de visitante, protocolos, e-mails na fila); nada novo é protegido com elas.
+	PreviousSecretKeys []Secret
 	// AllowedOrigins: origens aceitas no cabeçalho Origin de métodos não seguros.
 	AllowedOrigins []string
 	// PublicBaseURL: origem do frontend, usada nos links enviados por e-mail.
@@ -175,6 +198,12 @@ const (
 	VarPixExpiresIn      = "FILA_PIX_EXPIRES_IN"
 	VarAbacateTimeout    = "FILA_ABACATEPAY_TIMEOUT"
 	VarAbacateWebhook    = "FILA_ABACATEPAY_WEBHOOK_SECRET"
+	VarSecretKeyPrevious = "FILA_SECRET_KEY_PREVIOUS"
+	VarMetricsAddr       = "FILA_METRICS_ADDR"
+	VarRatePerMinute     = "FILA_HTTP_REQUESTS_PER_MINUTE"
+	VarSSEMax            = "FILA_SSE_MAX_CONNECTIONS"
+	VarSSEPerIP          = "FILA_SSE_MAX_PER_IP"
+	VarDeletionJournal   = "FILA_DELETION_JOURNAL_DIR"
 	// VarTestDatabaseURL é lida só pelos testes de integração; aceita aqui para não ser "desconhecida".
 	VarTestDatabaseURL = "FILA_TEST_DATABASE_URL"
 	VarRequireDBTests  = "FILA_REQUIRE_DB_TESTS"
@@ -191,7 +220,13 @@ var knownVars = map[string]bool{
 	VarTrustForwardedFor: true, VarMailMode: true, VarMailDir: true,
 	VarPixProvider: true, VarAbacateKey: true, VarAbacateBaseURL: true, VarAbacateValidated: true,
 	VarPixExpiresIn: true, VarAbacateTimeout: true, VarAbacateWebhook: true,
+	VarSecretKeyPrevious: true, VarMetricsAddr: true, VarRatePerMinute: true, VarSSEMax: true, VarSSEPerIP: true,
+	VarDeletionJournal: true,
 }
+
+// FileVars são os segredos que também podem vir de arquivo: NOME_FILE=/caminho (segredos da
+// plataforma montados como arquivo, ex.: Docker secrets). Nunca as duas formas juntas.
+var FileVars = []string{VarDatabaseURL, VarSecretKey, VarSecretKeyPrevious, VarAbacateKey, VarAbacateWebhook}
 
 // Origens padrão fora de produção: o servidor de desenvolvimento do Vite.
 var devOrigins = []string{"http://127.0.0.1:5173", "http://localhost:5173"}
@@ -223,11 +258,12 @@ func Load(environ []string) (*Config, error) {
 	}
 	prod := cfg.Env == EnvProduction
 	cfg.Security = SecurityConfig{
-		SecretKey:         l.secretKey(),
-		AllowedOrigins:    l.origins(prod),
-		PublicBaseURL:     l.publicBaseURL(prod),
-		CookieSecure:      l.boolean(VarCookieSecure, prod),
-		TrustForwardedFor: l.boolean(VarTrustForwardedFor, false),
+		SecretKey:          l.secretKey(),
+		PreviousSecretKeys: l.previousKeys(),
+		AllowedOrigins:     l.origins(prod),
+		PublicBaseURL:      l.publicBaseURL(prod),
+		CookieSecure:       l.boolean(VarCookieSecure, prod),
+		TrustForwardedFor:  l.boolean(VarTrustForwardedFor, false),
 	}
 	if prod && !cfg.Security.CookieSecure {
 		l.fail(VarCookieSecure, "em produção os cookies precisam ser Secure (use true ou remova a variável)")
@@ -244,6 +280,15 @@ func Load(environ []string) (*Config, error) {
 		l.fail(VarMailMode, "o modo file (arquivos locais) é só para desenvolvimento; em produção use disabled até configurar um provedor")
 	}
 	cfg.Payments = l.payments(prod)
+	cfg.Ops = OpsConfig{
+		RequestsPerMinute:  l.intRange(VarRatePerMinute, 600, 30, 100000),
+		SSEMaxConnections:  l.intRange(VarSSEMax, 2000, 10, 100000),
+		SSEPerIP:           l.intRange(VarSSEPerIP, 100, 1, 10000),
+		DeletionJournalDir: l.text(VarDeletionJournal, ""),
+	}
+	if _, ok := l.get(VarMetricsAddr); ok {
+		cfg.Ops.MetricsAddr = l.addr(VarMetricsAddr, "")
+	}
 	l.unknownVars()
 
 	if len(l.problems) > 0 {
@@ -433,16 +478,50 @@ func (l *loader) secretKey() Secret {
 	if !ok {
 		return ""
 	}
+	return l.decodeKey(VarSecretKey, val)
+}
+
+func (l *loader) decodeKey(v, val string) Secret {
 	raw, err := decodeBase64(val)
 	if err != nil {
-		l.fail(VarSecretKey, "deve estar em base64 (gere com: go -C backend run ./cmd/fila-admin gerar-chave)")
+		l.fail(v, "deve estar em base64 (gere com: go -C backend run ./cmd/fila-admin gerar-chave)")
 		return ""
 	}
 	if len(raw) < 32 {
-		l.fail(VarSecretKey, "curta demais: são necessários pelo menos 32 bytes aleatórios")
+		l.fail(v, "curta demais: são necessários pelo menos 32 bytes aleatórios")
 		return ""
 	}
 	return Secret(raw)
+}
+
+// previousKeys lê as chaves anteriores (separadas por vírgula, no máximo 3).
+func (l *loader) previousKeys() []Secret {
+	val, ok := l.get(VarSecretKeyPrevious)
+	if !ok {
+		return nil
+	}
+	var out []Secret
+	for _, part := range strings.Split(val, ",") {
+		if part = strings.TrimSpace(part); part == "" {
+			continue
+		}
+		if k := l.decodeKey(VarSecretKeyPrevious, part); k != "" {
+			out = append(out, k)
+		}
+	}
+	if len(out) > 3 {
+		l.fail(VarSecretKeyPrevious, "no máximo 3 chaves anteriores; remova as mais antigas depois do prazo da troca")
+	}
+	return out
+}
+
+// KeyMaterial devolve a chave atual e as anteriores para keys.New.
+func (s SecurityConfig) KeyMaterial() ([]byte, [][]byte) {
+	prev := make([][]byte, 0, len(s.PreviousSecretKeys))
+	for _, k := range s.PreviousSecretKeys {
+		prev = append(prev, []byte(k.Reveal()))
+	}
+	return []byte(s.SecretKey.Reveal()), prev
 }
 
 func decodeBase64(s string) ([]byte, error) {
@@ -506,8 +585,12 @@ func (l *loader) publicBaseURL(prod bool) string {
 }
 
 func (l *loader) unknownVars() {
+	fileVar := map[string]bool{}
+	for _, v := range FileVars {
+		fileVar[v+"_FILE"] = true
+	}
 	for k := range l.env {
-		if strings.HasPrefix(k, "FILA_") && !knownVars[k] {
+		if strings.HasPrefix(k, "FILA_") && !knownVars[k] && !fileVar[k] {
 			l.fail(k, "variável desconhecida (erro de digitação?)")
 		}
 	}
@@ -573,6 +656,9 @@ func (l *loader) payments(prod bool) PaymentsConfig {
 	u, err := url.Parse(c.BaseURL)
 	if err != nil || u.Host == "" || (prod && u.Scheme != "https") || (u.Scheme != "https" && u.Scheme != "http") {
 		l.fail(VarAbacateBaseURL, "endereço inválido (em produção precisa ser https)")
+	} else if prod && strings.ToLower(u.Hostname()) != OfficialAbacatePayHost {
+		// Produção nunca fala com simulador nem com outro endereço: a integração financeira é a real.
+		l.fail(VarAbacateBaseURL, "em produção só o endereço oficial da AbacatePay (https://"+OfficialAbacatePayHost+"/v2) é aceito")
 	}
 	return c
 }

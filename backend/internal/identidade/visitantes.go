@@ -47,6 +47,11 @@ func (s *Service) recoveryMAC(code string) []byte {
 	return s.ring.MAC(keys.PurposeRecoveryCode, []byte(code))
 }
 
+// recoveryMACs reconhece também códigos emitidos antes de uma troca da chave do servidor.
+func (s *Service) recoveryMACs(code string) [][]byte {
+	return s.ring.MACs(keys.PurposeRecoveryCode, []byte(code))
+}
+
 // visitorExpiry aplica R-VIS-02/03: 7 dias sem uso, 30 dias desde a criação do visitante e
 // até 24 h depois do encerramento da comanda — o que vier primeiro.
 func visitorExpiry(absolute, lastUsed time.Time, closed *time.Time) time.Time {
@@ -299,7 +304,7 @@ func (s *Service) recoverVisitorSession(w http.ResponseWriter, r *http.Request) 
 		var closed *time.Time
 		err := tx.QueryRow(ctx, `
 			SELECT id, nick, absolute_expires_at, visit_closed_at FROM visitor
-			WHERE establishment_id = $1 AND recovery_code_hmac = $2 FOR UPDATE`, estID, s.recoveryMAC(norm)).
+			WHERE establishment_id = $1 AND recovery_code_hmac = ANY($2) FOR UPDATE`, estID, s.recoveryMACs(norm)).
 			Scan(&visitorID, &nick, &absolute, &closed)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return errRecoveryInvalid

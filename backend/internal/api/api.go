@@ -74,7 +74,7 @@ type API struct {
 
 // New monta a API. register permite acrescentar rotas extras (ex.: saúde) ao mesmo mux.
 func New(d Deps, register func(mux *http.ServeMux)) (*API, error) {
-	ring, err := keys.New([]byte(d.Config.Security.SecretKey.Reveal()))
+	ring, err := keys.NewRotating(d.Config.Security.KeyMaterial())
 	if err != nil {
 		return nil, fmt.Errorf("chave do servidor: %w", err)
 	}

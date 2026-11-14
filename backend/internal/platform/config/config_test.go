@@ -283,3 +283,75 @@ func TestPaymentsConfig(t *testing.T) {
 		t.Fatalf("produção validada deveria carregar: %v", err)
 	}
 }
+
+func TestSecretFiles(t *testing.T) {
+	files := map[string]string{"/run/secrets/db": devURL + "\n", "/run/secrets/vazio": "\n"}
+	read := func(p string) ([]byte, error) {
+		if v, ok := files[p]; ok {
+			return []byte(v), nil
+		}
+		return nil, fs.ErrNotExist
+	}
+	env, err := secretFiles([]string{"FILA_ENV=production", "FILA_DATABASE_URL_FILE=/run/secrets/db"}, read)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if toMap(env)[VarDatabaseURL] != devURL {
+		t.Fatal("o conteúdo do arquivo (sem a quebra de linha) deve virar a variável")
+	}
+	_, err = secretFiles([]string{"FILA_DATABASE_URL=" + devURL, "FILA_DATABASE_URL_FILE=/run/secrets/db",
+		"FILA_SECRET_KEY_FILE=/nao/existe", "FILA_ABACATEPAY_API_KEY_FILE=/run/secrets/vazio"}, read)
+	var v *ValidationError
+	if !errors.As(err, &v) || len(v.Problems) != 3 {
+		t.Fatalf("esperava 3 problemas (as duas formas, arquivo ausente, vazio): %v", err)
+	}
+	if strings.Contains(err.Error(), "segredo-local-123") || strings.Contains(err.Error(), "/run/secrets") {
+		t.Fatal("erro não pode mostrar conteúdo nem caminho")
+	}
+	// _FILE é variável conhecida (não "desconhecida").
+	if _, err := Load(valid("FILA_SECRET_KEY_FILE=/x")); err != nil {
+		t.Fatalf("FILA_SECRET_KEY_FILE deve ser aceita: %v", err)
+	}
+}
+
+func TestPreviousKeysAndOps(t *testing.T) {
+	k := func(b byte) string {
+		return base64.RawURLEncoding.EncodeToString([]byte(strings.Repeat(string(rune('a'+b)), 32)))
+	}
+	cfg, err := Load(valid("FILA_SECRET_KEY="+k(1), "FILA_SECRET_KEY_PREVIOUS="+k(2)+", "+k(3), "FILA_METRICS_ADDR=127.0.0.1:9090"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cur, prev := cfg.Security.KeyMaterial()
+	if len(cur) != 32 || len(prev) != 2 || cfg.Ops.MetricsAddr != "127.0.0.1:9090" {
+		t.Fatalf("chaves/opções inesperadas: %d %d %q", len(cur), len(prev), cfg.Ops.MetricsAddr)
+	}
+	if cfg.Ops.RequestsPerMinute != 600 || cfg.Ops.SSEMaxConnections != 2000 || cfg.Ops.SSEPerIP != 100 {
+		t.Fatalf("limites padrão inesperados: %+v", cfg.Ops)
+	}
+	_, err = Load(valid("FILA_SECRET_KEY_PREVIOUS=curta", "FILA_METRICS_ADDR=sem-porta", "FILA_HTTP_REQUESTS_PER_MINUTE=1"))
+	var v *ValidationError
+	if !errors.As(err, &v) || len(v.Problems) != 3 {
+		t.Fatalf("esperava 3 problemas: %v", err)
+	}
+}
+
+func TestProductionPixOnlyOfficialHost(t *testing.T) {
+	prod := []string{"FILA_ENV=production",
+		"FILA_DATABASE_URL=postgres://fila:segredo-real-1@db:5432/fila?sslmode=require",
+		"FILA_ALLOWED_ORIGINS=https://fila.exemplo.com.br", "FILA_PUBLIC_BASE_URL=https://fila.exemplo.com.br",
+		"FILA_PIX_PROVIDER=abacatepay", "FILA_ABACATEPAY_API_KEY=abc_prod_xyz", "FILA_ABACATEPAY_PRODUCTION_VALIDATED=true"}
+	if _, err := Load(prod); err != nil {
+		t.Fatalf("produção com o endereço oficial deve passar: %v", err)
+	}
+	for _, base := range []string{"https://pixfake.interno/v2", "https://api.abacatepay.com.evil.example/v2", "http://api.abacatepay.com/v2"} {
+		_, err := Load(append(append([]string(nil), prod...), "FILA_ABACATEPAY_BASE_URL="+base))
+		if err == nil || !strings.Contains(err.Error(), VarAbacateBaseURL) {
+			t.Fatalf("produção deveria recusar %s: %v", base, err)
+		}
+	}
+	// Fora de produção, o simulador local continua permitido (testes).
+	if _, err := Load(valid("FILA_PIX_PROVIDER=abacatepay", "FILA_ABACATEPAY_API_KEY=abc_dev_x", "FILA_ABACATEPAY_BASE_URL=http://127.0.0.1:18090/v2")); err != nil {
+		t.Fatalf("simulador fora de produção deve passar: %v", err)
+	}
+}

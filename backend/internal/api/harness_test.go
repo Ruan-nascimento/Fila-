@@ -46,15 +46,16 @@ const webhookSecret = "secret-do-webhook-de-teste-0123456789" // gitleaks:allow
 var lightParams = identidade.PasswordParams{MemoryKiB: 1024, Time: 1, Threads: 1, SaltLen: 16, KeyLen: 32}
 
 type env struct {
-	t     *testing.T
-	pool  *pgxpool.Pool
-	clock *clock.Fake
-	api   *api.API
-	srv   *httptest.Server
-	ring  *keys.Ring
-	logs  *syncBuffer
-	inbox []mail.Message
-	deps  api.Deps
+	t      *testing.T
+	pool   *pgxpool.Pool
+	clock  *clock.Fake
+	api    *api.API
+	srv    *httptest.Server
+	ring   *keys.Ring
+	master []byte
+	logs   *syncBuffer
+	inbox  []mail.Message
+	deps   api.Deps
 	// pix simula a API da AbacatePay (o adaptador real fala HTTP com ele).
 	pix *pagamentotest.Fake
 	// ipSeq numera os navegadores simulados; atômico porque testes de concorrência criam
@@ -135,7 +136,7 @@ func newEnvDeps(t *testing.T, change func(*api.Deps)) *env {
 		stopHub()
 	})
 	ring, _ := keys.New(master)
-	return &env{t: t, pool: pool, clock: clk, api: a, srv: srv, ring: ring, logs: logs, deps: deps, pix: pix}
+	return &env{t: t, pool: pool, clock: clk, api: a, srv: srv, ring: ring, master: master, logs: logs, deps: deps, pix: pix}
 }
 
 // browser simula um navegador: cookies próprios, origem do site e token CSRF em memória.
@@ -282,6 +283,9 @@ func (e *env) lastToken(to, subject string) string {
 				return mm[1]
 			}
 		}
+	}
+	for _, m := range e.inbox {
+		e.t.Logf("caixa: %s | %s", m.To, m.Subject)
 	}
 	e.t.Fatalf("nenhum e-mail %q para %s com link", subject, to)
 	return ""

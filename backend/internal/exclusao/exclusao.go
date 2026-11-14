@@ -178,6 +178,11 @@ func (s *Service) protocolMAC(p string) []byte {
 	return s.Ring.MAC(purposeProtocol, []byte(normalizeProtocol(p)))
 }
 
+// protocolMACs reconhece também protocolos emitidos antes de uma troca da chave do servidor.
+func (s *Service) protocolMACs(p string) [][]byte {
+	return s.Ring.MACs(purposeProtocol, []byte(normalizeProtocol(p)))
+}
+
 // ---------------------------------------------------------------------------------------------
 // Bloqueios
 
@@ -403,7 +408,7 @@ func (s *Service) getDeletionRequestStatus(w http.ResponseWriter, r *http.Reques
 	}
 	var view requestView
 	err = database.InTx(ctx, s.Pool, func(tx pgx.Tx) error {
-		x, err := scanRequest(tx.QueryRow(ctx, requestSelect+` WHERE protocol_hmac = $1`, s.protocolMAC(*body.Protocol)))
+		x, err := scanRequest(tx.QueryRow(ctx, requestSelect+` WHERE protocol_hmac = ANY($1)`, s.protocolMACs(*body.Protocol)))
 		if errors.Is(err, pgx.ErrNoRows) {
 			return hs.ErrNotFound()
 		}

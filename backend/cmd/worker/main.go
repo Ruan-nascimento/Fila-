@@ -64,7 +64,7 @@ func run(ctx context.Context, environ []string, stdout, stderr io.Writer, starte
 		log.Error("worker não iniciado: banco indisponível ou sem migrações", "error", err.Error())
 		return app.ExitFailure
 	}
-	ring, err := keys.New([]byte(cfg.Security.SecretKey.Reveal()))
+	ring, err := keys.NewRotating(cfg.Security.KeyMaterial())
 	if err != nil {
 		log.Error("chave do servidor inválida", "error", err.Error())
 		return app.ExitConfigError

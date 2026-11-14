@@ -194,9 +194,8 @@ func (s *Service) Middleware(next http.Handler) http.Handler {
 			return
 		}
 		if httpserver.IsUnsafeMethod(r.Method) && (p.Session != nil || p.BrowserID != nil) {
-			want := s.csrfToken(p)
 			got := r.Header.Get("X-CSRF-Token")
-			if got == "" || !hmac.Equal([]byte(got), []byte(want)) {
+			if got == "" || !s.validCSRF(p, got) {
 				httpserver.WriteError(w, r, s.log, &httpserver.Error{Status: 403, Code: "csrf_failed",
 					Title: "Pedido não confirmado", Detail: "Atualize a página e tente de novo."})
 				return
@@ -222,6 +221,10 @@ func (s *Service) csrfToken(p *Principal) string {
 	if p.Session == nil && p.BrowserID == nil {
 		return ""
 	}
+	return base64.RawURLEncoding.EncodeToString(s.ring.MAC(keys.PurposeCSRF, csrfParts(p)...))
+}
+
+func csrfParts(p *Principal) [][]byte {
 	var sess, browser []byte
 	if p.Session != nil {
 		sess = p.Session.ID[:]
@@ -229,7 +232,20 @@ func (s *Service) csrfToken(p *Principal) string {
 	if p.BrowserID != nil {
 		browser = p.BrowserID[:]
 	}
-	return base64.RawURLEncoding.EncodeToString(s.ring.MAC(keys.PurposeCSRF, []byte("sessao"), sess, []byte("navegador"), browser))
+	return [][]byte{[]byte("sessao"), sess, []byte("navegador"), browser}
+}
+
+// validCSRF aceita o token da chave atual e, depois de uma troca de chave, o de uma anterior
+// (a página aberta antes da troca continua funcionando até reler a sessão).
+func (s *Service) validCSRF(p *Principal, got string) bool {
+	ok := false
+	for _, mac := range s.ring.MACs(keys.PurposeCSRF, csrfParts(p)...) {
+		want := base64.RawURLEncoding.EncodeToString(mac)
+		if hmac.Equal([]byte(got), []byte(want)) {
+			ok = true
+		}
+	}
+	return ok
 }
 
 func (s *Service) resolve(ctx context.Context, r *http.Request) (*Principal, error) {

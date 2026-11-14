@@ -149,7 +149,7 @@ func ownerProcess(ctx context.Context, cmd string, args, environ []string, stdou
 		return app.ExitConfigError
 	}
 	if cmd == "transfer-owner" {
-		ring, err := keys.New([]byte(rt.Config.Security.SecretKey.Reveal()))
+		ring, err := keys.NewRotating(rt.Config.Security.KeyMaterial())
 		if err != nil {
 			rt.Log.Error("chave do servidor inválida", "error", err.Error())
 			return app.ExitConfigError
@@ -243,7 +243,7 @@ func bootstrap(ctx context.Context, args, environ []string, stdout, stderr io.Wr
 	if rt.Config.Mail.Mode == config.MailDisabled {
 		rt.Log.Warn("envio de e-mail desativado: o convite será registrado, mas não chegará ao dono")
 	}
-	ring, err := keys.New([]byte(rt.Config.Security.SecretKey.Reveal()))
+	ring, err := keys.NewRotating(rt.Config.Security.KeyMaterial())
 	if err != nil {
 		rt.Log.Error("chave do servidor inválida", "error", err.Error())
 		return app.ExitConfigError

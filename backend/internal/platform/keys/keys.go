@@ -1,9 +1,13 @@
 // Package keys deriva chaves de uso específico a partir da chave secreta do servidor
 // (FILA_SECRET_KEY) e oferece HMAC e criptografia autenticada com elas.
 //
-// Uma única chave mestra é configurada; cada finalidade recebe uma subchave própria via
+// Uma chave mestra atual é configurada; cada finalidade recebe uma subchave própria via
 // HKDF-SHA256 (RFC 5869), para que o vazamento ou mau uso de uma finalidade não afete as outras.
 // Ver ADR-0017.
+//
+// Troca de chave (ADR-0026): chaves ANTERIORES podem ser informadas. Tudo o que é novo usa só a
+// chave atual; as anteriores servem apenas para reconhecer o que já foi emitido (códigos de
+// visitante, protocolos de exclusão, e-mails na fila, CSRF de sessões abertas) até expirar.
 package keys
 
 import (
@@ -32,19 +36,49 @@ const (
 
 // Ring guarda a chave mestra e as subchaves já derivadas.
 type Ring struct {
-	master []byte
-	mu     sync.Mutex
-	cache  map[string][]byte
+	master   []byte
+	mu       sync.Mutex
+	cache    map[string][]byte
+	previous []*Ring
 }
 
-// New valida a chave mestra.
-func New(master []byte) (*Ring, error) {
+// New valida a chave mestra atual e as anteriores (opcionais, só para reconhecer o já emitido).
+func New(master []byte, previous ...[]byte) (*Ring, error) {
+	r, err := single(master)
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range previous {
+		old, err := single(p)
+		if err != nil {
+			return nil, fmt.Errorf("chave anterior: %w", err)
+		}
+		r.previous = append(r.previous, old)
+	}
+	return r, nil
+}
+
+// NewRotating é New com as chaves anteriores numa lista (config.SecurityConfig.KeyMaterial).
+func NewRotating(master []byte, previous [][]byte) (*Ring, error) { return New(master, previous...) }
+
+func single(master []byte) (*Ring, error) {
 	if len(master) < MinMasterLen {
 		return nil, fmt.Errorf("chave secreta curta: são necessários pelo menos %d bytes", MinMasterLen)
 	}
 	m := make([]byte, len(master))
 	copy(m, master)
 	return &Ring{master: m, cache: map[string][]byte{}}, nil
+}
+
+// MACs devolve o MAC com a chave atual seguido dos MACs com as chaves anteriores. Use para
+// PROCURAR algo emitido antes de uma troca de chave (ex.: WHERE hmac = ANY($1)); para gravar,
+// use sempre MAC (só a chave atual).
+func (r *Ring) MACs(purpose string, parts ...[]byte) [][]byte {
+	out := [][]byte{r.MAC(purpose, parts...)}
+	for _, p := range r.previous {
+		out = append(out, p.MAC(purpose, parts...))
+	}
+	return out
 }
 
 // Derive devolve a subchave de 32 bytes da finalidade.
@@ -91,8 +125,19 @@ func (r *Ring) Seal(purpose string, plaintext, aad []byte) ([]byte, error) {
 	return gcm.Seal(nonce, nonce, plaintext, aad), nil
 }
 
-// Open decifra o que Seal produziu.
+// Open decifra o que Seal produziu (com a chave atual ou, depois de uma troca, com uma anterior).
 func (r *Ring) Open(purpose string, sealed, aad []byte) ([]byte, error) {
+	pt, err := r.open(purpose, sealed, aad)
+	for _, p := range r.previous {
+		if err == nil {
+			break
+		}
+		pt, err = p.open(purpose, sealed, aad)
+	}
+	return pt, err
+}
+
+func (r *Ring) open(purpose string, sealed, aad []byte) ([]byte, error) {
 	gcm, err := r.gcm(purpose)
 	if err != nil {
 		return nil, err

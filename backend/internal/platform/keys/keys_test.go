@@ -64,3 +64,35 @@ func TestSealOpen(t *testing.T) {
 		t.Fatal("conteúdo adulterado deve falhar")
 	}
 }
+
+func TestPreviousKeysOnlyRecognize(t *testing.T) {
+	old := ring(t, 1)
+	rotated, err := New(bytes.Repeat([]byte{2}, 32), bytes.Repeat([]byte{1}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Gravar usa só a chave nova.
+	if !bytes.Equal(rotated.MAC(PurposeCSRF, []byte("x")), ring(t, 2).MAC(PurposeCSRF, []byte("x"))) {
+		t.Fatal("MAC deve usar a chave atual")
+	}
+	// Procurar reconhece o que a chave antiga emitiu.
+	macs := rotated.MACs(PurposeRecoveryCode, []byte("codigo"))
+	if len(macs) != 2 || !bytes.Equal(macs[1], old.MAC(PurposeRecoveryCode, []byte("codigo"))) {
+		t.Fatal("MACs deve incluir o MAC da chave anterior")
+	}
+	sealed, err := old.Seal(PurposeMail, []byte("oi"), []byte("id"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pt, err := rotated.Open(PurposeMail, sealed, []byte("id"))
+	if err != nil || string(pt) != "oi" {
+		t.Fatalf("conteúdo cifrado com a chave anterior deve abrir: %v", err)
+	}
+	// Sem a chave anterior, não abre.
+	if _, err := ring(t, 2).Open(PurposeMail, sealed, []byte("id")); err == nil {
+		t.Fatal("sem a chave anterior não deveria abrir")
+	}
+	if _, err := New(bytes.Repeat([]byte{2}, 32), make([]byte, 10)); err == nil {
+		t.Fatal("chave anterior curta deve ser recusada")
+	}
+}
