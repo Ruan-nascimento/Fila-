@@ -22,6 +22,8 @@ export default defineConfig({
     sourcemap: false,
   },
   test: {
+    // Só os testes de componente; os de navegador real (e2e/) rodam com o Playwright.
+    include: ["src/**/*.test.{ts,tsx}"],
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
     restoreMocks: true,

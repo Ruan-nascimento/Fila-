@@ -132,10 +132,14 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
-      - name: Nenhuma variável de configuração no bundle público
+      - name: Nenhuma variável de configuração nem dado do provedor no bundle público
         run: |
           if grep -rIE "FILA_|POSTGRES_|DATABASE_URL" dist; then
             echo "O bundle contém nomes de configuração do servidor; verifique o código." ; exit 1
+          fi
+          # Chave da AbacatePay (teste/produção), secret e chave de assinatura do webhook: só no backend.
+          if grep -rIiE "abc_(dev|prod)_|webhook_?secret|x-webhook-signature|abacatepay\.com|t9dXRhHHo3" dist; then
+            echo "O bundle contém dado do provedor de pagamento; ele só pode existir no backend." ; exit 1
           fi
 
   segredos:

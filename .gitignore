@@ -12,6 +12,8 @@
 backend/bin/
 frontend/dist/
 frontend/coverage/
+frontend/e2e-relatorio/
+frontend/e2e-resultados/
 
 # Dependências
 node_modules/

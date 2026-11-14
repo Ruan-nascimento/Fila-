@@ -5,7 +5,7 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", "coverage", "src/api/schema.gen.ts"] },
+  { ignores: ["dist", "coverage", "src/api/schema.gen.ts", "e2e-relatorio", "e2e-resultados"] },
   {
     files: ["**/*.{ts,tsx}"],
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
@@ -25,7 +25,12 @@ export default tseslint.config(
     },
   },
   {
-    files: ["*.config.{js,ts}"],
+    files: ["*.config.{js,ts}", "e2e/**/*.ts"],
     languageOptions: { globals: globals.node },
+  },
+  {
+    // Testes de navegador leem JSON solto da API para montar cenários.
+    files: ["e2e/**/*.ts"],
+    rules: { "@typescript-eslint/no-explicit-any": "off" },
   },
 );

@@ -180,6 +180,8 @@ go -C backend test -count=1 ./...
 
 Sem essa variável, os testes de banco aparecem como **PULADOS** (`go test -v` mostra `SKIP`) — pulado não é aprovado.
 
+Testes em **navegador real** (Chrome e Edge instalados, contra a API real, nas larguras de celular a desktop): veja [docs/web-validacao.md](docs/web-validacao.md) — inclui quais navegadores foram e quais **não** foram testados.
+
 ## 8. Rodar tudo o que o CI roda
 
 ```powershell

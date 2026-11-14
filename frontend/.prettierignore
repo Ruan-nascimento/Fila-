@@ -3,3 +3,5 @@ coverage
 node_modules
 package-lock.json
 src/api/schema.gen.ts
+e2e-relatorio
+e2e-resultados
