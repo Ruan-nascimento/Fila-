@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { fakeApi, problem } from "../../test/fake-api";
 import type { Order } from "../comanda/textos";
@@ -152,6 +152,30 @@ describe("Pagamento do cliente", () => {
     );
     expect(screen.getByRole("img", { name: /QR Code do Pix/ })).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText(/Sem conexão com o servidor/)).toBeNull());
+  });
+
+  it("o Pix chega pelo tempo real ANTES de a tentativa falhar: o erro não aparece", async () => {
+    let fail: ((e: Error) => void) | null = null;
+    fakeApi({
+      [`POST ${base}/pix-charges`]: () => new Promise<Response>((_res, rej) => (fail = rej)),
+    });
+    const { rerender } = render(
+      <PagamentoCliente shopId={EST} order={order({ method_choice: "pix" })} onReload={async () => {}} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Gerar Pix/ }));
+    rerender(
+      <PagamentoCliente
+        shopId={EST}
+        order={order({ method_choice: "pix", charges: [charge()] }, { version: 6 })}
+        onReload={async () => {}}
+      />,
+    );
+    expect(screen.getByLabelText("Dinheiro")).toBeDisabled(); // tentativa ainda em andamento
+    await waitFor(() => expect(fail).not.toBeNull()); // o pedido chegou ao "servidor"
+    await act(async () => fail?.(new TypeError("Failed to fetch")));
+    await waitFor(() => expect(screen.getByLabelText("Dinheiro")).toBeEnabled()); // tentativa terminou
+    expect(screen.getByRole("img", { name: /QR Code do Pix/ })).toBeInTheDocument();
+    expect(screen.queryByText(/Sem conexão com o servidor/)).toBeNull();
   });
 
   it("Pix indisponível: erro claro, a comanda continua e a nova tentativa usa outra chave", async () => {

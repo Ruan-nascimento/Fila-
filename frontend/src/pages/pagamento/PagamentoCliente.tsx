@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../../api/client";
 import { formatCents } from "../../money";
 import { Notice } from "../../ui/ui";
@@ -25,9 +25,13 @@ export function PagamentoCliente({
   const cmd = useCommand();
   // Se o Pix aparece (resposta repetida ou atualização em tempo real depois de a rede cair), o
   // erro anterior de envio já não vale: some da tela.
+  // A ordem pode ser qualquer uma (o Pix chega pelo tempo real antes ou depois da falha), por isso
+  // há duas checagens: quando o Pix aparece e quando a tentativa falha.
   const activeId = activeCharge(order.payment.charges)?.id ?? null;
+  const activeRef = useRef<string | null>(activeId);
   const clearError = cmd.clear;
   useEffect(() => {
+    activeRef.current = activeId;
     if (activeId) clearError();
   }, [activeId, clearError]);
   const [confirmSwitch, setConfirmSwitch] = useState<PaymentMethod | null>(null);
@@ -87,6 +91,8 @@ export function PagamentoCliente({
         body: { expected_version: order.version },
       }),
     );
+    // Falhou, mas o Pix já chegou pelo tempo real (a resposta se perdeu): o erro não vale mais.
+    if (!out.ok && activeRef.current) cmd.clear();
     if (!out.ok && out.problem?.code === "provider_unavailable") setAttempt((n) => n + 1);
     if (out.ok || out.problem?.status === 409 || out.problem?.code === "provider_unavailable")
       await onReload();
