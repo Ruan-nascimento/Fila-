@@ -1,14 +1,15 @@
 # Fila — MVP web para barbearia
 
 Sistema de fila, atendimento, pagamento e fidelidade para barbearia, construído em etapas (veja [REGRAS.md](REGRAS.md)).
-**Situação atual: etapa 07 (histórico e exclusão).** A conta vê o próprio histórico em cada loja e pode pedir a exclusão (com protocolo e situação real); a dona acompanha as exclusões que dependem da loja. Antes: **etapa 06 (atualizações em tempo real).** As telas da loja e da equipe se atualizam sozinhas (SSE), sem precisar clicar em "Atualizar"; se a conexão cair, a tela avisa e reconecta sem perder nada. Já funcionam: contas e login de cliente e de equipe, recuperação de senha, convites, dono inicial por comando controlado, visitante com código de recuperação, loja, profissionais, serviços, a fila (entrar, acompanhar, chamar, iniciar, ausência, desistir, cancelar, transferir) e a comanda: trocar serviços enquanto aguarda, pedir alteração depois da chamada (o profissional aprova ou recusa), marcar serviço realizado, concluir (fecha o valor e libera a cadeira), interromper (o dono revisa e só cobra o que foi feito por inteiro) e correção do dono com senha. Receber o pagamento (Pix, dinheiro, cartão) chega nas próximas etapas.
+**Situação atual: etapa 12 (operação, recuperação e implantação).** Funcionam, no navegador do celular ao computador: contas e login de cliente e equipe, visitante com código de recuperação, loja, equipe e serviços, a fila com atualização em tempo real, a comanda, pagamento (Pix pela AbacatePay em modo de teste, dinheiro e cartão) com conferência, estorno e pendências, pontos e prêmios, histórico e exclusão de conta. A etapa 12 trouxe a implantação em servidor (homologação e produção com TLS, segredos em arquivo e banco com menor privilégio), métricas e alertas, backup cifrado e restauração que concilia os pagamentos com o provedor antes de religar o worker. Como colocar no ar: [docs/operacao/](docs/operacao/README.md).
 
 | Pasta | O que tem |
 |---|---|
 | [backend/](backend/) | Servidor em Go: `cmd/api` (HTTP), `cmd/worker` (tarefas em segundo plano), `cmd/migrate` (migrações), módulos de domínio em `internal/` |
 | [frontend/](frontend/) | Aplicação web React + TypeScript + Vite |
 | [docs/](docs/README.md) | Regras, contrato OpenAPI, matrizes, cenários e decisões (ADRs) |
-| [compose.yaml](compose.yaml) | PostgreSQL local via Docker |
+| [compose.yaml](compose.yaml) | PostgreSQL local via Docker (desenvolvimento) |
+| [deploy/](deploy/) | Homologação e produção: imagens, compose com Caddy (TLS), papéis do banco, backup/restauração, alertas ([docs/operacao/](docs/operacao/README.md)) |
 | [.github/workflows/ci.yml](.github/workflows/ci.yml) | Integração contínua |
 
 ---
@@ -210,7 +211,18 @@ Inclui: verificação da documentação e do contrato, formatação, análise es
 
 Códigos de saída dos programas: `0` sucesso, `1` falha durante a execução, `2` configuração ou uso inválido.
 
-## 10. Regras de segurança do repositório
+## 10. Colocar no ar (homologação e produção)
+
+Servidor Linux com Docker, domínio apontando para ele e portas 80/443 abertas. Passo a passo completo, com segredos, banco com menor privilégio, backup, restauração, alertas e rotinas de incidente: [docs/operacao/](docs/operacao/README.md).
+
+```bash
+deploy/implantar.sh /etc/fila/producao.env $(git rev-parse --short HEAD)   # backup, migrações, troca sem perder fila
+docker compose -f deploy/compose.yaml --env-file /etc/fila/producao.env --profile ferramentas run --rm fila-admin verificar
+```
+
+Produção **não sobe** com Pix simulado (chave de teste ou endereço que não seja o oficial da AbacatePay): o processo sai com erro de configuração.
+
+## 11. Regras de segurança do repositório
 
 - Segredos só em `.env` (local) ou nas variáveis da plataforma (produção). Em produção o `.env` é ignorado.
 - Os logs ocultam automaticamente campos como senha, token, cookie e URL do banco — mesmo assim, não registre dados pessoais nem segredos.

@@ -1003,6 +1003,30 @@ Então o worker fica parado até a reconciliação com o provedor terminar
 E cobranças recebidas depois do backup são registradas a partir do provedor (o banco restaurado não "desfaz" um pagamento)
 E a época do fluxo SSE muda.
 
+### C-OPS-02 — Implantação não perde fila
+- Regras: R-SEG-05, R-SEG-06, R-SEG-11 · Transições: T-OP-03 · Contrato: `listPublicQueues`, `openEventStream` · Tipo: exercício real em homologação (frontend/e2e/operacao.spec.ts)
+
+Dado pessoas aguardando na fila e uma tela de cliente aberta no celular
+Quando uma versão nova é implantada com tráfego contínuo (deploy/implantar.sh)
+Então nenhuma leitura falha (o proxy segura as requisições durante a troca da API)
+E ninguém some da fila e o comando feito durante a troca vale uma vez
+E a tela do cliente atualiza a posição sozinha depois da troca.
+
+### C-OPS-03 — Worker retoma depois de cair
+- Regras: R-SEG-11 · Transições: T-OP-03 · Contrato: `createPixCharge`, `createRewardReservation`, `requestAccountDeletion` · Tipo: exercício real em homologação + integração (TestWorkerHeldDoesNothingUntilReleased)
+
+Dado o worker morto sem encerramento (SIGKILL) com Pix pago, reserva vencida, exclusão e e-mail pendentes
+Quando o worker volta
+Então tudo é feito uma única vez (um recebimento, uma liberação, exclusão concluída, e-mail entregue).
+
+### C-OPS-04 — Produção não ativa com integração financeira simulada
+- Regras: R-PAG-15, R-SEG-08 · Tipo: unidade (TestProductionPixOnlyOfficialHost, TestStagingIsHardenedButNeverCharges) + CI (imagem de produção recusa subir)
+
+Dado FILA_ENV=production
+Quando a chave do Pix é de teste, ou o endereço não é o oficial da AbacatePay
+Então o processo não sobe (configuração inválida, saída 2)
+E a homologação nunca aceita chave de produção.
+
 ---
 
 ## Critérios de pronto do anexo (§15) → cenários
@@ -1022,4 +1046,4 @@ E a época do fluxo SSE muda.
 | Estado após reconexão corresponde ao banco | C-SSE-02, C-SSE-03, C-SSE-04, C-SSE-07 |
 | Sessão revogada não continua recebendo dados | C-SSE-06, C-VIS-05 |
 | Layout passa pelas larguras previstas | C-WEB-01 |
-| Sandbox financeiro e restauração têm evidências | C-PAG-02 (sandbox na etapa 08/09), C-OPS-01 |
+| Sandbox financeiro e restauração têm evidências | C-PAG-02 (sandbox na etapa 08/09; **AbacatePay real pendente**), C-OPS-01, C-OPS-02, C-OPS-03, C-OPS-04 |

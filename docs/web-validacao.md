@@ -87,7 +87,11 @@ As variáveis começam com `E2E_` (e não com `FILA_`) porque a configuração d
 
 O Playwright **não baixa navegadores** (`PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` na instalação): usa o Chrome e o Edge já instalados. Esses testes **não rodam no CI**, que não sobe o ambiente completo nem tem os navegadores. No CI rodam os testes de componente (Vitest) e a verificação de segredos do bundle.
 
-## 6. Limitações conhecidas
+## 6. Na homologação (etapa 12)
+
+A mesma suíte (18/18, Chrome e Edge) rodou contra a homologação em Docker: Caddy com TLS, cabeçalhos de segurança e **CSP**, e o banco com o papel restrito. Use `E2E_BASE_URL=https://localhost:8443` e `E2E_IGNORAR_TLS=1` (certificado da CA interna do Caddy). Toda tela agora **falha se o navegador recusar algo pela CSP**: nenhuma violação foi encontrada. Os exercícios de operação (`e2e/operacao.spec.ts`: implantar com fila, worker morto, restauração) só rodam com `E2E_OPERACAO=1` ([operacao/evidencias.md](operacao/evidencias.md)).
+
+## 7. Limitações conhecidas
 
 - Firefox, Safari e aparelhos físicos não testados (seção 1).
 - O axe encontra só problemas detectáveis automaticamente. Leitor de tela real (NVDA, VoiceOver, TalkBack) não foi usado.
