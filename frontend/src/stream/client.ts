@@ -77,6 +77,14 @@ export class StreamClient {
   }
 
   private readonly onOnline = () => this.reconnectNow();
+  // Sem internet: a conexão pode ficar "pendurada" sem erro. Fecha já e avisa; volta no "online".
+  private readonly onOffline = () => {
+    if (this.stopped) return;
+    this.clearTimer();
+    this.es?.close();
+    this.es = null;
+    this.o.onStatus("reconnecting");
+  };
   private readonly onVisible = () => {
     if (this.o.doc.visibilityState === "visible") this.reconnectNow();
   };
@@ -87,6 +95,7 @@ export class StreamClient {
       return;
     }
     this.o.win.addEventListener("online", this.onOnline);
+    this.o.win.addEventListener("offline", this.onOffline);
     this.o.doc.addEventListener("visibilitychange", this.onVisible);
     this.connect();
   }
@@ -97,6 +106,7 @@ export class StreamClient {
     this.es?.close();
     this.es = null;
     this.o.win.removeEventListener("online", this.onOnline);
+    this.o.win.removeEventListener("offline", this.onOffline);
     this.o.doc.removeEventListener("visibilitychange", this.onVisible);
   }
 

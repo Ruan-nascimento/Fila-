@@ -82,7 +82,8 @@ export function Comandas({ ctx }: { ctx: StaffContext }) {
     const o = m.data as Order;
     const known = orders?.find((x) => x.id === o.id);
     if (known) {
-      if (o.version > known.version) replace(o);
+      // Compara com o estado ATUAL: eventos fora de ordem não trazem de volta uma versão velha.
+      setOrders((list) => (list ?? []).map((x) => (x.id === o.id && o.version > x.version ? o : x)));
     } else if (!filter || o.status === filter) {
       void reload();
     }

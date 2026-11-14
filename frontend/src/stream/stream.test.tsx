@@ -133,6 +133,37 @@ describe("cliente SSE", () => {
     expect(FakeES.open()).toHaveLength(0);
   });
 
+  it("aparelho sem internet: fecha a conexão e avisa na hora; volta com a rede, pelo cursor", () => {
+    vi.useFakeTimers();
+    const statuses: StreamStatus[] = [];
+    const client = new StreamClient({
+      estId: EST,
+      channels: ["visit"],
+      onMessage: () => {},
+      onStatus: (s) => statuses.push(s),
+      onSessionEnded: () => {},
+      open: (url) => new FakeES(url),
+      random: () => 0.5,
+    });
+    client.start();
+    FakeES.last().emit(
+      "stream.snapshot",
+      envelope("stream.snapshot", { type: "stream", id: EST, version: 2 }, {}),
+      "c2",
+    );
+    expect(statuses.at(-1)).toBe("live");
+    // A conexão "pendurada" não dá erro sozinha: o evento offline do navegador fecha e avisa.
+    window.dispatchEvent(new Event("offline"));
+    expect(statuses.at(-1)).toBe("reconnecting");
+    expect(FakeES.open()).toHaveLength(0);
+    vi.advanceTimersByTime(60_000);
+    expect(FakeES.all).toHaveLength(1); // sem rede, não fica tentando
+    window.dispatchEvent(new Event("online"));
+    expect(FakeES.open()).toHaveLength(1);
+    expect(FakeES.last().url).toContain("cursor=c2");
+    client.stop();
+  });
+
   it("sessão encerrada no servidor: para e avisa (sem reconectar com a sessão velha)", () => {
     const ended = vi.fn();
     const client = new StreamClient({
@@ -288,6 +319,23 @@ describe("visita atualizada pelo fluxo", () => {
       ),
     );
     expect(screen.getByText(/Em atendimento/)).toBeInTheDocument();
+    // Participação e comanda mudam juntas (conclusão): os dois eventos chegam no mesmo instante e
+    // nenhum pode apagar o outro com uma cópia velha da visita.
+    act(() => {
+      es.emit("participation.updated", part("completed", 4), "c10");
+      const v = visit("completed", 4);
+      es.emit(
+        "order.updated",
+        envelope(
+          "order.updated",
+          { type: "order", id: "o1", version: 5 },
+          { ...v.order, status: "awaiting_payment", version: 5 },
+        ),
+        "c11",
+      );
+    });
+    expect(screen.getByText(/Atendimento concluído/)).toBeInTheDocument();
+    expect(screen.getByText(/Comanda: Aguardando pagamento/)).toBeInTheDocument();
     expect(requests.filter((r) => r.path.endsWith("/my-visit"))).toHaveLength(1);
     expect(FakeES.all).toHaveLength(1); // uma conexão para a página inteira
   });

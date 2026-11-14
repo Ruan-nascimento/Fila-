@@ -136,6 +136,24 @@ describe("Pagamento do cliente", () => {
     expect(screen.getByLabelText("Dinheiro")).toBeDisabled();
   });
 
+  it("rede caiu ao gerar o Pix, mas ele chegou depois (repetição ou tempo real): o erro velho some", async () => {
+    fakeApi({ [`POST ${base}/pix-charges`]: () => Promise.reject(new TypeError("Failed to fetch")) });
+    const { rerender } = render(
+      <PagamentoCliente shopId={EST} order={order({ method_choice: "pix" })} onReload={async () => {}} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Gerar Pix/ }));
+    expect(await screen.findByText(/Sem conexão com o servidor/)).toBeInTheDocument();
+    rerender(
+      <PagamentoCliente
+        shopId={EST}
+        order={order({ method_choice: "pix", charges: [charge()] }, { version: 6 })}
+        onReload={async () => {}}
+      />,
+    );
+    expect(screen.getByRole("img", { name: /QR Code do Pix/ })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText(/Sem conexão com o servidor/)).toBeNull());
+  });
+
   it("Pix indisponível: erro claro, a comanda continua e a nova tentativa usa outra chave", async () => {
     const { requests } = fakeApi({
       [`POST ${base}/pix-charges`]: () =>

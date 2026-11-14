@@ -72,17 +72,24 @@ export function MinhaVisita({ shopId }: { shopId: string }) {
       return;
     }
     if (m.audience !== "visit") return;
+    // Sempre a partir do estado ATUAL (setVisit com função): dois eventos que chegam juntos
+    // (participação e comanda) não podem sobrescrever um ao outro com uma cópia velha.
     if (m.type === "participation.updated") {
       const p = m.data as Visit["participation"];
       if (!visit || visit.participation.id !== p.id) {
         void reload(); // visita nova (outra aba): relê a visita inteira
-      } else if (p.version > visit.participation.version) {
-        setVisit({ ...visit, participation: p });
+        return;
       }
+      setVisit((cur) =>
+        cur && cur.participation.id === p.id && p.version > cur.participation.version
+          ? { ...cur, participation: p }
+          : cur,
+      );
     } else if (m.type === "order.updated" || m.type === "payment.updated") {
       const o = m.data as Visit["order"];
-      if (visit && visit.order.id === o.id && o.version > visit.order.version)
-        setVisit({ ...visit, order: o });
+      setVisit((cur) =>
+        cur && cur.order.id === o.id && o.version > cur.order.version ? { ...cur, order: o } : cur,
+      );
     }
   });
 

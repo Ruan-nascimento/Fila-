@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../../api/client";
 import { formatCents } from "../../money";
 import { Notice } from "../../ui/ui";
@@ -23,6 +23,13 @@ export function PagamentoCliente({
   onReload: () => Promise<void>;
 }) {
   const cmd = useCommand();
+  // Se o Pix aparece (resposta repetida ou atualização em tempo real depois de a rede cair), o
+  // erro anterior de envio já não vale: some da tela.
+  const activeId = activeCharge(order.payment.charges)?.id ?? null;
+  const clearError = cmd.clear;
+  useEffect(() => {
+    if (activeId) clearError();
+  }, [activeId, clearError]);
   const [confirmSwitch, setConfirmSwitch] = useState<PaymentMethod | null>(null);
   // Nova tentativa depois de o provedor recusar = nova intenção (nova chave); repetição por
   // queda de rede usa a mesma chave e devolve a mesma tentativa.
