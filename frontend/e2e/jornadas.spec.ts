@@ -45,6 +45,7 @@ test.beforeAll(async () => {
   });
 });
 
+// Cenários: C-VIS-03, C-SSE-01.
 test("visitante no celular e Beto no computador: do link da loja ao pago, atualizando sozinho", async ({
   browser,
 }) => {
@@ -95,6 +96,7 @@ test("visitante no celular e Beto no computador: do link da loja ao pago, atuali
   await sctx.close();
 });
 
+// Cenários: C-SSE-04, C-WEB-03.
 test("cliente: cadastro, e-mail, Pix com rede caindo (sem cobrar duas vezes), pontos e prêmio", async ({
   browser,
 }) => {

@@ -1,0 +1,67 @@
+# Bateria final (telas, jornadas, piloto) — Chrome 157 e Edge 157, homologação v7
+  ok  1 [chrome] › e2e\jornadas.spec.ts:49:1 › visitante no celular e Beto no computador: do link da loja ao pago, atualizando sozinho (2.6s)
+  ok  2 [chrome] › e2e\jornadas.spec.ts:100:1 › cliente: cadastro, e-mail, Pix com rede caindo (sem cobrar duas vezes), pontos e prêmio (26.4s)
+  ok  3 [chrome] › e2e\jornadas.spec.ts:200:1 › conta: senha esquecida, sessão encerrada em outro aparelho e exclusão com protocolo (6.3s)
+  ok  4 [chrome] › e2e\jornadas.spec.ts:249:1 › dona no tablet: convida e cancela convite (com senha), vê pendências e auditoria (2.5s)
+ROTEIRO:
+- visitante entrou com nick e recebeu código
+- visita recuperada em outro aparelho; recarregar mostra o mesmo estado
+- conta entrou e mudou o pedido (R$ 45 → R$ 75) enquanto aguardava
+- nick com HTML exibido como texto, sem executar
+- chamada chegou sozinha; ausência só depois da tolerância
+- rede caiu e voltou: a chamada apareceu depois de reconectar, sem recarregar
+- atendimento concluído; Pix recebido pelo banco e conferido pela equipe
+- 15 pontos creditados uma vez; prêmio reservado e entregue
+- atendimento interrompido com motivo; cadeira liberada
+- dona viu e resolveu o Pix tardio pela tela; revisou a interrupção
+  ok  5 [chrome] › e2e\piloto.spec.ts:69:1 › roteiro do piloto: do primeiro cliente às pendências da dona (51.5s)
+  ok  6 [chrome] › e2e\telas.spec.ts:108:1 › telas públicas (30.2s)
+  ok  7 [chrome] › e2e\telas.spec.ts:123:1 › telas do cliente (9.7s)
+  ok  8 [chrome] › e2e\telas.spec.ts:132:1 › telas da dona (42.8s)
+  ok  9 [chrome] › e2e\telas.spec.ts:150:1 › telas do profissional (17.5s)
+  ok 10 [chrome] › e2e\telas.spec.ts:159:1 › só teclado: pular para o conteúdo, entrar e foco sempre visível (927ms)
+  ok 11 [edge] › e2e\jornadas.spec.ts:49:1 › visitante no celular e Beto no computador: do link da loja ao pago, atualizando sozinho (3.1s)
+  ok 12 [edge] › e2e\jornadas.spec.ts:100:1 › cliente: cadastro, e-mail, Pix com rede caindo (sem cobrar duas vezes), pontos e prêmio (25.8s)
+  ok 13 [edge] › e2e\jornadas.spec.ts:200:1 › conta: senha esquecida, sessão encerrada em outro aparelho e exclusão com protocolo (6.2s)
+  ok 14 [edge] › e2e\jornadas.spec.ts:249:1 › dona no tablet: convida e cancela convite (com senha), vê pendências e auditoria (2.6s)
+  x  15 [edge] › e2e\piloto.spec.ts:69:1 › roteiro do piloto: do primeiro cliente às pendências da dona (1.2m)
+  ok 16 [edge] › e2e\telas.spec.ts:108:1 › telas públicas (31.2s)
+  ok 17 [edge] › e2e\telas.spec.ts:123:1 › telas do cliente (10.1s)
+  ok 18 [edge] › e2e\telas.spec.ts:132:1 › telas da dona (43.5s)
+  ok 19 [edge] › e2e\telas.spec.ts:150:1 › telas do profissional (14.5s)
+  ok 20 [edge] › e2e\telas.spec.ts:159:1 › só teclado: pular para o conteúdo, entrar e foco sempre visível (724ms)
+    Error: expect(locator).toBeVisible() failed
+    e2e-resultados\piloto-roteiro-do-piloto-d-c5871-iente-às-pendências-da-dona-edge\test-failed-3.png
+    e2e-resultados\piloto-roteiro-do-piloto-d-c5871-iente-às-pendências-da-dona-edge\test-failed-4.png
+    e2e-resultados\piloto-roteiro-do-piloto-d-c5871-iente-às-pendências-da-dona-edge\test-failed-1.png
+    e2e-resultados\piloto-roteiro-do-piloto-d-c5871-iente-às-pendências-da-dona-edge\test-failed-2.png
+    e2e-resultados\piloto-roteiro-do-piloto-d-c5871-iente-às-pendências-da-dona-edge\test-failed-1.png
+  1 failed
+  19 passed (7.2m)
+
+# Roteiro do piloto depois de corrigir o passo 11 do teste (alvo da pendência)
+ROTEIRO:
+- visitante entrou com nick e recebeu código
+- visita recuperada em outro aparelho; recarregar mostra o mesmo estado
+- conta entrou e mudou o pedido (R$ 45 → R$ 75) enquanto aguardava
+- nick com HTML exibido como texto, sem executar
+- chamada chegou sozinha; ausência só depois da tolerância
+- rede caiu e voltou: a chamada apareceu depois de reconectar, sem recarregar
+- atendimento concluído; Pix recebido pelo banco e conferido pela equipe
+- 15 pontos creditados uma vez; prêmio reservado e entregue
+- atendimento interrompido com motivo; cadeira liberada
+- dona viu e resolveu o Pix tardio pela tela; revisou a interrupção
+  ok 1 [chrome] › e2e\piloto.spec.ts:78:1 › roteiro do piloto: do primeiro cliente às pendências da dona (51.0s)
+ROTEIRO:
+- visitante entrou com nick e recebeu código
+- visita recuperada em outro aparelho; recarregar mostra o mesmo estado
+- conta entrou e mudou o pedido (R$ 45 → R$ 75) enquanto aguardava
+- nick com HTML exibido como texto, sem executar
+- chamada chegou sozinha; ausência só depois da tolerância
+- rede caiu e voltou: a chamada apareceu depois de reconectar, sem recarregar
+- atendimento concluído; Pix recebido pelo banco e conferido pela equipe
+- 15 pontos creditados uma vez; prêmio reservado e entregue
+- atendimento interrompido com motivo; cadeira liberada
+- dona viu e resolveu o Pix tardio pela tela; revisou a interrupção
+  ok 2 [edge] › e2e\piloto.spec.ts:78:1 › roteiro do piloto: do primeiro cliente às pendências da dona (50.9s)
+  2 passed (1.9m)

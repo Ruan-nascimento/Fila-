@@ -1,0 +1,5 @@
+# Exercícios de operação — Chrome, homologação (implantação v7→v8)
+  ok 1 [chrome] › e2e\operacao.spec.ts:129:1 › implantação com gente na fila: nada se perde, ninguém vê erro e as telas voltam sozinhas (31.1s)
+  ok 2 [chrome] › e2e\operacao.spec.ts:219:1 › worker morto no meio do trabalho: ao voltar, faz tudo o que ficou parado (uma vez) (28.4s)
+  ok 3 [chrome] › e2e\operacao.spec.ts:304:1 › restauração de backup: worker travado até conciliar; pagamento depois do backup não se perde (1.6m)
+  3 passed (2.7m)

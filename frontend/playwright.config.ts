@@ -6,6 +6,10 @@ import { defineConfig } from "@playwright/test";
 const baseURL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:15173";
 // Homologação local (etapa 12): Caddy com certificado da CA interna, que o navegador não conhece.
 const ignoreHTTPSErrors = process.env.E2E_IGNORAR_TLS === "1";
+// Docker Desktop no Windows às vezes trava o encaminhamento IPv6 (::1) de uma porta: com
+// E2E_LOCALHOST_IPV4=1, "localhost" resolve para 127.0.0.1 no navegador (o TLS segue com o nome).
+const launchOptions =
+  process.env.E2E_LOCALHOST_IPV4 === "1" ? { args: ["--host-resolver-rules=MAP localhost 127.0.0.1"] } : {};
 
 export default defineConfig({
   testDir: "./e2e",
@@ -19,6 +23,7 @@ export default defineConfig({
   use: {
     baseURL,
     ignoreHTTPSErrors,
+    launchOptions,
     locale: "pt-BR",
     timezoneId: "America/Sao_Paulo",
     trace: "retain-on-failure",

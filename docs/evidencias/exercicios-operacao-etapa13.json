@@ -1,0 +1,53 @@
+{
+  "implantacao": {
+    "duracao_ms": 25928,
+    "leituras": {
+      "total": 73,
+      "falhas": 0,
+      "codigos": {
+        "200": 73
+      },
+      "maxMs": 5641
+    },
+    "saida": [
+      "[0s] banco",
+      "[2s] backup antes de migrar",
+      "[14s] migrações",
+      "[17s] trocando a API",
+      "[23s] trocando o worker",
+      "[24s] publicando o site",
+      "[26s] conferindo pela porta pública",
+      "[26s] ok: versão v8 no ar"
+    ]
+  },
+  "worker": {
+    "parado_ms": 3613,
+    "pix_confirmado_ms": 14173,
+    "tudo_em_dia_ms": 14260
+  },
+  "restauracao": {
+    "backup": "fila-20261114T182820Z",
+    "backup_ms": 13953,
+    "manifesto": "arquivo=fila-20261114T182820Z.dump.enc\ncriado_utc=20261114T182820Z\nhmac_sha256=573aa35fedf860e832c32311602fb8158f7044b2c172eb692481511912242e51\ntamanho_bytes=84989440\ntabelas_com_dados=45\nduracao_segundos=12\n",
+    "restaurar_script_ms": 36026,
+    "restaurar_passos": [
+      "[0s] parando API e worker",
+      "[1s] restaurando fila-20261114T182820Z",
+      "restaurar: ok (fila-20261114T182820Z em 21 s); banco anterior guardado como fila_antes_20261114T182907Z",
+      "[27s] migrações e permissões",
+      "[29s] travando o worker por restauração",
+      "[30s] subindo API e worker (worker travado)",
+      "[36s] pronto para conciliar. Agora:"
+    ],
+    "conciliacao_ms": 1005,
+    "conciliacao": [
+      "· época nova do fluxo de eventos: 1e7807c6-df2d-4ddd-987b-87c87a693048",
+      "· sessões encerradas: 61 · links de e-mail invalidados: 1",
+      "· Pix desde 2026-11-13: 17 pago(s) e 0 estornado(s) no provedor; 0 tentativa(s) do banco consultada(s), 0 seguem em verificação",
+      "· pagamentos registrados agora: 1 · recriadas do provedor: 1 · órfãs: 0 · estornos não registrados: 0",
+      "· diário de exclusões: 9 pedido(s); 8 já no banco; 1 reaplicado(s); 0 de conta inexistente no backup"
+    ],
+    "rto_api_no_ar_ms": 36026,
+    "rto_worker_liberado_ms": 38866
+  }
+}

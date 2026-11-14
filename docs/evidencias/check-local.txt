@@ -1,0 +1,34 @@
+ok  	fila/cmd/api	6.222s
+ok  	fila/cmd/fila-admin	21.093s
+ok  	fila/cmd/migrate	5.677s
+ok  	fila/cmd/worker	29.454s
+ok  	fila/internal/api	210.702s
+ok  	fila/internal/arquitetura	2.328s
+ok  	fila/internal/identidade	2.989s
+ok  	fila/internal/operacao	23.147s
+ok  	fila/internal/pagamento	2.852s
+--- FAIL: TestDeployVarsMatchDeployFiles (corrigido depois: regex sem dígitos; pacote reexecutado: ok) (0.01s)
+    deployvars_test.go:31: implantar.sh usa FILA_CURL_IPV, que não é variável da aplicação nem de DeployVars
+    deployvars_test.go:31: homologacao.env.example usa FILA_CURL_IPV, que não é variável da aplicação nem de DeployVars
+FAIL
+FAIL	fila/internal/platform/config	0.750s
+ok  	fila/internal/platform/database	29.002s
+ok  	fila/internal/platform/httpserver	2.859s
+ok  	fila/internal/platform/idempotency	25.188s
+ok  	fila/internal/platform/keys	1.136s
+ok  	fila/internal/platform/logging	1.808s
+ok  	fila/internal/platform/mail	9.231s
+ok  	fila/internal/platform/maintenance	7.707s
+ok  	fila/internal/platform/metrics	1.607s
+ok  	fila/internal/platform/outbox	16.503s
+ok  	fila/internal/platform/ratelimit	2.092s
+ok  	fila/internal/platform/validate	0.884s
+FAIL
+TESTES FALHARAM
+frontend check:api ok
+frontend format:check ok
+frontend lint ok
+frontend typecheck ok
+frontend test ok
+frontend build ok
+FALHAS: 1

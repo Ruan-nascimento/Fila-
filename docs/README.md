@@ -14,6 +14,11 @@ Regras, decisões e contrato do MVP (etapa 00), usados pelo backend (`backend/`,
 | [contrato/convencoes.md](contrato/convencoes.md) | Envelopes, erros (RFC 9457), paginação, IDs, dinheiro em centavos, datas UTC, idempotência, sessões e CSRF |
 | [contrato/eventos-sse.md](contrato/eventos-sse.md) | Eventos SSE: versão, audiência, cursor pós-commit, snapshot e recuperação |
 | [adr/](adr/README.md) | Decisões de arquitetura (ADR-0001…0026) |
+| [evidencias.md](evidencias.md) | **Revisão final (etapa 13):** o que foi executado, onde, quando e com que resultado; o que não foi testado e o que depende de fora |
+| [rastreabilidade.md](rastreabilidade.md) | Cada regra → cenários → testes que os citam (gerado) |
+| [bugs.md](bugs.md) | Defeitos encontrados, gravidade, reprodução e situação |
+| [guia-por-papel.md](guia-por-papel.md) | Guia curto para cliente, profissional, dono e operador |
+| [piloto.md](piloto.md) | Plano de piloto, critérios de parada e volta atrás |
 | [operacao/](operacao/README.md) | Implantação, monitoramento e alertas, backup e restauração, rotinas de incidente e evidências (etapa 12) |
 | [retencao.md](retencao.md) | Matriz de retenção por categoria (o que o sistema faz hoje; prazos legais pendentes de validação) |
 | [tools/verificar_contrato.py](tools/verificar_contrato.py) | Verificador de rastreabilidade regra → cenário → transição → operação |

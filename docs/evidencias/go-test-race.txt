@@ -1,0 +1,38 @@
+go version go1.27.4 linux/amd64
+ok  	fila/cmd/api	3.199s
+ok  	fila/cmd/fila-admin	12.522s
+ok  	fila/cmd/migrate	3.050s
+ok  	fila/cmd/worker	16.589s
+?   	fila/internal/acesso	[no test files]
+ok  	fila/internal/api	148.482s
+ok  	fila/internal/arquitetura	3.620s
+?   	fila/internal/atendimento	[no test files]
+?   	fila/internal/auditoria	[no test files]
+?   	fila/internal/catalogo	[no test files]
+?   	fila/internal/contrato	[no test files]
+?   	fila/internal/estabelecimento	[no test files]
+?   	fila/internal/exclusao	[no test files]
+?   	fila/internal/fidelidade	[no test files]
+?   	fila/internal/fila	[no test files]
+?   	fila/internal/fluxo	[no test files]
+ok  	fila/internal/identidade	1.813s
+ok  	fila/internal/operacao	10.755s
+ok  	fila/internal/pagamento	1.870s
+?   	fila/internal/pagamento/pagamentotest	[no test files]
+?   	fila/internal/painel	[no test files]
+?   	fila/internal/platform/app	[no test files]
+?   	fila/internal/platform/clock	[no test files]
+ok  	fila/internal/platform/config	1.151s
+ok  	fila/internal/platform/database	14.141s
+ok  	fila/internal/platform/httpserver	1.819s
+ok  	fila/internal/platform/idempotency	11.687s
+ok  	fila/internal/platform/keys	1.022s
+ok  	fila/internal/platform/logging	1.013s
+ok  	fila/internal/platform/mail	7.045s
+ok  	fila/internal/platform/maintenance	5.846s
+ok  	fila/internal/platform/metrics	1.014s
+ok  	fila/internal/platform/outbox	7.856s
+ok  	fila/internal/platform/ratelimit	2.477s
+?   	fila/internal/platform/testdb	[no test files]
+ok  	fila/internal/platform/validate	1.016s
+?   	fila/migrations	[no test files]

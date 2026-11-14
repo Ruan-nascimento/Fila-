@@ -125,6 +125,7 @@ async function comando(api: Api, method: string, path: string, body?: unknown): 
   throw new Error(`${method} ${path}: sem sucesso em 30 s`);
 }
 
+// Cenários: C-OPS-02.
 test("implantação com gente na fila: nada se perde, ninguém vê erro e as telas voltam sozinhas", async ({
   browser,
 }) => {
@@ -214,6 +215,7 @@ test.afterEach(() => {
   }
 });
 
+// Cenários: C-OPS-03.
 test("worker morto no meio do trabalho: ao voltar, faz tudo o que ficou parado (uma vez)", async () => {
   limparLimitesDoTeste();
   const loja = await montarLoja("work");
@@ -298,6 +300,7 @@ test("worker morto no meio do trabalho: ao voltar, faz tudo o que ficou parado (
   evidencias.worker = { parado_ms: t0 - morto, pix_confirmado_ms: pagoMs, tudo_em_dia_ms: tudoMs };
 });
 
+// Cenários: C-OPS-01.
 test("restauração de backup: worker travado até conciliar; pagamento depois do backup não se perde", async () => {
   limparLimitesDoTeste();
   const loja = await montarLoja("rest");

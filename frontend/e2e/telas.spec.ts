@@ -104,6 +104,7 @@ test.beforeAll(async () => {
   await entrarNaFila(loja, cliente, [loja.corte]);
 });
 
+// Cenários: C-WEB-01, C-WEB-02.
 test("telas públicas", async ({ page }, info) => {
   for (const [tela, url] of [
     ["inicio", "/"],
@@ -154,6 +155,7 @@ test("telas do profissional", async ({ page }, info) => {
   }
 });
 
+// Cenários: C-WEB-02.
 test("só teclado: pular para o conteúdo, entrar e foco sempre visível", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/entrar");
