@@ -172,8 +172,12 @@ jobs:
           deploy/backup/restaurar-banco.sh deploy/postgres/init/01-papeis.sh
       - name: Compose válido para homologação e produção
         run: |
-          docker compose -f deploy/compose.yaml --env-file deploy/env/producao.env.example             --profile ferramentas --profile banco-local --profile monitoramento config --quiet --no-env-resolution
-          docker compose -f deploy/compose.yaml --env-file deploy/env/homologacao.env.example config --quiet --no-env-resolution
+          docker compose version
+          for amb in producao homologacao; do
+            cp "deploy/env/aplicacao-$amb.env.example" "$RUNNER_TEMP/app-$amb.env"
+            sed "s#^FILA_CONFIG=.*#FILA_CONFIG=$RUNNER_TEMP/app-$amb.env#" "deploy/env/$amb.env.example" > "$RUNNER_TEMP/$amb.env"
+            docker compose -f deploy/compose.yaml --env-file "$RUNNER_TEMP/$amb.env"               --profile ferramentas --profile banco-local --profile monitoramento config --quiet
+          done
       - name: Regras de alerta válidas (promtool)
         run: >-
           docker run --rm -v "$PWD/deploy/monitoramento:/etc/prometheus:ro" --entrypoint promtool

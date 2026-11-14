@@ -339,4 +339,54 @@ describe("visita atualizada pelo fluxo", () => {
     expect(requests.filter((r) => r.path.endsWith("/my-visit"))).toHaveLength(1);
     expect(FakeES.all).toHaveLength(1); // uma conexão para a página inteira
   });
+
+  it("a posição anda quando quem está na frente é chamado (evento público da fila da pessoa)", async () => {
+    vi.stubGlobal("EventSource", FakeES);
+    let position = 2;
+    const { requests } = fakeApi({
+      "GET /v1/session": () =>
+        Response.json({
+          data: { account: null, session: null, visitors: [], memberships: [], csrf_token: null },
+        }),
+      [`GET /v1/establishments/${EST}/my-visit`]: () => {
+        const v = visit("waiting", 1);
+        return Response.json({
+          data: { ...v, participation: { ...v.participation, position } },
+          cursor: "c1",
+        });
+      },
+      [`GET /v1/public/establishments/${EST}/queues`]: () => Response.json({ data: [], cursor: "c1" }),
+      [`GET /v1/public/establishments/${EST}/services`]: () => Response.json({ data: [] }),
+    });
+    render(
+      <SessionProvider>
+        <StreamProvider estId={EST} channels={["public", "visit"]}>
+          <MinhaVisita shopId={EST} />
+        </StreamProvider>
+      </SessionProvider>,
+    );
+    expect(await screen.findByText(/você é o 2º da fila/)).toBeInTheDocument();
+    const es = FakeES.last();
+    const visits = () => requests.filter((r) => r.path.endsWith("/my-visit")).length;
+    // Fila de OUTRO profissional: nada a reler.
+    act(() =>
+      es.emit(
+        "queue.public.updated",
+        envelope("queue.public.updated", { type: "queue", id: "q2", version: 5 }, {}),
+        "c2",
+      ),
+    );
+    expect(visits()).toBe(1);
+    // A pessoa da frente foi chamada: a fila da Lia mudou e a tela relê a própria visita.
+    position = 1;
+    act(() =>
+      es.emit(
+        "queue.public.updated",
+        envelope("queue.public.updated", { type: "queue", id: "q1", version: 6 }, {}),
+        "c3",
+      ),
+    );
+    expect(await screen.findByText(/você é o 1º da fila/)).toBeInTheDocument();
+    expect(visits()).toBe(2);
+  });
 });

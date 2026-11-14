@@ -385,3 +385,13 @@ func TestStagingIsHardenedButNeverCharges(t *testing.T) {
 		t.Fatal("homologação ignora .env")
 	}
 }
+
+// Variáveis da implantação (terminal do operador) não são erro; as da aplicação continuam vigiadas.
+func TestDeployVarsAreIgnored(t *testing.T) {
+	if _, err := Load(valid("FILA_IMAGEM_BACKEND=fila-backend:v2", "FILA_SEGREDOS=/etc/fila/segredos")); err != nil {
+		t.Fatalf("variáveis de implantação deveriam ser ignoradas: %v", err)
+	}
+	if _, err := Load(valid("FILA_IMAGEM_BACKNED=x")); err == nil {
+		t.Fatal("erro de digitação continua sendo acusado")
+	}
+}

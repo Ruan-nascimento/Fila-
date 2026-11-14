@@ -232,6 +232,14 @@ var knownVars = map[string]bool{
 	VarDeletionJournal: true,
 }
 
+// DeployVars são variáveis da IMPLANTAÇÃO (deploy/compose.yaml, deploy/*.sh), não da aplicação:
+// existem no terminal do operador e a aplicação as ignora (mas não as acusa como erro de digitação).
+var DeployVars = []string{"FILA_AMBIENTE", "FILA_BACKUPS_DIR", "FILA_BACKUP_RETENCAO_DIAS", "FILA_BANCO_HOST",
+	"FILA_BANCO_LOCAL", "FILA_BANCO_PORTA", "FILA_CHAVE_ANTERIOR_ARQUIVO", "FILA_COMPOSE_EXTRA", "FILA_CONFIG",
+	"FILA_CURL_INSEGURO", "FILA_DIARIO_DIR", "FILA_DOMINIO", "FILA_IMAGEM_BACKEND", "FILA_IMAGEM_WEB",
+	"FILA_PIX_CHAVE_ARQUIVO", "FILA_PIX_WEBHOOK_ARQUIVO", "FILA_PORTA_HTTP", "FILA_PORTA_HTTPS", "FILA_PORTA_PROMETHEUS",
+	"FILA_SEGREDOS", "FILA_SEM_BUILD", "FILA_TLS_MODO"}
+
 // FileVars são os segredos que também podem vir de arquivo: NOME_FILE=/caminho (segredos da
 // plataforma montados como arquivo, ex.: Docker secrets). Nunca as duas formas juntas.
 var FileVars = []string{VarDatabaseURL, VarSecretKey, VarSecretKeyPrevious, VarAbacateKey, VarAbacateWebhook}
@@ -596,6 +604,9 @@ func (l *loader) unknownVars() {
 	fileVar := map[string]bool{}
 	for _, v := range FileVars {
 		fileVar[v+"_FILE"] = true
+	}
+	for _, v := range DeployVars {
+		fileVar[v] = true
 	}
 	for k := range l.env {
 		if strings.HasPrefix(k, "FILA_") && !knownVars[k] && !fileVar[k] {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { api } from "../../api/client";
 import { call, problemMessage } from "../../api/problem";
 import type { components } from "../../api/schema.gen";
@@ -65,10 +65,49 @@ export function MinhaVisita({ shopId }: { shopId: string }) {
 
   // Atualizações pelo fluxo SSE: snapshot (ao conectar/reconectar) e eventos da própria visita.
   // Cada evento traz o recurso completo e a versão; só vale se for mais novo que o da tela.
+  // A posição e a espera dependem de QUEM ESTÁ NA FRENTE: quando a fila pública da pessoa muda
+  // (alguém chamado, saiu, entrou), relê a própria visita. Uma leitura por vez; mudanças durante a
+  // leitura pedem mais uma. A leitura só substitui a tela se não for mais velha que ela.
+  const refreshing = useRef<"idle" | "busy" | "again">("idle");
+  // Lido por função: o valor muda em outra chamada enquanto esta espera a resposta.
+  const again = () => refreshing.current === "again";
+  const refreshPosition = useCallback(async () => {
+    if (refreshing.current !== "idle") {
+      refreshing.current = "again";
+      return;
+    }
+    refreshing.current = "busy";
+    try {
+      for (;;) {
+        const out = await fetchVisit();
+        if (out.ok) {
+          const fresh = out.data.data ?? null;
+          setVisit((cur) =>
+            !cur || !fresh || cur.participation.id !== fresh.participation.id
+              ? cur
+              : fresh.participation.version >= cur.participation.version &&
+                  fresh.order.version >= cur.order.version
+                ? fresh
+                : cur,
+          );
+        }
+        if (!again()) break;
+        refreshing.current = "busy";
+      }
+    } finally {
+      refreshing.current = "idle";
+    }
+  }, [fetchVisit]);
+
   useStreamMessages((m) => {
     if (m.type === "stream.snapshot") {
       const d = m.data as { visit?: Visit | null; granted_channels: string[] };
       if (d.granted_channels.includes("visit")) setVisit(d.visit ?? null);
+      return;
+    }
+    if (m.type === "queue.public.updated") {
+      if (visit && visit.participation.status === "waiting" && m.resource.id === visit.participation.queue_id)
+        void refreshPosition();
       return;
     }
     if (m.audience !== "visit") return;
