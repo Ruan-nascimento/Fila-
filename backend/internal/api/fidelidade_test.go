@@ -143,6 +143,7 @@ func TestLoyaltyProgramStartsDisabled(t *testing.T) {
 
 // R-FID-02…05 — crédito uma única vez, só depois de pago E conferido; elegibilidade é a da
 // entrada; visitante, interrupção, cancelamento e serviço não feito não geram pontos.
+// Cenários: C-FID-02, C-FID-03, C-FID-04, C-FID-05.
 func TestCreditOnceAfterPaidAndConferred(t *testing.T) {
 	e := newEnv(t)
 	b := e.barbearia(t) // Corte = 10 pontos, Barba = 5
@@ -256,6 +257,7 @@ func TestCreditOnceAfterPaidAndConferred(t *testing.T) {
 
 // R-FID-09…12 — reserva trava pontos e unidade; uma ativa por conta; cancelar/entregar/corrigir
 // uma vez; condições aceitas preservadas; só a equipe da loja entrega; só o dono corrige.
+// Cenários: C-FID-05, C-FID-07, C-FID-08.
 func TestRewardReservationLifecycle(t *testing.T) {
 	e := newEnv(t)
 	b := e.barbearia(t)
@@ -379,6 +381,7 @@ func TestRewardReservationLifecycle(t *testing.T) {
 }
 
 // R-FID-14 — última unidade disputada: exatamente uma reserva; ninguém fica com estoque negativo.
+// Cenários: C-FID-09.
 func TestLastUnitConcurrency(t *testing.T) {
 	e := newEnv(t)
 	b := e.barbearia(t)
@@ -418,6 +421,7 @@ func TestLastUnitConcurrency(t *testing.T) {
 
 // Gasto duplo: a mesma conta tentando reservar dois prêmios ao mesmo tempo com saldo para um só,
 // e o banco recusando reserva acima do disponível mesmo se o código falhasse.
+// Cenários: C-FID-09.
 func TestNoDoubleSpend(t *testing.T) {
 	e := newEnv(t)
 	b := e.barbearia(t)
@@ -447,6 +451,7 @@ func TestNoDoubleSpend(t *testing.T) {
 
 // T-RW-03 × T-RW-04 — entrega contra vencimento: depois do prazo a entrega é recusada e o
 // vencimento libera uma vez; antes do prazo a entrega vence a corrida e o vencimento não faz nada.
+// Cenários: C-FID-08, C-FID-10.
 func TestDeliveryVersusExpiry(t *testing.T) {
 	e := newEnv(t)
 	b := e.barbearia(t)
@@ -502,6 +507,7 @@ func TestDeliveryVersusExpiry(t *testing.T) {
 
 // R-FID-08 — estorno integral do principal reverte o crédito uma vez (saldo pode ficar negativo
 // sem dívida; novo resgate bloqueado); devolver um excedente não reverte a compra válida.
+// Cenários: C-FID-06.
 func TestRefundAfterRedemption(t *testing.T) {
 	e := newEnv(t)
 	b := e.barbearia(t)
@@ -563,6 +569,7 @@ func TestRefundAfterRedemption(t *testing.T) {
 
 // R-FID-13 — desligar preserva saldo, consulta e reservas ativas (cancelar e entregar seguem
 // valendo); só impede novas reservas e novos acúmulos.
+// Cenários: C-FID-07, C-FID-11.
 func TestDisablingProgramKeepsRights(t *testing.T) {
 	e := newEnv(t)
 	b := e.barbearia(t)

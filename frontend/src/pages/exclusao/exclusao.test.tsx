@@ -138,6 +138,7 @@ describe("Consulta pelo protocolo", () => {
 });
 
 describe("Exclusões na gestão", () => {
+  // Cenários: C-EXC-04.
   it("destaca o que está perto da meta de 30 dias, sem chamar de prazo legal", async () => {
     const old = new Date(Date.now() - 26 * 24 * 60 * 60 * 1000).toISOString();
     fakeApi({

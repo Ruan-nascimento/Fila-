@@ -133,6 +133,7 @@ describe("cliente SSE", () => {
     expect(FakeES.open()).toHaveLength(0);
   });
 
+  // Cenários: C-SSE-04, C-WEB-03.
   it("aparelho sem internet: fecha a conexão e avisa na hora; volta com a rede, pelo cursor", () => {
     vi.useFakeTimers();
     const statuses: StreamStatus[] = [];

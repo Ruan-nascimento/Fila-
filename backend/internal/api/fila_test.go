@@ -77,6 +77,7 @@ func (e *env) partStatus(t *testing.T, id string) (status, queue string) {
 }
 
 // C-FILA-01 — entrada válida; preço calculado no servidor; fila pública sem dados privados.
+// Cenários: C-CMD-01.
 func TestQueueEntry(t *testing.T) {
 	e := newEnv(t)
 	b := e.barbearia(t)
@@ -186,6 +187,7 @@ func TestSameIdentityTwoTabs(t *testing.T) {
 }
 
 // C-FILA-03 — entradas simultâneas enquanto a dona pausa: tudo ou nada; posições e senhas únicas.
+// Cenários: C-EST-04.
 func TestConcurrentEntriesWhilePausing(t *testing.T) {
 	e := newEnv(t)
 	b := e.barbearia(t)
@@ -630,6 +632,7 @@ func TestVisitorVisitLifecycle(t *testing.T) {
 }
 
 // Fila real (etapa 04) nas regras da etapa 03: fechar e desativar respeitam quem está na fila.
+// Cenários: C-EST-04.
 func TestQueueRulesWithRealParticipations(t *testing.T) {
 	e := newEnv(t)
 	b := e.barbearia(t)

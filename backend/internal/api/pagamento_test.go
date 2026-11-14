@@ -393,6 +393,7 @@ func TestPixExpiredAllowsNewCharge(t *testing.T) {
 }
 
 // C-PAG-05, C-PAG-09 — dinheiro com troco; valor adulterado; repetição; quem pode registrar.
+// Cenários: C-CMD-01.
 func TestCashWithChange(t *testing.T) {
 	e := newEnv(t)
 	b := e.barbearia(t)

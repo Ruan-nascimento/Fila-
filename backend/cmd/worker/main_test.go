@@ -122,6 +122,7 @@ func TestWorkerDeliversQueuedMail(t *testing.T) {
 
 // Worker travado (manutenção) não roda NENHUMA tarefa, mas continua expondo os indicadores (é
 // assim que o alerta aparece). Ao soltar a trava, as tarefas voltam e o trabalho parado é feito.
+// Cenários: C-OPS-03.
 func TestWorkerHeldDoesNothingUntilReleased(t *testing.T) {
 	t.Chdir(t.TempDir())
 	pool := testdb.Migrated(t)

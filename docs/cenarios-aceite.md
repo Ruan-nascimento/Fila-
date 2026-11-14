@@ -952,6 +952,15 @@ Quando a origem está certa mas falta `X-CSRF-Token`
 Então recebe `403 csrf_failed`
 E os cookies são `Secure; HttpOnly; SameSite=Lax` e nenhum token é guardado em `localStorage`.
 
+### C-SEG-12 — Varredura de autorização em todas as rotas
+- Regras: R-PERM-01, R-PERM-02 · Contrato: `x-authz` · Tipo: integração (etapa 13)
+
+Dado recursos reais da loja A (visita, comanda paga, recebimento, cobrança, reserva, convite)
+Quando cada rota do contrato é chamada por anônimo, dona de outra loja (com a loja A e com a própria loja na URL), cliente sem relação, visitante sem relação e outro profissional da mesma loja
+Então toda chamada que o `x-authz` não permite responde 401, 403 ou 404 — inclusive com corpo válido
+E as leituras permitidas (dados próprios, listas filtradas) não trazem recurso alheio
+E nada muda nos recursos da loja A.
+
 ### C-SEG-10 — Limites de corpo e campos
 - Regras: R-SEG-04 · Contrato: `payload_too_large`, `validation_failed` · Tipo: integração
 

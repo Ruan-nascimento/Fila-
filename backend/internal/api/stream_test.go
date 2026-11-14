@@ -221,6 +221,7 @@ func channelsOf(v any) []string {
 // ---------------------------------------------------------------------------------------------
 
 // Snapshot autorizado + eventos ao vivo, cada um com a visão da própria audiência.
+// Cenários: C-SSE-01.
 func TestStreamSnapshotAndLiveEvents(t *testing.T) {
 	e := newEnv(t)
 	b := e.barbearia(t)
@@ -286,6 +287,7 @@ func mustJSON(v any) []byte {
 
 // Retomada pelo cursor (parâmetro e Last-Event-ID); cursor ilegível, de outra época ou vencido
 // recebe snapshot novo.
+// Cenários: C-SSE-07.
 func TestStreamResumeAndCursorFallbacks(t *testing.T) {
 	e := newEnv(t)
 	b := e.barbearia(t)
@@ -352,6 +354,7 @@ func TestStreamResumeAndCursorFallbacks(t *testing.T) {
 
 // Evento publicado enquanto o snapshot é montado (antes e depois de fixar a posição): o cliente
 // converge ao estado verdadeiro, sem perder nada.
+// Cenários: C-SSE-02.
 func TestStreamEventDuringSnapshotConverges(t *testing.T) {
 	for _, stage := range []string{"registered", "in_snapshot"} {
 		t.Run(stage, func(t *testing.T) {
@@ -406,6 +409,7 @@ func TestStreamEventDuringSnapshotConverges(t *testing.T) {
 
 // Audiência indevida: cliente só recebe a própria visita; profissional só a própria fila; replay
 // com cursor de outra pessoa não revela nada além do que a sessão pode ver.
+// Cenários: C-SSE-05.
 func TestStreamAudienceIsolation(t *testing.T) {
 	e := newEnv(t)
 	b := e.barbearia(t)
@@ -457,6 +461,7 @@ func TestStreamAudienceIsolation(t *testing.T) {
 
 // Sessão revogada encerra a conexão já aberta: logout, fim do acesso de equipe e expiração
 // (reconferência periódica).
+// Cenários: C-SSE-06.
 func TestStreamSessionRevoked(t *testing.T) {
 	e := newEnvDeps(t, func(d *api.Deps) {
 		d.StreamLimits = fluxo.Limits{Heartbeat: time.Second, Revalidate: 300 * time.Millisecond, MaxLifetime: time.Minute,
@@ -492,6 +497,7 @@ func TestStreamSessionRevoked(t *testing.T) {
 
 // Dois processos de API sobre o mesmo banco entregam a mesma sequência; reinício de um deles e
 // queda da conexão: o cliente volta pelo cursor em outro processo sem perder eventos.
+// Cenários: C-SSE-08.
 func TestStreamTwoAPIProcessesAndRestart(t *testing.T) {
 	e := newEnv(t)
 	b := e.barbearia(t)

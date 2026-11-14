@@ -453,6 +453,7 @@ func TestCompleteFreesChair(t *testing.T) {
 }
 
 // C-ATD-02/03 — interrupção com valor positivo; revisão só pelo dono; sem pontos.
+// Cenários: C-ATD-03.
 func TestInterruptionPositive(t *testing.T) {
 	e := newEnv(t)
 	b := e.barbearia(t)
@@ -642,6 +643,7 @@ func TestAdjustClosedOrder(t *testing.T) {
 }
 
 // Leitura e lista de comandas: quem vê o quê (R-PERM-*), filtro e paginação por cursor.
+// Cenários: C-SEG-02, C-SEG-03, C-SEG-04.
 func TestOrderAccessAndList(t *testing.T) {
 	e := newEnv(t)
 	b := e.barbearia(t)

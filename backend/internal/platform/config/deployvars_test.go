@@ -11,7 +11,7 @@ import (
 // A lista DeployVars acompanha os arquivos de implantação: toda variável FILA_ usada lá é da
 // aplicação (conhecida) ou da implantação (DeployVars).
 func TestDeployVarsMatchDeployFiles(t *testing.T) {
-	re := regexp.MustCompile(`FILA_[A-Z_]+`)
+	re := regexp.MustCompile(`FILA_[A-Z0-9_]+`)
 	files, _ := filepath.Glob(filepath.Join("..", "..", "..", "..", "deploy", "*"))
 	more, _ := filepath.Glob(filepath.Join("..", "..", "..", "..", "deploy", "env", "*.example"))
 	files = append(files, more...)

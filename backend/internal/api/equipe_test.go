@@ -65,6 +65,7 @@ func TestCreateProfessionalCreatesClosedQueue(t *testing.T) {
 }
 
 // C-EST-03 — só a dona abre, pausa e fecha; o profissional só sinaliza indisponibilidade.
+// Cenários: C-SEG-04.
 func TestQueueStatesAndPermissions(t *testing.T) {
 	e := newEnv(t)
 	loja := e.shop("barbearia-teste", "ana@exemplo.com")
@@ -308,6 +309,7 @@ func TestEstablishmentConfiguration(t *testing.T) {
 }
 
 // Consultas cruzadas: nada de outra loja é visível ou alterável, nem por id direto.
+// Cenários: C-SEG-02.
 func TestCrossEstablishmentIsolation(t *testing.T) {
 	e := newEnv(t)
 	lojaA := e.shop("loja-a", "ana@exemplo.com")

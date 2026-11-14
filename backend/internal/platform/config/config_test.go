@@ -336,6 +336,7 @@ func TestPreviousKeysAndOps(t *testing.T) {
 	}
 }
 
+// Cenários: C-OPS-04.
 func TestProductionPixOnlyOfficialHost(t *testing.T) {
 	prod := []string{"FILA_ENV=production",
 		"FILA_DATABASE_URL=postgres://fila:segredo-real-1@db:5432/fila?sslmode=require",
@@ -358,6 +359,7 @@ func TestProductionPixOnlyOfficialHost(t *testing.T) {
 
 // Homologação: travas de produção (https, cookies Secure, banco com TLS), mas Pix só com chave de
 // teste e simulador/sandbox permitidos; e-mail em arquivo permitido (sem provedor de e-mail).
+// Cenários: C-OPS-04.
 func TestStagingIsHardenedButNeverCharges(t *testing.T) {
 	base := []string{"FILA_ENV=homologacao",
 		"FILA_DATABASE_URL=postgres://fila:segredo-real-1@db:5432/fila?sslmode=require",

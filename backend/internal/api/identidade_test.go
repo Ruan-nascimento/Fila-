@@ -521,6 +521,7 @@ func TestCSRFAndOrigin(t *testing.T) {
 }
 
 // C-SEG-05 / C-SEG-01 — papel vem da sessão; escalada e acesso a outra loja são negados.
+// Cenários: C-SEG-02.
 func TestRoleEscalationAndCrossEstablishment(t *testing.T) {
 	e := newEnv(t)
 	lojaA := e.shop("loja-a", "ana@exemplo.com")

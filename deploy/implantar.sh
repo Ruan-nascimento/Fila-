@@ -64,7 +64,7 @@ passo "publicando o site"
 
 passo "conferindo pela porta pública"
 for _ in $(seq 1 30); do
-	if curl -fsS ${FILA_CURL_INSEGURO:+-k} "https://${FILA_DOMINIO}:${FILA_PORTA_HTTPS:-443}/healthz/ready" >/dev/null; then
+	if curl -fsS --max-time 5 ${FILA_CURL_INSEGURO:+-k} ${FILA_CURL_IPV4:+-4} "https://${FILA_DOMINIO}:${FILA_PORTA_HTTPS:-443}/healthz/ready" >/dev/null; then
 		passo "ok: versão $VERSAO no ar"
 		exit 0
 	fi

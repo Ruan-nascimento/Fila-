@@ -37,6 +37,7 @@ func visitorIDs(s map[string]any) []string {
 }
 
 // C-VIS-01 — visitante entra com nick e recebe código uma vez; banco guarda só HMAC.
+// Cenários: C-SEG-07.
 func TestVisitorSessionAndRecoveryCode(t *testing.T) {
 	e := newEnv(t)
 	loja := e.shop("barbearia-teste", "ana@exemplo.com")
