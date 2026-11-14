@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"fila/internal/atendimento"
+	"fila/internal/auditoria"
 	"fila/internal/catalogo"
 	"fila/internal/estabelecimento"
 	"fila/internal/exclusao"
@@ -142,6 +143,7 @@ func New(d Deps, register func(mux *http.ServeMux)) (*API, error) {
 	a.routes = append(a.routes, pay.Routes()...)
 	a.routes = append(a.routes, panel.Routes()...)
 	a.routes = append(a.routes, loyalty.Routes()...)
+	a.routes = append(a.routes, (&auditoria.Service{Pool: d.Pool, Auth: ident}).Routes()...)
 	a.routes = append(a.routes, stream.Routes()...)
 	a.routes = append(a.routes, deletion.Routes()...)
 	hs.Mount(a.mux, d.Log, a.routes)

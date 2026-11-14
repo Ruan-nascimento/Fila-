@@ -18,6 +18,7 @@ func (s *Service) Routes() []hs.Route {
 		{Operation: "logout", Method: http.MethodPost, Path: "/v1/auth/logout", Grants: hs.GrantAnyAccount, Handler: s.logout},
 		{Operation: "requestPasswordReset", Method: http.MethodPost, Path: "/v1/auth/password-reset/request", Grants: pub, Handler: s.requestPasswordReset},
 		{Operation: "confirmPasswordReset", Method: http.MethodPost, Path: "/v1/auth/password-reset/confirm", Grants: pub, Handler: s.confirmPasswordReset},
+		{Operation: "updateMyProfile", Method: http.MethodPatch, Path: "/v1/me", Grants: hs.GrantAnyAccount, Handler: s.updateMyProfile},
 		{Operation: "changePassword", Method: http.MethodPost, Path: "/v1/auth/password/change", Grants: hs.GrantAnyAccount, Handler: s.changePassword},
 		{Operation: "reauthenticate", Method: http.MethodPost, Path: "/v1/auth/reauthenticate", Grants: hs.GrantAnyAccount, Handler: s.reauthenticate},
 		{Operation: "acceptInvite", Method: http.MethodPost, Path: "/v1/auth/invites/accept", Grants: pub, Handler: s.acceptInvite},
