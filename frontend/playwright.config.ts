@@ -4,6 +4,8 @@ import { defineConfig } from "@playwright/test";
 // real. O ambiente (API, worker, Vite, banco e simulador de Pix) é preparado fora daqui: veja
 // docs/web-validacao.md. E2E_BASE_URL aponta para o Vite desse ambiente.
 const baseURL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:15173";
+// Homologação local (etapa 12): Caddy com certificado da CA interna, que o navegador não conhece.
+const ignoreHTTPSErrors = process.env.E2E_IGNORAR_TLS === "1";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -16,6 +18,7 @@ export default defineConfig({
   outputDir: "e2e-resultados",
   use: {
     baseURL,
+    ignoreHTTPSErrors,
     locale: "pt-BR",
     timezoneId: "America/Sao_Paulo",
     trace: "retain-on-failure",

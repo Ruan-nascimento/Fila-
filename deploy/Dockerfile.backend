@@ -1,0 +1,22 @@
+# Imagem do backend: api, worker, migrate e fila-admin num só binário por comando.
+# Construir (na raiz do repositório):  docker build -f deploy/Dockerfile.backend -t fila-backend .
+# Imagens base fixadas por versão E digest (Dependabot atualiza).
+
+FROM golang:1.27.4-alpine@sha256:0a5f7fe796599ff487605987432e7619ae45beeb2fba4c2ce0b907879932aebf AS build
+WORKDIR /src
+ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOFLAGS=-trimpath
+COPY backend/go.mod backend/go.sum ./
+RUN go mod download
+COPY backend/ ./
+ARG VERSAO=desconhecida
+RUN go build -ldflags="-s -w" -o /out/ ./cmd/api ./cmd/worker ./cmd/migrate ./cmd/fila-admin
+
+# Sem shell, sem gerenciador de pacotes, usuário sem privilégio (uid 65532).
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
+ARG VERSAO=desconhecida
+LABEL org.opencontainers.image.title="fila-backend" org.opencontainers.image.version="${VERSAO}"
+COPY --from=build /out/ /usr/local/bin/
+USER nonroot:nonroot
+EXPOSE 8080 9090
+HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=3 CMD ["/usr/local/bin/api", "healthcheck"]
+ENTRYPOINT ["/usr/local/bin/api"]

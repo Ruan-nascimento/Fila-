@@ -1,0 +1,120 @@
+# Alertas acionáveis: cada um diz o que está errado, quem age e onde está o passo a passo
+# (docs/operacao/rotinas.md#<rotina>). Os limiares dos alertas de negócio são os mesmos de
+# operacao.Evaluate (fila-admin verificar), conferido por teste.
+groups:
+  - name: fila-disponibilidade
+    rules:
+      - alert: FilaApiForaDoAr
+        expr: up{job="fila-api"} == 0
+        for: 1m
+        labels: {severity: critico, responsavel: operador, rotina: api-fora}
+        annotations:
+          summary: "A API não responde às coletas há 1 minuto: o site não funciona."
+      - alert: FilaWorkerForaDoAr
+        expr: up{job="fila-worker"} == 0
+        for: 2m
+        labels: {severity: critico, responsavel: operador, rotina: worker-parado}
+        annotations:
+          summary: "O processo do worker não responde: Pix, e-mails, exclusões e vencimentos param."
+      - alert: FilaErros5xx
+        expr: sum(rate(fila_http_requests_total{status=~"5.."}[5m])) > 0.05 and sum(rate(fila_http_requests_total{status=~"5.."}[5m])) / sum(rate(fila_http_requests_total[5m])) > 0.01
+        for: 5m
+        labels: {severity: critico, responsavel: operador, rotina: erros-5xx}
+        annotations:
+          summary: "Mais de 1% das requisições com erro do servidor nos últimos 5 minutos."
+      - alert: FilaLatenciaAlta
+        expr: histogram_quantile(0.95, sum by (le) (rate(fila_http_request_duration_seconds_bucket[5m]))) > 1
+        for: 10m
+        labels: {severity: aviso, responsavel: operador, rotina: lentidao}
+        annotations:
+          summary: "95% das requisições levam mais de 1 s há 10 minutos."
+      - alert: FilaSSEPertoDoTeto
+        expr: fila_sse_connections > 1600
+        for: 5m
+        labels: {severity: aviso, responsavel: operador, rotina: lentidao}
+        annotations:
+          summary: "Conexões de tempo real acima de 80% do teto do processo (2000)."
+      - alert: FilaPoolDoBancoCheio
+        expr: increase(fila_db_pool_empty_acquire_total[5m]) > 50
+        for: 5m
+        labels: {severity: aviso, responsavel: operador, rotina: lentidao}
+        annotations:
+          summary: "Requisições esperando conexão livre com o banco (pool cheio)."
+      - alert: FilaAbusoLimiteGeral
+        expr: increase(fila_http_rate_limited_total[10m]) > 500
+        labels: {severity: aviso, responsavel: operador, rotina: abuso}
+        annotations:
+          summary: "Muitas requisições recusadas pelo limite por IP (robô ou ataque?)."
+
+  - name: fila-tarefas-e-dinheiro
+    rules:
+      - alert: FilaIndicadoresSemLeitura
+        expr: time() - fila_indicators_last_success_timestamp_seconds > 120
+        labels: {severity: critico, responsavel: operador, rotina: worker-parado}
+        annotations:
+          summary: "O worker não consegue ler os indicadores do banco há 2 minutos."
+      - alert: FilaWorkerTravadoRestauracao
+        expr: fila_worker_restore_hold == 1
+        labels: {severity: critico, responsavel: operador, rotina: restauracao}
+        annotations:
+          summary: "Worker travado por restauração de backup: conciliar e liberar."
+      - alert: FilaWorkerEmManutencaoLonga
+        expr: fila_worker_hold == 1 and fila_worker_restore_hold == 0 and fila_worker_hold_seconds > 7200
+        labels: {severity: aviso, responsavel: operador, rotina: manutencao}
+        annotations:
+          summary: "Worker em manutenção há mais de 2 horas."
+      - alert: FilaWorkerSemSinal
+        expr: fila_worker_hold == 0 and fila_worker_last_seen_age_seconds > 120
+        labels: {severity: critico, responsavel: operador, rotina: worker-parado}
+        annotations:
+          summary: "O worker não registra sinal de vida no banco há 2 minutos."
+      - alert: FilaOutboxAtrasada
+        expr: fila_outbox_pending > 0 and fila_outbox_oldest_seconds > 60
+        labels: {severity: critico, responsavel: operador, rotina: worker-parado}
+        annotations:
+          summary: "Eventos sem publicar há mais de 1 minuto: as telas não se atualizam sozinhas."
+      - alert: FilaPixDesconhecido
+        expr: fila_pix_charges_stuck > 0
+        labels: {severity: aviso, responsavel: "operador e dono da loja", rotina: provedor-indisponivel}
+        annotations:
+          summary: "Cobrança Pix com resultado desconhecido há mais de 15 minutos."
+      - alert: FilaDivergenciaFinanceiraAntiga
+        expr: sum(fila_financial_issues_open) > 0 and fila_financial_issue_oldest_seconds > 259200
+        labels: {severity: aviso, responsavel: "dono da loja", rotina: divergencia-financeira}
+        annotations:
+          summary: "Pendência financeira aberta há mais de 3 dias."
+      - alert: FilaDivergenciaPosRestauracao
+        expr: sum(fila_financial_issues_open{kind=~"restored_.*"}) > 0
+        labels: {severity: critico, responsavel: "operador e dono da loja", rotina: restauracao}
+        annotations:
+          summary: "Pagamento ou estorno que o backup não tinha: o dono precisa tratar."
+      - alert: FilaEstornoParado
+        expr: fila_refunds_stuck > 0
+        labels: {severity: aviso, responsavel: operador, rotina: provedor-indisponivel}
+        annotations:
+          summary: "Estorno pedido há mais de 24 h sem confirmação do provedor."
+      - alert: FilaExclusaoSemProcessamento
+        expr: fila_deletions_processing > 0 and fila_deletions_unchecked_seconds > 900
+        labels: {severity: critico, responsavel: operador, rotina: worker-parado}
+        annotations:
+          summary: "Exclusões de conta sem reavaliação há 15 minutos (tarefa parada?)."
+      - alert: FilaExclusaoPertoDaMeta
+        expr: fila_deletions_near_target > 0
+        labels: {severity: aviso, responsavel: "operador e dono da loja", rotina: exclusao-atrasada}
+        annotations:
+          summary: "Exclusão em processamento há 25 dias ou mais (meta operacional de 30 dias)."
+      - alert: FilaReservaVencidaPresa
+        expr: fila_reservations_overdue > 0
+        labels: {severity: critico, responsavel: operador, rotina: worker-parado}
+        annotations:
+          summary: "Reserva de prêmio vencida e não liberada (pontos presos)."
+      - alert: FilaEmailParado
+        expr: fila_mail_pending > 0 and fila_mail_oldest_pending_seconds > 900
+        labels: {severity: aviso, responsavel: operador, rotina: email}
+        annotations:
+          summary: "E-mail esperando envio há mais de 15 minutos."
+      - alert: FilaEmailFalhou
+        expr: fila_mail_failed_24h > 0
+        labels: {severity: aviso, responsavel: operador, rotina: email}
+        annotations:
+          summary: "E-mail desistido nas últimas 24 h."

@@ -1,0 +1,17 @@
+# Contexto de build das imagens (deploy/Dockerfile.*): só o código. Nunca segredo nem artefato local.
+.git
+.github
+.env
+.env.*
+**/.correio
+**/node_modules
+frontend/dist
+frontend/coverage
+frontend/e2e-relatorio
+frontend/e2e-resultados
+backend/bin
+deploy/env/*.env
+*.pem
+*.key
+*.dump
+*.dump.enc

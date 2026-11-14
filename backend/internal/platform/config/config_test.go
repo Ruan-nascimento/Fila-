@@ -355,3 +355,33 @@ func TestProductionPixOnlyOfficialHost(t *testing.T) {
 		t.Fatalf("simulador fora de produção deve passar: %v", err)
 	}
 }
+
+// Homologação: travas de produção (https, cookies Secure, banco com TLS), mas Pix só com chave de
+// teste e simulador/sandbox permitidos; e-mail em arquivo permitido (sem provedor de e-mail).
+func TestStagingIsHardenedButNeverCharges(t *testing.T) {
+	base := []string{"FILA_ENV=homologacao",
+		"FILA_DATABASE_URL=postgres://fila:segredo-real-1@db:5432/fila?sslmode=require",
+		"FILA_ALLOWED_ORIGINS=https://homolog.exemplo.com.br", "FILA_PUBLIC_BASE_URL=https://homolog.exemplo.com.br",
+		"FILA_MAIL_MODE=file", "FILA_PIX_PROVIDER=abacatepay", "FILA_ABACATEPAY_API_KEY=abc_dev_x",
+		"FILA_ABACATEPAY_BASE_URL=http://pixfake:18090/v2"}
+	cfg, err := Load(base)
+	if err != nil || !cfg.Security.CookieSecure || !cfg.Env.Hardened() {
+		t.Fatalf("homologação válida: %v", err)
+	}
+	for _, bad := range [][]string{
+		{"FILA_ABACATEPAY_API_KEY=abc_prod_x"},
+		{"FILA_DATABASE_URL=postgres://fila:segredo-real-1@db:5432/fila?sslmode=disable"},
+		{"FILA_ALLOWED_ORIGINS=http://homolog.exemplo.com.br"},
+		{"FILA_COOKIE_SECURE=false"},
+	} {
+		env := append(append([]string(nil), base...), bad...)
+		if _, err := Load(env); err == nil {
+			t.Errorf("homologação deveria recusar %v", bad)
+		}
+	}
+	if environ, _, _ := effectiveEnviron([]string{"FILA_ENV=homologacao"}, func(string) ([]byte, error) {
+		return []byte("FILA_SECRET_KEY=do-arquivo"), nil
+	}); len(environ) != 1 {
+		t.Fatal("homologação ignora .env")
+	}
+}

@@ -1,0 +1,194 @@
+# Homologação e produção num servidor com Docker (docs/operacao/implantacao.md).
+#
+#   docker compose -f deploy/compose.yaml --env-file /etc/fila/producao.env up -d
+#
+# O arquivo --env-file (modelo em deploy/env/) diz QUAL ambiente é e onde ficam os segredos;
+# nenhum segredo fica neste arquivo nem no repositório. Os segredos são arquivos numa pasta do
+# servidor (FILA_SEGREDOS), separados por quem precisa deles:
+#   banco/     senhas dos papéis do PostgreSQL (só o contêiner do banco lê)
+#   migrador/  database_url do papel dono das tabelas (só o migrate lê)
+#   app/       database_url do papel da aplicação, chave do servidor, chave/secret da AbacatePay
+#   backup/    senha do papel de backup e chave de cifra dos backups
+#
+# Perfis: banco-local (PostgreSQL neste servidor; sem ele, use um banco gerenciado),
+#         ferramentas (migrate, fila-admin, backup, restore), monitoramento (Prometheus).
+
+name: fila-${FILA_AMBIENTE:?defina FILA_AMBIENTE (homologacao ou producao) no arquivo de ambiente}
+
+x-backend: &backend
+  image: ${FILA_IMAGEM_BACKEND:-fila-backend:local}
+  restart: unless-stopped
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  env_file: ["${FILA_CONFIG:?defina FILA_CONFIG (arquivo de configuração da aplicação)}"]
+  logging:
+    driver: json-file
+    options: {max-size: "20m", max-file: "10"}
+
+services:
+  postgres:
+    profiles: [banco-local]
+    image: postgres:18.7@sha256:9f4fd4aa918f52ae3d6f3b687f1de90d8f867cd4d520021545a9a50c120eae3b
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: fila_dba
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_senha_superusuario
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - ./postgres/init/01-papeis.sh:/docker-entrypoint-initdb.d/01-papeis.sh:ro
+      - ./postgres/papeis.sql:/docker-entrypoint-initdb.d/papeis.sql.inc:ro
+      - ${FILA_SEGREDOS:?defina FILA_SEGREDOS}/banco:/run/secrets:ro
+    shm_size: 256mb
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U fila_dba -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    <<: *backend
+    profiles: [ferramentas]
+    restart: "no"
+    entrypoint: ["/usr/local/bin/migrate"]
+    command: ["status"]
+    environment:
+      FILA_DATABASE_URL_FILE: /run/secrets/database_url
+      FILA_PIX_PROVIDER: disabled   # o migrate não fala com o provedor nem recebe a chave
+    volumes:
+      - ${FILA_SEGREDOS}/migrador:/run/secrets:ro
+    depends_on:
+      postgres: {condition: service_healthy, required: false}
+
+  api:
+    <<: *backend
+    entrypoint: ["/usr/local/bin/api"]
+    environment:
+      FILA_HTTP_ADDR: 0.0.0.0:8080
+      FILA_METRICS_ADDR: 0.0.0.0:9090
+      FILA_TRUST_X_FORWARDED_FOR: "true"   # só o Caddy (deste compose) fala com a API
+      FILA_DATABASE_URL_FILE: /run/secrets/database_url
+      FILA_SECRET_KEY_FILE: /run/secrets/secret_key
+      FILA_SECRET_KEY_PREVIOUS_FILE: ${FILA_CHAVE_ANTERIOR_ARQUIVO:-}   # troca de chave (rotinas.md)
+      FILA_ABACATEPAY_API_KEY_FILE: ${FILA_PIX_CHAVE_ARQUIVO:-}
+      FILA_ABACATEPAY_WEBHOOK_SECRET_FILE: ${FILA_PIX_WEBHOOK_ARQUIVO:-}
+    volumes:
+      - ${FILA_SEGREDOS}/app:/run/secrets:ro
+    stop_grace_period: 30s
+    depends_on:
+      postgres: {condition: service_healthy, required: false}
+
+  worker:
+    <<: *backend
+    entrypoint: ["/usr/local/bin/worker"]
+    healthcheck: {disable: true}
+    environment:
+      FILA_METRICS_ADDR: 0.0.0.0:9090
+      FILA_DATABASE_URL_FILE: /run/secrets/database_url
+      FILA_SECRET_KEY_FILE: /run/secrets/secret_key
+      FILA_SECRET_KEY_PREVIOUS_FILE: ${FILA_CHAVE_ANTERIOR_ARQUIVO:-}   # troca de chave (rotinas.md)
+      FILA_ABACATEPAY_API_KEY_FILE: ${FILA_PIX_CHAVE_ARQUIVO:-}
+      FILA_ABACATEPAY_WEBHOOK_SECRET_FILE: ${FILA_PIX_WEBHOOK_ARQUIVO:-}
+      FILA_DELETION_JOURNAL_DIR: /var/lib/fila/diario
+      FILA_MAIL_DIR: /var/lib/fila/correio
+    volumes:
+      - ${FILA_SEGREDOS}/app:/run/secrets:ro
+      # Diário de exclusões: em OUTRO disco/volume que o do banco, copiado para fora do servidor.
+      - ${FILA_DIARIO_DIR:?defina FILA_DIARIO_DIR (pasta do diário de exclusões, fora do disco do banco)}:/var/lib/fila/diario
+      - correio:/var/lib/fila/correio
+    stop_grace_period: 30s
+    depends_on:
+      postgres: {condition: service_healthy, required: false}
+
+  fila-admin:
+    <<: *backend
+    profiles: [ferramentas]
+    restart: "no"
+    entrypoint: ["/usr/local/bin/fila-admin"]
+    healthcheck: {disable: true}
+    environment:
+      FILA_DATABASE_URL_FILE: /run/secrets/database_url
+      FILA_SECRET_KEY_FILE: /run/secrets/secret_key
+      FILA_SECRET_KEY_PREVIOUS_FILE: ${FILA_CHAVE_ANTERIOR_ARQUIVO:-}   # troca de chave (rotinas.md)
+      FILA_ABACATEPAY_API_KEY_FILE: ${FILA_PIX_CHAVE_ARQUIVO:-}
+      FILA_DELETION_JOURNAL_DIR: /var/lib/fila/diario
+      FILA_MAIL_DIR: /var/lib/fila/correio
+    volumes:
+      - ${FILA_SEGREDOS}/app:/run/secrets:ro
+      - ${FILA_DIARIO_DIR}:/var/lib/fila/diario:ro
+      - ${FILA_BACKUPS_DIR:?defina FILA_BACKUPS_DIR}:/backups:ro
+      - correio:/var/lib/fila/correio
+
+  web:
+    image: ${FILA_IMAGEM_WEB:-fila-web:local}
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      FILA_DOMINIO: ${FILA_DOMINIO:?defina FILA_DOMINIO}
+      FILA_TLS_MODO: ${FILA_TLS_MODO:-acme}
+    ports:
+      - "${FILA_PORTA_HTTP:-80}:80"
+      - "${FILA_PORTA_HTTPS:-443}:443"
+      - "${FILA_PORTA_HTTPS:-443}:443/udp"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    tmpfs: [/tmp]
+    depends_on: [api]
+
+  # Backup e restauração usam o pg_dump/pg_restore da MESMA versão do servidor (18.7).
+  backup:
+    profiles: [ferramentas]
+    image: postgres:18.7@sha256:9f4fd4aa918f52ae3d6f3b687f1de90d8f867cd4d520021545a9a50c120eae3b
+    restart: "no"
+    entrypoint: ["sh", "/scripts/backup.sh"]
+    environment:
+      PGHOST: ${FILA_BANCO_HOST:-postgres}
+      PGPORT: ${FILA_BANCO_PORTA:-5432}
+      PGSSLMODE: require
+      FILA_BACKUP_RETENCAO_DIAS: ${FILA_BACKUP_RETENCAO_DIAS:-14}
+    volumes:
+      - ./backup:/scripts:ro
+      - ${FILA_BACKUPS_DIR}:/backups
+      - ${FILA_DIARIO_DIR}:/diario:ro
+      - ${FILA_SEGREDOS}/backup:/run/secrets:ro
+    depends_on:
+      postgres: {condition: service_healthy, required: false}
+
+  restore:
+    profiles: [ferramentas]
+    image: postgres:18.7@sha256:9f4fd4aa918f52ae3d6f3b687f1de90d8f867cd4d520021545a9a50c120eae3b
+    restart: "no"
+    entrypoint: ["sh", "/scripts/restaurar-banco.sh"]
+    environment:
+      PGHOST: ${FILA_BANCO_HOST:-postgres}
+      PGPORT: ${FILA_BANCO_PORTA:-5432}
+      PGSSLMODE: require
+    volumes:
+      - ./backup:/scripts:ro
+      - ${FILA_BACKUPS_DIR}:/backups:ro
+      - ${FILA_SEGREDOS}/backup:/run/secrets/backup:ro
+      - ${FILA_SEGREDOS}/banco:/run/secrets/banco:ro
+    depends_on:
+      postgres: {condition: service_healthy, required: false}
+
+  prometheus:
+    profiles: [monitoramento]
+    image: prom/prometheus:v3.15.1@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2
+    restart: unless-stopped
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=15d"]
+    volumes:
+      - ./monitoramento:/etc/prometheus:ro
+      - prometheus:/prometheus
+    ports:
+      - "127.0.0.1:${FILA_PORTA_PROMETHEUS:-9091}:9090"   # só neste servidor (acesso por túnel SSH)
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
+  correio:
+  prometheus:

@@ -20,7 +20,7 @@ func FromProcess() (*Config, string, error) { return Resolve(os.Environ()) }
 //     (permite rodar a partir de backend/ com o .env na raiz do repositório).
 //   - variáveis já definidas no processo têm prioridade sobre o arquivo.
 //
-// Em produção (FILA_ENV=production definido no processo) o .env é ignorado: segredos vêm
+// Em produção e homologação (FILA_ENV=production/homologacao no processo) o .env é ignorado: segredos vêm
 // do ambiente fornecido pela plataforma de implantação.
 //
 // Devolve também o caminho do .env usado (vazio se nenhum), para registrar no log.
@@ -75,7 +75,7 @@ type readFileFunc func(string) ([]byte, error)
 
 func effectiveEnviron(environ []string, read readFileFunc) ([]string, string, error) {
 	proc := toMap(environ)
-	if proc[VarEnv] == string(EnvProduction) {
+	if Environment(proc[VarEnv]).Hardened() {
 		return environ, "", nil
 	}
 	candidates := []string{".env", filepath.Join("..", ".env")}

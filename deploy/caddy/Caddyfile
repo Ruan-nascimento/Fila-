@@ -1,0 +1,70 @@
+# Caddy: TLS automático (Let's Encrypt) ou interno (homologação local), site estático e proxy
+# reverso para a API. Variáveis (definidas no compose):
+#   FILA_DOMINIO   ex.: fila.exemplo.com.br (produção) ou localhost (homologação local)
+#   FILA_TLS_MODO  acme (certificado público automático) ou interno (CA local do Caddy)
+#
+# Decisões (docs/operacao/implantacao.md):
+#   - SSE: o Caddy repassa text/event-stream sem buffer (documentação oficial); NÃO há timeout de
+#     escrita no servidor (a API encerra cada conexão SSE em 30 min e manda ping a cada 15 s).
+#   - Reinício da API: lb_try_duration segura as requisições por até 20 s enquanto a API volta;
+#     pedido que não chegou à API é repetido (seguro), o que já chegou não é repetido pelo proxy.
+#   - Sem log de acesso no Caddy: ele gravaria IP e user-agent (dado pessoal). O log de acesso é o
+#     da API, que não tem IP, corpo nem query string.
+
+{
+	admin off
+	servers {
+		timeouts {
+			read_header 10s
+			read_body 30s
+			idle 2m
+		}
+	}
+}
+
+(tls-acme) {
+}
+
+(tls-interno) {
+	tls internal
+}
+
+{$FILA_DOMINIO} {
+	import tls-{$FILA_TLS_MODO}
+
+	request_body {
+		max_size 1MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		X-Frame-Options "DENY"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		-Server
+	}
+
+	@api path /v1/* /healthz/*
+	handle @api {
+		reverse_proxy api:8080 {
+			lb_try_duration 20s
+			lb_try_interval 250ms
+			health_uri /healthz/ready
+			health_interval 5s
+			health_timeout 3s
+		}
+	}
+
+	handle {
+		root * /srv
+		encode zstd gzip
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		@page not path /assets/*
+		header @page Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+}

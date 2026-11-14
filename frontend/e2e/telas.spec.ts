@@ -5,6 +5,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import {
+  vigiarCSP,
   atenderTudo,
   clienteVerificado,
   entrarNaFila,
@@ -14,6 +15,8 @@ import {
   receberDinheiro,
   type Loja,
 } from "./apoio";
+
+vigiarCSP();
 
 const larguras = [
   { nome: "360", w: 360, h: 780 },

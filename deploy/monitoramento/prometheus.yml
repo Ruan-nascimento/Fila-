@@ -1,0 +1,19 @@
+# Prometheus do compose (perfil monitoramento). Coleta as métricas internas da API e do worker
+# pela rede do compose (porta 9090 de cada contêiner, nunca publicada).
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/alertas.yml
+
+scrape_configs:
+  - job_name: fila-api
+    static_configs:
+      - targets: ["api:9090"]
+  - job_name: fila-worker
+    static_configs:
+      - targets: ["worker:9090"]
+
+# Envio dos alertas (e-mail, Telegram, etc.) exige um Alertmanager e credenciais do canal
+# escolhido pela operação: NÃO configurado aqui (docs/operacao/monitoramento.md).

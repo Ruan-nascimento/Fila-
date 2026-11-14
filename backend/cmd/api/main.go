@@ -7,6 +7,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -24,9 +25,33 @@ import (
 )
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "healthcheck" {
+		os.Exit(healthcheck(os.Getenv("FILA_HTTP_ADDR"), os.Stderr))
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	os.Exit(run(ctx, os.Environ(), os.Stdout, os.Stderr, nil))
+}
+
+// healthcheck consulta /healthz/ready da própria API (HEALTHCHECK do contêiner: a imagem mínima
+// não tem curl). Saída 0 = pronta, 1 = não pronta.
+func healthcheck(addr string, stderr io.Writer) int {
+	port := "8080"
+	if _, p, err := net.SplitHostPort(addr); err == nil && p != "" && p != "0" {
+		port = p
+	}
+	c := &http.Client{Timeout: 3 * time.Second}
+	res, err := c.Get("http://127.0.0.1:" + port + "/healthz/ready")
+	if err != nil {
+		fmt.Fprintln(stderr, "api: não respondeu:", err.Error())
+		return 1
+	}
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		fmt.Fprintln(stderr, "api: não pronta:", res.StatusCode)
+		return 1
+	}
+	return 0
 }
 
 // run devolve o código de saída. listening (opcional, para testes) recebe o endereço em uso.

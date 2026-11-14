@@ -23,10 +23,16 @@ import (
 // Environment identifica o ambiente de execução.
 type Environment string
 
+// Hardened informa se o ambiente exige as travas de produção (produção e homologação).
+func (e Environment) Hardened() bool { return e == EnvProduction || e == EnvStaging }
+
 const (
 	EnvDevelopment Environment = "development"
 	EnvTest        Environment = "test"
 	EnvProduction  Environment = "production"
+	// EnvStaging é a homologação: as mesmas travas de produção (https, cookies Secure, banco com
+	// TLS, .env ignorado), mas Pix SÓ com chave de teste (nada é cobrado de verdade).
+	EnvStaging Environment = "homologacao"
 )
 
 // Config é a configuração completa e já validada.
@@ -207,6 +213,8 @@ const (
 	// VarTestDatabaseURL é lida só pelos testes de integração; aceita aqui para não ser "desconhecida".
 	VarTestDatabaseURL = "FILA_TEST_DATABASE_URL"
 	VarRequireDBTests  = "FILA_REQUIRE_DB_TESTS"
+	VarTestAppRole     = "FILA_TEST_APP_ROLE"
+	VarTestAppPassword = "FILA_TEST_APP_PASSWORD"
 	// VarAPIProxyTarget é lida pelo Vite (frontend/vite.config.ts), não pelo backend.
 	VarAPIProxyTarget = "FILA_API_PROXY_TARGET"
 )
@@ -215,7 +223,7 @@ var knownVars = map[string]bool{
 	VarEnv: true, VarEnvFile: true, VarLogLevel: true, VarLogFormat: true, VarHTTPAddr: true,
 	VarReadHeaderTimeout: true, VarReadTimeout: true, VarWriteTimeout: true, VarIdleTimeout: true,
 	VarShutdownTimeout: true, VarDatabaseURL: true, VarDBMaxConns: true, VarDBConnectTimeout: true,
-	VarTestDatabaseURL: true, VarRequireDBTests: true, VarAPIProxyTarget: true,
+	VarTestDatabaseURL: true, VarRequireDBTests: true, VarAPIProxyTarget: true, VarTestAppRole: true, VarTestAppPassword: true,
 	VarSecretKey: true, VarAllowedOrigins: true, VarPublicBaseURL: true, VarCookieSecure: true,
 	VarTrustForwardedFor: true, VarMailMode: true, VarMailDir: true,
 	VarPixProvider: true, VarAbacateKey: true, VarAbacateBaseURL: true, VarAbacateValidated: true,
@@ -256,7 +264,7 @@ func Load(environ []string) (*Config, error) {
 		MaxConns:       int32(l.intRange(VarDBMaxConns, 10, 1, 200)),
 		ConnectTimeout: l.duration(VarDBConnectTimeout, 5*time.Second, time.Second, time.Minute),
 	}
-	prod := cfg.Env == EnvProduction
+	prod := cfg.Env.Hardened() // travas de produção valem também na homologação
 	cfg.Security = SecurityConfig{
 		SecretKey:          l.secretKey(),
 		PreviousSecretKeys: l.previousKeys(),
@@ -276,10 +284,10 @@ func Load(environ []string) (*Config, error) {
 		Mode: l.oneOf(VarMailMode, mailDefault, MailFile, MailDisabled),
 		Dir:  l.text(VarMailDir, ".correio"),
 	}
-	if prod && cfg.Mail.Mode == MailFile {
+	if cfg.Env == EnvProduction && cfg.Mail.Mode == MailFile {
 		l.fail(VarMailMode, "o modo file (arquivos locais) é só para desenvolvimento; em produção use disabled até configurar um provedor")
 	}
-	cfg.Payments = l.payments(prod)
+	cfg.Payments = l.payments(cfg.Env)
 	cfg.Ops = OpsConfig{
 		RequestsPerMinute:  l.intRange(VarRatePerMinute, 600, 30, 100000),
 		SSEMaxConnections:  l.intRange(VarSSEMax, 2000, 10, 100000),
@@ -330,14 +338,14 @@ func (l *loader) get(v string) (string, bool) {
 func (l *loader) environment() Environment {
 	v, ok := l.get(VarEnv)
 	if !ok {
-		l.fail(VarEnv, "obrigatória; use development, test ou production")
+		l.fail(VarEnv, "obrigatória; use development, test, homologacao ou production")
 		return ""
 	}
 	switch e := Environment(v); e {
-	case EnvDevelopment, EnvTest, EnvProduction:
+	case EnvDevelopment, EnvTest, EnvProduction, EnvStaging:
 		return e
 	default:
-		l.fail(VarEnv, "valor não reconhecido; use development, test ou production")
+		l.fail(VarEnv, "valor não reconhecido; use development, test, homologacao ou production")
 		return ""
 	}
 }
@@ -438,7 +446,7 @@ func (l *loader) databaseURL(env Environment) Secret {
 		l.fail(VarDatabaseURL, "falta o usuário do banco")
 	}
 	sslmode := u.Query().Get("sslmode")
-	if env == EnvProduction {
+	if env.Hardened() {
 		switch sslmode {
 		case "require", "verify-ca", "verify-full":
 		default:
@@ -618,7 +626,8 @@ func toMap(environ []string) map[string]string {
 }
 
 // payments lê a configuração do Pix e aplica as travas de ambiente (R-PAG-15).
-func (l *loader) payments(prod bool) PaymentsConfig {
+func (l *loader) payments(env Environment) PaymentsConfig {
+	prod := env == EnvProduction
 	c := PaymentsConfig{
 		Pix:                 l.oneOf(VarPixProvider, PixDisabled, PixDisabled, PixAbacatePay),
 		BaseURL:             l.text(VarAbacateBaseURL, "https://api.abacatepay.com/v2"),
@@ -645,7 +654,9 @@ func (l *loader) payments(prod bool) PaymentsConfig {
 			l.fail(VarAbacateKey, "em produção não se usa chave de teste (abc_dev_): os pagamentos seriam simulados")
 		}
 	case strings.HasPrefix(k, "abc_prod_"):
-		if !prod {
+		if env == EnvStaging {
+			l.fail(VarAbacateKey, "homologação nunca usa chave de produção (abc_prod_): use a chave de teste (abc_dev_)")
+		} else if !prod {
 			l.fail(VarAbacateKey, "chave de produção (abc_prod_) só no ambiente de produção; para testar use a chave de teste (abc_dev_)")
 		} else if !c.ProductionValidated {
 			l.fail(VarAbacateValidated, "a cobrança real está desligada até a validação da integração (ver docs/pagamentos-abacatepay.md); depois use true")

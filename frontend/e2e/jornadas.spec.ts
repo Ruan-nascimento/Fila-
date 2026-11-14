@@ -3,6 +3,7 @@
 import { expect, test, type Page, type Request } from "@playwright/test";
 import {
   Api,
+  vigiarCSP,
   atenderProximo,
   clienteVerificado,
   entrarNaTela,
@@ -13,6 +14,8 @@ import {
   senha,
   type Loja,
 } from "./apoio";
+
+vigiarCSP();
 
 const celular = { viewport: { width: 360, height: 780 }, hasTouch: true };
 

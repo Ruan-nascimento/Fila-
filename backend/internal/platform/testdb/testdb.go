@@ -4,6 +4,10 @@
 //   - FILA_TEST_DATABASE_URL: URL de um usuário com permissão CREATEDB (nunca o banco de produção).
 //   - FILA_REQUIRE_DB_TESTS=1: torna obrigatório (o CI define). Sem ele, os testes são pulados
 //     com aviso explícito — teste pulado nunca conta como aprovado.
+//   - FILA_TEST_APP_ROLE e FILA_TEST_APP_PASSWORD (opcionais, etapa 12): Migrated aplica as
+//     permissões mínimas (database.ApplyGrants) e devolve um pool que conecta com ESSE papel, sem
+//     DDL nem reescrita de histórico. Rodar a suíte assim prova que a aplicação funciona com o
+//     menor privilégio usado em produção.
 package testdb
 
 import (
@@ -105,7 +109,21 @@ func Migrated(t testing.TB) *pgxpool.Pool {
 	if _, err := m.Up(ctx); err != nil {
 		t.Fatalf("migrar banco de teste: %v", err)
 	}
-	return pool
+	role, pw := os.Getenv(config.VarTestAppRole), os.Getenv(config.VarTestAppPassword)
+	if role == "" {
+		return pool
+	}
+	if err := database.ApplyGrants(ctx, pool, role); err != nil {
+		t.Fatalf("permissões do papel da aplicação: %v", err)
+	}
+	m.Close()
+	pool.Close() // daqui em diante só o papel da aplicação conecta
+	u, err := url.Parse(pool.Config().ConnString())
+	if err != nil {
+		t.Fatal(err)
+	}
+	u.User = url.UserPassword(role, pw)
+	return Pool(t, u.String())
 }
 
 // SecretKeyVar devolve "FILA_SECRET_KEY=<chave aleatória>" para testes. A chave é gerada a cada

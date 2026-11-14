@@ -4,9 +4,28 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { expect, request, type APIRequestContext, type Page } from "@playwright/test";
+import { expect, request, test, type APIRequestContext, type Page } from "@playwright/test";
 
 export const baseURL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:15173";
+const ignoreHTTPSErrors = process.env.E2E_IGNORAR_TLS === "1";
+
+/**
+ * Falha o teste se o navegador recusar algo pela política de segurança de conteúdo (CSP) do
+ * servidor de produção (Caddy). Contra o Vite de desenvolvimento não há CSP: nada a recusar.
+ */
+export function vigiarCSP(): void {
+  const violacoes: string[] = [];
+  test.beforeEach(({ context }) => {
+    violacoes.length = 0;
+    context.on("console", (m) => {
+      if (m.type() === "error" && /Content Security Policy|Refused to/.test(m.text()))
+        violacoes.push(m.text());
+    });
+  });
+  test.afterEach(() => {
+    expect(violacoes, "violações de CSP no navegador").toEqual([]);
+  });
+}
 export const senha = "senha-e2e-forte-1";
 
 function env(name: string): string {
@@ -58,7 +77,9 @@ export class Api {
   private constructor(readonly ctx: APIRequestContext) {}
 
   static async nova(): Promise<Api> {
-    return new Api(await request.newContext({ baseURL, extraHTTPHeaders: { Origin: baseURL } }));
+    return new Api(
+      await request.newContext({ baseURL, ignoreHTTPSErrors, extraHTTPHeaders: { Origin: baseURL } }),
+    );
   }
 
   async call(method: string, path: string, body?: unknown): Promise<{ status: number; json: any }> {

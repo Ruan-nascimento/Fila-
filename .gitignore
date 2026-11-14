@@ -25,3 +25,8 @@ node_modules/
 *.log
 .DS_Store
 Thumbs.db
+
+# Implantação: arquivos reais de ambiente (só os modelos .example vão para o Git)
+deploy/env/*.env
+*.dump
+*.dump.enc

@@ -90,7 +90,7 @@ func run(ctx context.Context, environ []string, stdout, stderr io.Writer, starte
 	if cfg.Mail.Mode != config.MailFile {
 		log.Warn("envio de e-mail desativado: verificação, redefinição de senha e convites não chegarão às pessoas")
 	}
-	if cfg.Ops.DeletionJournalDir == "" && cfg.Env == config.EnvProduction {
+	if cfg.Ops.DeletionJournalDir == "" && cfg.Env.Hardened() {
 		log.Warn("diário de exclusões desligado (FILA_DELETION_JOURNAL_DIR): exclusões pedidas depois do último backup não poderão ser reaplicadas após uma restauração")
 	}
 	prov := api.PixProvider(cfg.Payments, nil)
@@ -178,6 +178,13 @@ func runJobs(ctx context.Context, rt *app.Runtime, ring *keys.Ring, clk clock.Cl
 // collectIndicators lê os indicadores a cada 15 s para as métricas e registra os alertas no log
 // quando mudam (para quem não tem Prometheus, o log já mostra o problema).
 func collectIndicators(ctx context.Context, rt *app.Runtime, g *operacao.Gauges, log *slog.Logger) {
+	// Primeira leitura depois da primeira passagem do supervisor (que grava o sinal de vida):
+	// sem isso, toda partida mostraria um falso "worker sem sinal".
+	select {
+	case <-ctx.Done():
+		return
+	case <-time.After(3 * time.Second):
+	}
 	t := time.NewTicker(15 * time.Second)
 	defer t.Stop()
 	last := ""
