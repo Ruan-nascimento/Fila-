@@ -17,6 +17,7 @@ import (
 	"fila/internal/auditoria"
 	"fila/internal/catalogo"
 	"fila/internal/estabelecimento"
+	"fila/internal/fidelidade"
 	"fila/internal/platform/database"
 	hs "fila/internal/platform/httpserver"
 	"fila/internal/platform/idempotency"
@@ -154,10 +155,16 @@ func (s *Service) createParticipation(w http.ResponseWriter, r *http.Request) er
 		if id.Kind == acesso.IdentityVisitor {
 			audit.ActorKind = auditoria.ActorVisitor
 		}
-		// Elegibilidade de pontos (R-FID-03): só conta com programa ligado. O programa de pontos
-		// chega na etapa 10 e começa desligado (R-FID-01); até lá ninguém é elegível. O valor é
-		// copiado (snapshot) para a participação e para a comanda.
-		const loyaltyEligible = false
+		// Elegibilidade de pontos (R-FID-02/03): só conta (sessão de conta só existe com e-mail
+		// verificado) e só com o programa ligado NA ENTRADA. O valor é copiado (snapshot) para a
+		// participação e para a comanda: desligar depois não retira o crédito prometido, e um
+		// visitante que cria conta depois não ganha pontos desta visita.
+		loyaltyEligible := false
+		if id.Kind == acesso.IdentityAccount {
+			if loyaltyEligible, err = fidelidade.ProgramEnabled(ctx, tx, estID); err != nil {
+				return idempotency.Result{}, err
+			}
+		}
 		if _, err := atendimento.CreateOrder(ctx, tx, atendimento.NewOrder{ID: orderID, EstablishmentID: estID,
 			ParticipationID: partID, ProfessionalID: qi.ProfessionalID, Identity: orderIdentity(*id),
 			LoyaltyEligible: loyaltyEligible, Services: services, Now: now}, audit); err != nil {

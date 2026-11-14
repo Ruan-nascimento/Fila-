@@ -29,6 +29,7 @@ import (
 
 	"fila/internal/api"
 	"fila/internal/exclusao"
+	"fila/internal/fidelidade"
 	"fila/internal/fila"
 	"fila/internal/identidade"
 	"fila/internal/pagamento"
@@ -111,9 +112,13 @@ func run(ctx context.Context, environ []string, stdout, stderr io.Writer, starte
 		Identity: ident, Queue: fila.New(fila.Deps{Pool: rt.Pool, Clock: clk, Log: log.With("tarefa", "exclusao")})})
 	wg.Go(func() { deletion.Run(ctx, time.Minute) })
 
+	// Fidelidade: vence reservas de prêmio (24 h) e libera pontos e unidade uma vez (T-RW-03).
+	loyalty := fidelidade.New(fidelidade.Deps{Pool: rt.Pool, Clock: clk, Log: log.With("tarefa", "fidelidade")})
+	wg.Go(func() { loyalty.Run(ctx, 30*time.Second) })
+
 	// Pagamentos: reconsulta cobranças Pix pendentes ou de resultado desconhecido (R-PAG-09/16).
 	if prov := api.PixProvider(cfg.Payments, nil); prov != nil {
-		pay := pagamento.New(pagamento.Deps{Pool: rt.Pool, Clock: clk, Log: log.With("tarefa", "pagamentos"), Provider: prov,
+		pay := pagamento.New(pagamento.Deps{Pool: rt.Pool, Clock: clk, Log: log.With("tarefa", "pagamentos"), Provider: prov, Loyalty: loyalty,
 			ExpiresIn: cfg.Payments.ExpiresIn, Timeout: cfg.Payments.Timeout, Pendencies: painel.Record})
 		wg.Go(func() { pay.Run(ctx, 2*time.Second) })
 		log.Info("reconciliação de Pix ligada", "provedor", cfg.Payments.Pix, "modo_teste", prov.TestMode())

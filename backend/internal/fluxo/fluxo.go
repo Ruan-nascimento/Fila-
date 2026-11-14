@@ -72,6 +72,8 @@ type Deps struct {
 	// antes do snapshot) e "in_snapshot" (dentro da leitura do snapshot, depois de fixar a
 	// posição). Prova que um evento publicado nesses intervalos não se perde.
 	SnapshotHook func(stage string)
+	// Loyalty lê o resumo de pontos da conta para o snapshot (canal account). nil = sem fidelidade.
+	Loyalty func(ctx context.Context, q database.Querier, estID, accountID uuid.UUID) (any, error)
 	// Pendencies lê os contadores do painel do dono para o snapshot (nil = sem painel).
 	Pendencies func(ctx context.Context, q database.Querier, estID uuid.UUID) (any, error)
 }
@@ -374,6 +376,11 @@ func (s *Service) snapshot(ctx context.Context, tx pgx.Tx, r *http.Request, estI
 	}
 	if err != nil {
 		return d, err
+	}
+	if g.Account != nil && s.Loyalty != nil {
+		if d.Loyalty, err = s.Loyalty(ctx, tx, estID, *g.Account); err != nil {
+			return d, err
+		}
 	}
 	if g.VisitAccount != nil || g.VisitVisitor != nil {
 		account, visitor := s.Customers.CustomerIdentities(r, estID)

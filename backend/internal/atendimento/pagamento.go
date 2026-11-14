@@ -210,3 +210,36 @@ func PendencyCounts(ctx context.Context, q database.Querier, estID uuid.UUID) (O
 		estID).Scan(&c.AwaitingPayment, &c.AwaitingConfirmation, &c.PendingReview)
 	return c, err
 }
+
+// OrderCredit é o que a fidelidade precisa saber de uma comanda para creditar pontos (T-LG-01).
+type OrderCredit struct {
+	EstablishmentID uuid.UUID
+	AccountID       *uuid.UUID // nil = visitante (nunca ganha pontos)
+	Eligible        bool       // snapshot de elegibilidade da entrada (R-FID-03)
+	Interrupted     bool       // atendimento interrompido não gera pontos (R-FID-05)
+	Status          string
+	Points          int // soma dos pontos aceitos dos itens realizados e cobrados
+}
+
+// CreditInfo lê a comanda DESTA loja para o crédito ou a reversão de pontos.
+func CreditInfo(ctx context.Context, q database.Querier, estID, orderID uuid.UUID) (OrderCredit, error) {
+	var c OrderCredit
+	var interrupted *time.Time
+	err := q.QueryRow(ctx, `
+		SELECT o.establishment_id, o.account_id, o.loyalty_eligible, o.interrupted_at, o.status,
+		       coalesce((SELECT sum(points) FROM order_item WHERE order_id = o.id AND charged AND status = 'performed'), 0)
+		FROM service_order o WHERE o.establishment_id = $1 AND o.id = $2`, estID, orderID).
+		Scan(&c.EstablishmentID, &c.AccountID, &c.Eligible, &interrupted, &c.Status, &c.Points)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return c, ErrOrderNotFound
+	}
+	c.Interrupted = interrupted != nil
+	return c, err
+}
+
+var pointsCredited func(ctx context.Context, q database.Querier, orderIDs []uuid.UUID) (map[uuid.UUID]int, error)
+
+// RegisterPointsCredited liga o histórico aos pontos efetivamente creditados (módulo fidelidade).
+func RegisterPointsCredited(f func(ctx context.Context, q database.Querier, orderIDs []uuid.UUID) (map[uuid.UUID]int, error)) {
+	pointsCredited = f
+}

@@ -17,6 +17,7 @@ import (
 	"fila/internal/catalogo"
 	"fila/internal/estabelecimento"
 	"fila/internal/exclusao"
+	"fila/internal/fidelidade"
 	"fila/internal/fila"
 	"fila/internal/fluxo"
 	"fila/internal/identidade"
@@ -51,7 +52,7 @@ type Deps struct {
 	StreamLimits fluxo.Limits
 	// SnapshotHook (só testes): ver fluxo.Deps.
 	SnapshotHook func(stage string)
-	// Benefits encerra pontos e reservas na exclusão de conta (etapa 10). nil = não há benefícios.
+	// Benefits (só testes) substitui o encerramento de pontos e reservas na exclusão. nil = fidelidade.
 	Benefits exclusao.Benefits
 	// DeletionFault (só testes) simula queda no meio da anonimização.
 	DeletionFault func(step string) error
@@ -64,6 +65,7 @@ type API struct {
 	Stream   *fluxo.Service
 	Deletion *exclusao.Service
 	Payments *pagamento.Service
+	Loyalty  *fidelidade.Service
 	routes   []hs.Route
 	mux      *http.ServeMux
 	handler  http.Handler
@@ -105,7 +107,8 @@ func New(d Deps, register func(mux *http.ServeMux)) (*API, error) {
 	cat := catalogo.New(catalogo.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Auth: ident})
 	atd := atendimento.New(atendimento.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Auth: ident, Customers: ident,
 		Visits: fl, Charges: d.Charges, VisitClosed: ident.VisitClosed})
-	pay := pagamento.New(pagamento.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Orders: atd,
+	loyalty := fidelidade.New(fidelidade.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Auth: ident, Customers: ident})
+	pay := pagamento.New(pagamento.Deps{Loyalty: loyalty, Pool: d.Pool, Clock: d.Clock, Log: d.Log, Orders: atd,
 		Provider: PixProvider(d.Config.Payments, d.PixProvider), ExpiresIn: d.Config.Payments.ExpiresIn,
 		Timeout: d.Config.Payments.Timeout, VisitClosed: ident.VisitClosed, Auth: ident,
 		WebhookSecret: d.Config.Payments.WebhookSecret, Pendencies: painel.Record})
@@ -118,14 +121,19 @@ func New(d Deps, register func(mux *http.ServeMux)) (*API, error) {
 		Refresh: ident.Refresh, Sources: fl, Limits: d.StreamLimits, TrustForwardedFor: d.Config.Security.TrustForwardedFor,
 		SnapshotHook: d.SnapshotHook, Pendencies: func(ctx context.Context, q database.Querier, estID uuid.UUID) (any, error) {
 			return painel.Count(ctx, q, estID)
-		}})
+		}, Loyalty: loyalty.Snapshot})
 	panel := &painel.Service{Pool: d.Pool, Auth: ident}
 
+	// Exclusão de conta encerra pontos e reservas (T-LG-03, T-RW-06); testes podem substituir.
+	var benefits exclusao.Benefits = loyalty
+	if d.Benefits != nil {
+		benefits = d.Benefits
+	}
 	deletion := exclusao.New(exclusao.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Ring: ring, Auth: ident,
 		Limiter: ratelimit.New(d.Pool, d.Clock, ring), TrustForwardedFor: d.Config.Security.TrustForwardedFor,
-		Identity: ident, Queue: fl, Benefits: d.Benefits, Fault: d.DeletionFault})
+		Identity: ident, Queue: fl, Benefits: benefits, Fault: d.DeletionFault})
 
-	a := &API{Identity: ident, Hub: hub, Stream: stream, Deletion: deletion, Payments: pay, mux: http.NewServeMux()}
+	a := &API{Identity: ident, Hub: hub, Stream: stream, Deletion: deletion, Payments: pay, Loyalty: loyalty, mux: http.NewServeMux()}
 	a.routes = append(a.routes, ident.Routes()...)
 	a.routes = append(a.routes, est.Routes()...)
 	a.routes = append(a.routes, cat.Routes()...)
@@ -133,6 +141,7 @@ func New(d Deps, register func(mux *http.ServeMux)) (*API, error) {
 	a.routes = append(a.routes, atd.Routes()...)
 	a.routes = append(a.routes, pay.Routes()...)
 	a.routes = append(a.routes, panel.Routes()...)
+	a.routes = append(a.routes, loyalty.Routes()...)
 	a.routes = append(a.routes, stream.Routes()...)
 	a.routes = append(a.routes, deletion.Routes()...)
 	hs.Mount(a.mux, d.Log, a.routes)

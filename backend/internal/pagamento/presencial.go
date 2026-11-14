@@ -229,7 +229,7 @@ func (s *Service) registerInPersonReceipt(w http.ResponseWriter, r *http.Request
 		if err := auditoria.Record(ctx, tx, a); err != nil {
 			return idempotency.Result{}, err
 		}
-		if err := atendimento.Settle(ctx, tx, lp, now, who.Audit(ctx, lp), s.VisitClosed); err != nil {
+		if err := s.settle(ctx, tx, lp, now, who.Audit(ctx, lp)); err != nil {
 			return idempotency.Result{}, err
 		}
 		if err := atendimento.RecordPaymentEvents(ctx, tx, p.EstablishmentID, p.ID, now, false); err != nil {
@@ -310,7 +310,7 @@ func (s *Service) conferReceipt(w http.ResponseWriter, r *http.Request) error {
 			settle = principal == lp.TotalCents && open == 0
 		}
 		if settle {
-			if err := atendimento.Settle(ctx, tx, lp, now, who.Audit(ctx, lp), s.VisitClosed); err != nil {
+			if err := s.settle(ctx, tx, lp, now, who.Audit(ctx, lp)); err != nil {
 				return idempotency.Result{}, err
 			}
 		}

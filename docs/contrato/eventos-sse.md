@@ -149,7 +149,7 @@ Detalhes de como o desenho acima roda; as decisões estão no [ADR-0021](../adr/
 
 Mensagens do próprio fluxo:
 
-- `stream.snapshot`: `id` = cursor do instante do snapshot; `audience` = a mais específica concedida (owner > professional > account > visit > public); `resource` = `{type: "stream", id: <id da conexão>, version: <posição>}`; `data` segue `StreamSnapshot` (`pendencies` vem preenchido para o dono desde a etapa 09; `loyalty` fica `null` até a etapa 10).
+- `stream.snapshot`: `id` = cursor do instante do snapshot; `audience` = a mais específica concedida (owner > professional > account > visit > public); `resource` = `{type: "stream", id: <id da conexão>, version: <posição>}`; `data` segue `StreamSnapshot` (`pendencies` vem preenchido para o dono desde a etapa 09; `loyalty` vem preenchido para o canal `account` desde a etapa 10).
 - `stream.session_ended`: sem `id` (não muda o cursor); `data` = `{"reason": "session_revoked"}`. O servidor fecha a conexão logo depois; o navegador relê a sessão e abre outro fluxo com os canais que ainda tiver.
 
 Versão de recurso nos eventos de fila: `queue.version` + contador de atividade da fila (as duas só crescem). Depois de um snapshot, o cliente recomeça as versões conhecidas.

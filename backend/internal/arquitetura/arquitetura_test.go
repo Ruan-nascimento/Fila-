@@ -82,6 +82,7 @@ var tableOwners = map[string][]string{
 	"atendimento":          {"service_order", "order_item", "change_request", "change_request_addition", "order_adjustment"},
 	"auditoria":            {"audit_event"},
 	"exclusao":             {"deletion_request", "deletion_request_block"},
+	"fidelidade":           {"loyalty_program", "loyalty_account", "loyalty_ledger", "reward", "reward_stock_movement", "reward_reservation"},
 	"pagamento":            {"pix_charge", "receipt", "receipt_conferral", "refund", "financial_issue", "provider_event"},
 	"platform/ratelimit":   {"rate_limit"},
 	"platform/idempotency": {"idempotency_record"},

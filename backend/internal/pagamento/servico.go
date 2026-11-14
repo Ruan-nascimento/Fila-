@@ -13,6 +13,7 @@ import (
 
 	"fila/internal/acesso"
 	"fila/internal/atendimento"
+	"fila/internal/auditoria"
 	"fila/internal/platform/clock"
 	"fila/internal/platform/config"
 	"fila/internal/platform/database"
@@ -48,8 +49,17 @@ type Deps struct {
 	VisitClosed func(ctx context.Context, q database.Querier, visitorID uuid.UUID, at time.Time) error
 	// WebhookSecret do webhook cadastrado na AbacatePay; vazio = webhook desligado (ADR-0024).
 	WebhookSecret config.Secret
+	// Loyalty credita pontos quando a comanda fica paga e reverte no estorno do recebimento
+	// principal (módulo fidelidade). nil = sem programa de pontos.
+	Loyalty Loyalty
 	// Pendencies grava pendencies.updated (contadores do painel do dono) na transação. nil = sem painel.
 	Pendencies func(ctx context.Context, tx pgx.Tx, estID uuid.UUID, now time.Time) error
+}
+
+// Loyalty é implementado pelo módulo fidelidade (T-LG-01/02), na transação do pagamento.
+type Loyalty interface {
+	Credit(ctx context.Context, tx pgx.Tx, estID, orderID uuid.UUID, now time.Time) error
+	Reverse(ctx context.Context, tx pgx.Tx, estID, orderID uuid.UUID, now time.Time) error
 }
 
 // Service implementa pagamentos (cobrança Pix, recebimentos e conferência).
@@ -168,3 +178,31 @@ func (s *Service) ChargeState(ctx context.Context, q database.Querier, orderID u
 }
 
 var _ atendimento.ChargeGuard = (*Service)(nil)
+
+// settle encerra a comanda paga e conferida (T-O-10) e credita os pontos (T-LG-01) na MESMA
+// transação: o crédito acontece uma única vez (a comanda só fica paga uma vez; chave única no extrato).
+func (s *Service) settle(ctx context.Context, tx pgx.Tx, lp atendimento.PaymentInfo, now time.Time, audit auditoria.Event) error {
+	if err := atendimento.Settle(ctx, tx, lp, now, audit, s.VisitClosed); err != nil {
+		return err
+	}
+	if s.Loyalty == nil {
+		return nil
+	}
+	return s.Loyalty.Credit(ctx, tx, lp.EstablishmentID, lp.ID, now)
+}
+
+// refundConfirmed: estorno confirmado do recebimento PRINCIPAL reverte o crédito da comanda uma
+// vez (T-LG-02); devolver um recebimento excedente (duplicado/tardio) não reverte a compra válida.
+func (s *Service) refundConfirmed(ctx context.Context, tx pgx.Tx, estID, orderID, receiptID uuid.UUID, now time.Time) error {
+	if s.Loyalty == nil {
+		return nil
+	}
+	var class string
+	if err := tx.QueryRow(ctx, `SELECT classification FROM receipt WHERE id = $1`, receiptID).Scan(&class); err != nil {
+		return err
+	}
+	if class != "principal" {
+		return nil
+	}
+	return s.Loyalty.Reverse(ctx, tx, estID, orderID, now)
+}

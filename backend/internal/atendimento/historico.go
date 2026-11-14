@@ -174,15 +174,21 @@ func (s *Service) listMyHistory(w http.ResponseWriter, r *http.Request) error {
 	if err := irows.Err(); err != nil {
 		return err
 	}
+	// Pontos creditados (líquidos de reversão) vêm do extrato da fidelidade.
+	points := map[uuid.UUID]int{}
+	if pointsCredited != nil {
+		if points, err = pointsCredited(ctx, s.Pool, orderIDs); err != nil {
+			return err
+		}
+	}
 	data := make([]historyEntry, 0, len(list))
 	for _, x := range list {
 		its := items[x.id]
 		if its == nil {
 			its = []historyItem{}
 		}
-		// Pontos creditados chegam com o programa de fidelidade (etapa 10); até lá, zero.
 		data = append(data, historyEntry{OrderID: x.id, VisitedAt: x.at, ProfessionalName: names[x.prof], Items: its,
-			Total: brl(x.total), OrderStatus: x.status, ParticipationStatus: statuses[x.part]})
+			Total: brl(x.total), OrderStatus: x.status, ParticipationStatus: statuses[x.part], PointsCredited: points[x.id]})
 	}
 	hs.WriteJSON(w, http.StatusOK, struct {
 		Data []historyEntry `json:"data"`

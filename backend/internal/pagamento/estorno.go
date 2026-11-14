@@ -256,6 +256,8 @@ func (s *Service) manualRefund(to string) hs.HandlerFunc {
 			action := "T-RF-06"
 			if to == RefundFailed {
 				action = "T-RF-07"
+			} else if err := s.refundConfirmed(ctx, tx, p.EstablishmentID, p.ID, cur.ReceiptID, now); err != nil {
+				return idempotency.Result{}, err
 			}
 			a := who.Audit(ctx, lp)
 			a.EstablishmentID, a.OccurredAt, a.Action, a.TargetType, a.TargetID = &p.EstablishmentID, now, action, "refund", refundID
@@ -309,9 +311,10 @@ func (s *Service) refundTo(ctx context.Context, tx pgx.Tx, lp atendimento.Paymen
 		}
 	}
 	if to == RefundConfirmed {
-		// Reversão de pontos do recebimento principal (T-LG-02) chega com a fidelidade (etapa 10);
-		// esta transição acontece uma única vez por estorno (estado final não muda: gatilho no banco).
-		s.Log.Info("estorno confirmado pelo provedor", "estorno", rf.ID.String())
+		// Estado final não muda (gatilho no banco): a reversão acontece uma única vez por estorno.
+		if err := s.refundConfirmed(ctx, tx, rf.EstablishmentID, rf.OrderID, rf.ReceiptID, now); err != nil {
+			return err
+		}
 	}
 	if err := s.pendenciesChanged(ctx, tx, rf.EstablishmentID, now); err != nil {
 		return err
