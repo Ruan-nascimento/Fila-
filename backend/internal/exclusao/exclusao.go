@@ -651,6 +651,17 @@ func (s *Service) anonymize(ctx context.Context, tx pgx.Tx, x requestRow, now ti
 	ev := evidence{Categories: map[string]int64{}, At: now,
 		// O que fica (com o pseudônimo, sem perfil): necessário a reconciliação e auditoria.
 		Kept: []string{"comandas_e_itens", "correcoes", "auditoria", "participacoes_sem_nick"}}
+	// Textos pessoais (nome, e-mail, nicks das visitas) ANTES de anonimizar: também saem dos
+	// registros temporários de outros módulos (eventos e respostas guardadas da equipe, 24 h).
+	personal, err := identidade.PersonalStrings(ctx, tx, x.AccountID)
+	if err != nil {
+		return ev, err
+	}
+	nicks, err := fila.NicksOf(ctx, tx, x.AccountID)
+	if err != nil {
+		return ev, err
+	}
+	personal = append(personal, nicks...)
 	profile, err := s.Identity.AnonymizeAccount(ctx, tx, x.AccountID, now)
 	if err != nil {
 		return ev, err
@@ -673,6 +684,18 @@ func (s *Service) anonymize(ctx context.Context, tx pgx.Tx, x requestRow, now ti
 		return ev, err
 	}
 	ev.Categories["eventos"] = n
+	if n, err = outbox.ScrubStrings(ctx, tx, personal, fila.DeletedNick); err != nil {
+		return ev, err
+	}
+	ev.Categories["eventos_da_equipe"] = n
+	if n, err = idempotency.ForgetActor(ctx, tx, "conta:"+x.AccountID.String()); err != nil {
+		return ev, err
+	}
+	m, err := idempotency.ScrubStrings(ctx, tx, personal, fila.DeletedNick)
+	if err != nil {
+		return ev, err
+	}
+	ev.Categories["respostas_guardadas"] = n + m
 	return ev, nil
 }
 

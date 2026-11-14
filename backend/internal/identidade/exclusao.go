@@ -175,3 +175,14 @@ func (s *Service) OperatorInviteOwner(ctx context.Context, estID uuid.UUID, estN
 	})
 	return expires, err
 }
+
+// PersonalStrings devolve nome e e-mail da conta (antes de anonimizar), para apagar esses textos
+// também dos registros temporários de outros módulos (eventos, respostas guardadas).
+func PersonalStrings(ctx context.Context, q database.Querier, accountID uuid.UUID) ([]string, error) {
+	var name, email string
+	err := q.QueryRow(ctx, `SELECT name, email FROM account WHERE id = $1`, accountID).Scan(&name, &email)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	return []string{name, email}, err
+}

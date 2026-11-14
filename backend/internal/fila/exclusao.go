@@ -192,3 +192,13 @@ func ActiveInEstablishment(ctx context.Context, q database.Querier, estID uuid.U
 	err := q.QueryRow(ctx, `SELECT count(*) FROM participation WHERE establishment_id = $1 AND status = ANY($2)`, estID, activeStatuses).Scan(&n)
 	return n, err
 }
+
+// NicksOf devolve os nicks usados pela conta nas visitas (antes de anonimizar), para apagar o
+// texto também dos eventos e respostas guardados da equipe.
+func NicksOf(ctx context.Context, q database.Querier, accountID uuid.UUID) ([]string, error) {
+	rows, err := q.Query(ctx, `SELECT DISTINCT nick FROM participation WHERE account_id = $1 AND nick <> $2`, accountID, DeletedNick)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowTo[string])
+}

@@ -250,3 +250,26 @@ func ForgetAccount(ctx context.Context, q database.Querier, accountID uuid.UUID)
 	}
 	return a.RowsAffected() + b.RowsAffected(), nil
 }
+
+// ScrubStrings troca, nos eventos ainda guardados (event_log, até 24 h, e outbox), cada texto
+// pessoal pelo substituto (etapa 13: exclusão de conta). As visões da equipe levam o nick da
+// pessoa; apagar esses eventos abriria buracos na sequência do fluxo, então o texto é trocado.
+// A troca é de um VALOR JSON inteiro ("Fulana" → "Cliente"), nunca de pedaço de palavra.
+func ScrubStrings(ctx context.Context, q database.Querier, values []string, replacement string) (int64, error) {
+	var total int64
+	for _, v := range values {
+		if strings.TrimSpace(v) == "" {
+			continue
+		}
+		for _, table := range []string{"event_log", "outbox"} {
+			tag, err := q.Exec(ctx, `
+				UPDATE `+table+` SET payload = replace(payload::text, to_jsonb($1::text)::text, to_jsonb($2::text)::text)::jsonb
+				WHERE strpos(payload::text, to_jsonb($1::text)::text) > 0`, v, replacement)
+			if err != nil {
+				return total, err
+			}
+			total += tag.RowsAffected()
+		}
+	}
+	return total, nil
+}
