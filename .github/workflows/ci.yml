@@ -165,7 +165,11 @@ jobs:
         with:
           persist-credentials: false
       - name: Scripts de implantação e backup (shellcheck)
-        run: shellcheck deploy/*.sh deploy/backup/*.sh deploy/postgres/init/*.sh
+        run: >-
+          docker run --rm -v "$PWD:/mnt" -w /mnt
+          koalaman/shellcheck:v0.11.0@sha256:61862eba1fcf09a484ebcc6feea46f1782532571a34ed51fedf90dd25f925a8d
+          --severity=info deploy/implantar.sh deploy/restaurar.sh deploy/backup/backup.sh
+          deploy/backup/restaurar-banco.sh deploy/postgres/init/01-papeis.sh
       - name: Compose válido para homologação e produção
         run: |
           docker compose -f deploy/compose.yaml --env-file deploy/env/producao.env.example             --profile ferramentas --profile banco-local --profile monitoramento config --quiet --no-env-resolution

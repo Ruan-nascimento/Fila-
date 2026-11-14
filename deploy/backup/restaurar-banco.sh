@@ -18,7 +18,10 @@ TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 umask 077
 
-[ -f "$ARQ" ] && [ -f "$MAN" ] || { echo "restaurar: backup $NOME não encontrado em /backups" >&2; exit 2; }
+if [ ! -f "$ARQ" ] || [ ! -f "$MAN" ]; then
+	echo "restaurar: backup $NOME não encontrado em /backups" >&2
+	exit 2
+fi
 ESPERADO=$(sed -n 's/^hmac_sha256=//p' "$MAN")
 CALCULADO=$(openssl dgst -sha256 -hmac "$(cat "$CHAVE")" -r "$ARQ" | cut -d' ' -f1)
 [ "$ESPERADO" = "$CALCULADO" ] || { echo "restaurar: HMAC NÃO confere (arquivo alterado ou chave errada); nada foi feito" >&2; exit 1; }
