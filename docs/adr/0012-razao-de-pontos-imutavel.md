@@ -23,3 +23,4 @@ O saldo precisa ser explicável, resistir a eventos repetidos e permitir saldo n
 
 - Correções são novos lançamentos, nunca edição.
 - Saldo negativo bloqueia apenas novas reservas.
+- Atualização (etapa 10): implementado como no ADR-0025 (saldo materializado por gatilho, estoque por movimentos).

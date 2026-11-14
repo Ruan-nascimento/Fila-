@@ -29,3 +29,4 @@ Para mudar uma decisão, crie um novo ADR que substitua o anterior (não reescre
 | [ADR-0022](0022-exclusao-de-conta-e-historico.md) | Exclusão de conta e histórico | Aceita (etapa 07) |
 | [ADR-0023](0023-pagamentos-pix-reconciliacao.md) | Pagamentos: Pix em duas fases, reconciliação por externalId e recebimento presencial | Aceita (etapa 08) |
 | [ADR-0024](0024-webhook-estorno-pendencias.md) | Webhook autenticado, estorno em três momentos e pendências financeiras | Aceita (etapa 09) |
+| [ADR-0025](0025-fidelidade-extrato-reservas.md) | Fidelidade: extrato materializado pelo banco, crédito na liquidação e reservas de 24 h | Aceita (etapa 10) |

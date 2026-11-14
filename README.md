@@ -107,6 +107,8 @@ A API e o worker leem a mesma configuração: o worker é quem consulta a Abacat
 
 Opcional: para receber os avisos da AbacatePay (webhook), cadastre no painel deles a URL pública **https** da sua API terminando em `/v1/webhooks/abacatepay`, com um secret de 32+ caracteres, e coloque o mesmo valor em `FILA_ABACATEPAY_WEBHOOK_SECRET`. Sem isso o sistema funciona do mesmo jeito, só que confirma os Pix pela consulta do worker (alguns segundos depois). Detalhes, limites e o checklist antes de cobrar de verdade estão em [docs/pagamentos-abacatepay.md](docs/pagamentos-abacatepay.md).
 
+**Pontos e prêmios (etapa 10).** O programa começa desligado. O dono liga em Gestão → Prêmios, define os pontos de cada serviço na aba Serviços e cadastra os prêmios (cortesias). O worker vence as reservas de prêmio depois de 24 h e devolve os pontos.
+
 Ainda não há provedor de e-mail: em desenvolvimento cada e-mail (verificação de conta, redefinição de senha, convite) vira um arquivo `.txt` na pasta `backend\.correio\`. Abra o arquivo e copie o link para o navegador. Essa pasta não vai para o Git.
 
 ### 5.2 Criar a loja e o dono inicial (uma vez)
