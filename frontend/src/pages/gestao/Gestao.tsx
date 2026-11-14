@@ -7,6 +7,7 @@ import { Exclusoes } from "./Exclusoes";
 import type { StaffContext } from "./comum";
 import { Filas } from "./Filas";
 import { Pendencias } from "./Pendencias";
+import { Premios } from "./Premios";
 import { LojaConfig } from "./LojaConfig";
 import { Profissionais } from "./Profissionais";
 import { Servicos } from "./Servicos";
@@ -72,6 +73,9 @@ export function GestaoLoja() {
             <li>
               <NavLink to={`${base}/servicos`}>Serviços</NavLink>
             </li>
+            <li>
+              <NavLink to={`${base}/premios`}>Prêmios</NavLink>
+            </li>
             {ctx.isOwner && (
               <>
                 <li>
@@ -94,6 +98,7 @@ export function GestaoLoja() {
           <Route path="filas" element={<Filas ctx={ctx} />} />
           <Route path="comandas" element={<Comandas ctx={ctx} />} />
           <Route path="servicos" element={<Servicos ctx={ctx} />} />
+          <Route path="premios" element={<Premios ctx={ctx} />} />
           <Route
             path="pendencias"
             element={ctx.isOwner ? <Pendencias ctx={ctx} /> : <Navigate to={`${base}/filas`} replace />}

@@ -9,6 +9,7 @@ import { useForm } from "../ui/useForm";
 import { formatCents } from "../money";
 import { StreamProvider, StreamStatusNotice } from "../stream/StreamProvider";
 import { usePublicQueues } from "./fila/filasPublicas";
+import { Pontos } from "./fidelidade/Pontos";
 import { Historico } from "./fila/Historico";
 import { MinhaVisita } from "./fila/MinhaVisita";
 
@@ -48,7 +49,16 @@ export function Loja() {
     state.status === "ready" &&
     (state.session.account !== null || state.session.visitors.some((v) => v.establishment_id === shop.id));
   return (
-    <StreamProvider estId={shop.id} channels={identified ? ["public", "visit"] : ["public"]}>
+    <StreamProvider
+      estId={shop.id}
+      channels={
+        state.status === "ready" && state.session.account !== null
+          ? ["public", "visit", "account"]
+          : identified
+            ? ["public", "visit"]
+            : ["public"]
+      }
+    >
       <section aria-labelledby="titulo-loja">
         <h2 id="titulo-loja">{shop.name}</h2>
         <StreamStatusNotice />
@@ -88,6 +98,7 @@ function Visitante({ shop }: { shop: PublicEstablishment }) {
         </p>
       )}
       {(current || account) && <MinhaVisita shopId={shop.id} />}
+      {account && <Pontos shopId={shop.id} />}
       {account && <Historico shopId={shop.id} />}
       {current ? (
         <div className="card">

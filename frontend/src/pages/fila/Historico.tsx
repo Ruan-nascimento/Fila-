@@ -88,6 +88,9 @@ export function Historico({ shopId }: { shopId: string }) {
               <span>{orderStatusText[h.order_status]}</span>
               <strong>{formatCents(h.total.amount_cents)}</strong>
             </p>
+            {h.points_credited > 0 && (
+              <p className="muted">+{h.points_credited} pontos ganhos nesta visita</p>
+            )}
           </li>
         ))}
       </ul>
