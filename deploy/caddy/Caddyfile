@@ -8,6 +8,8 @@
 #     escrita no servidor (a API encerra cada conexão SSE em 30 min e manda ping a cada 15 s).
 #   - Reinício da API: lb_try_duration segura as requisições por até 20 s enquanto a API volta;
 #     pedido que não chegou à API é repetido (seguro), o que já chegou não é repetido pelo proxy.
+#   - O Caddy fica sempre no ar (imagem oficial); cada versão só publica os arquivos do site no
+#     volume /site (serviço "site" do compose). Trocar de versão não fecha a porta pública.
 #   - Sem log de acesso no Caddy: ele gravaria IP e user-agent (dado pessoal). O log de acesso é o
 #     da API, que não tem IP, corpo nem query string.
 
@@ -58,7 +60,7 @@
 	}
 
 	handle {
-		root * /srv
+		root * /site
 		encode zstd gzip
 		@assets path /assets/*
 		header @assets Cache-Control "public, max-age=31536000, immutable"

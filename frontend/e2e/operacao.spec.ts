@@ -206,6 +206,14 @@ test("implantação com gente na fila: nada se perde, ninguém vê erro e as tel
   };
 });
 
+let religarNoFim = false;
+test.afterEach(() => {
+  if (religarNoFim) {
+    compose("up", "-d", "--no-deps", "worker");
+    religarNoFim = false;
+  }
+});
+
 test("worker morto no meio do trabalho: ao voltar, faz tudo o que ficou parado (uma vez)", async () => {
   limparLimitesDoTeste();
   const loja = await montarLoja("work");
@@ -239,9 +247,14 @@ test("worker morto no meio do trabalho: ao voltar, faz tudo o que ficou parado (
 
   // Mata o worker SEM encerramento gracioso (como queda de energia ou OOM).
   compose("kill", "-s", "SIGKILL", "worker");
+  // Mesmo se uma verificação falhar, o worker volta (os outros testes dependem dele).
+  test.info().attach("worker", { body: "morto" });
+  religarNoFim = true;
   const morto = Date.now();
   await pixControle(`/control/set?externalId=${pix.id}&status=PAID`);
-  psql(`UPDATE reward_reservation SET expires_at = now() - interval '1 minute' WHERE id = '${reserva.id}'`);
+  psql(
+    `UPDATE reward_reservation SET created_at = now() - interval '25 hours', expires_at = now() - interval '1 hour' WHERE id = '${reserva.id}'`,
+  );
   await sofia.ok("POST", "/v1/auth/reauthenticate", { password: senha });
   const pedido = await sofia.ok("POST", "/v1/me/deletion-request", { confirm_effects: true });
   const outro = await Api.nova();
@@ -251,6 +264,7 @@ test("worker morto no meio do trabalho: ao voltar, faz tudo o que ficou parado (
   expect((await loja.beto.ok("GET", `${est}/orders/${om.id}`)).payment.charges[0].status).toBe("pending");
 
   compose("up", "-d", "--no-deps", "worker");
+  religarNoFim = false;
   const t0 = Date.now();
   await expect
     .poll(async () => (await loja.beto.ok("GET", `${est}/orders/${om.id}`)).payment.charges[0].status, {

@@ -573,10 +573,14 @@ func TestStreamTimeoutsHeartbeatAndLimits(t *testing.T) {
 	if !s.ended(3 * time.Second) {
 		t.Fatal("vida máxima não encerrou a conexão")
 	}
-	a := openStream(t, srv.Client(), srv.URL, b.id, "public", "", "X-Forwarded-For", "198.51.100.10")
-	c := openStream(t, srv.Client(), srv.URL, b.id, "public", "", "X-Forwarded-For", "198.51.100.10")
-	d := openStream(t, srv.Client(), srv.URL, b.id, "public", "", "X-Forwarded-For", "198.51.100.10")
-	if a.status != 200 || c.status != 200 || d.status != 429 {
+	// Anônimos no mesmo IP (Wi-Fi da loja) não contam como uma credencial: só o teto por IP vale.
+	for i := range 3 {
+		if a := openStream(t, srv.Client(), srv.URL, b.id, "public", "", "X-Forwarded-For", "198.51.100.10"); a.status != 200 {
+			t.Fatalf("anônimo %d no mesmo IP: %d", i, a.status)
+		}
+	}
+	// Com credencial (a visitante Ana), o limite por credencial vale (2 neste teste).
+	if a, c, d := v.stream(b.id, "public,visit", ""), v.stream(b.id, "public,visit", ""), v.stream(b.id, "public,visit", ""); a.status != 200 || c.status != 200 || d.status != 429 {
 		t.Fatalf("limite por credencial: %d %d %d", a.status, c.status, d.status)
 	}
 }

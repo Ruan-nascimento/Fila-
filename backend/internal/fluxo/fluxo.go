@@ -201,7 +201,10 @@ func (s *Service) acquire(key, ip string) error {
 		return &hs.Error{Status: 503, Code: "service_unavailable", Title: "Servidor ocupado",
 			Detail: "Muitas conexões abertas agora. A tela tenta de novo sozinha.", RetryAfter: 10 * time.Second}
 	}
-	if s.perCred[key] >= s.Limits.PerCredential || s.perIP[ip] >= s.Limits.PerIP {
+	// Sem credencial (só olhando a página da loja), a "credencial" seria o IP: várias pessoas no
+	// mesmo Wi-Fi da barbearia contariam como uma. Para elas vale só o teto por IP.
+	anonymous := strings.HasPrefix(key, "ip:")
+	if (!anonymous && s.perCred[key] >= s.Limits.PerCredential) || s.perIP[ip] >= s.Limits.PerIP {
 		return hs.ErrRateLimited(5 * time.Second)
 	}
 	s.perCred[key]++

@@ -119,8 +119,10 @@ services:
       - ${FILA_BACKUPS_DIR:?defina FILA_BACKUPS_DIR}:/backups:ro
       - correio:/var/lib/fila/correio
 
+  # Caddy: TLS, site e proxy. Imagem oficial e Caddyfile do repositório: muda raramente, então a
+  # implantação de uma versão nova NÃO recria este contêiner (a porta pública não fecha).
   web:
-    image: ${FILA_IMAGEM_WEB:-fila-web:local}
+    image: caddy:2.11.9-alpine@sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20faefb9f61126836f0
     restart: unless-stopped
     read_only: true
     cap_drop: [ALL]
@@ -134,10 +136,23 @@ services:
       - "${FILA_PORTA_HTTPS:-443}:443"
       - "${FILA_PORTA_HTTPS:-443}:443/udp"
     volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - site:/site:ro
       - caddy_data:/data
       - caddy_config:/config
     tmpfs: [/tmp]
     depends_on: [api]
+
+  # Publica o site da versão (imagem fila-web) no volume que o Caddy serve; roda e sai.
+  site:
+    profiles: [ferramentas]
+    image: ${FILA_IMAGEM_WEB:-fila-web:local}
+    restart: "no"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - site:/site
 
   # Backup e restauração usam o pg_dump/pg_restore da MESMA versão do servidor (18.7).
   backup:
@@ -188,6 +203,7 @@ services:
 
 volumes:
   pgdata:
+  site:
   caddy_data:
   caddy_config:
   correio:

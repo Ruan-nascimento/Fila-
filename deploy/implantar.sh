@@ -8,7 +8,8 @@
 #   2. backup ANTES de migrar (reversão de migração = restaurar este backup);
 #   3. migrações (só para frente, compatíveis com a versão anterior) e permissões mínimas;
 #   4. troca a API (o Caddy segura as requisições por até 20 s) e depois o worker;
-#   5. confere a saúde pela porta pública.
+#   5. publica o site da versão no volume do Caddy (o Caddy NÃO é reiniciado: a porta não fecha);
+#   6. confere a saúde pela porta pública.
 # Reversão da APLICAÇÃO: rode de novo com a versão anterior (o banco migrado continua
 # compatível com ela). Reversão de MIGRAÇÃO com defeito: deploy/restaurar.sh com o backup do passo 2.
 set -euo pipefail
@@ -56,6 +57,9 @@ passo "trocando a API"
 "${DC[@]}" up -d --no-deps --wait api
 passo "trocando o worker"
 "${DC[@]}" up -d --no-deps worker
+# O site novo só depois da API nova (a API aceita o site anterior e o novo; o contrário não).
+passo "publicando o site"
+"${DC[@]}" "${PERFIS[@]}" run --rm site
 "${DC[@]}" up -d --no-deps --wait web
 
 passo "conferindo pela porta pública"

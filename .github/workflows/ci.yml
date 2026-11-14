@@ -169,7 +169,7 @@ jobs:
           docker run --rm -v "$PWD:/mnt" -w /mnt
           koalaman/shellcheck:v0.11.0@sha256:61862eba1fcf09a484ebcc6feea46f1782532571a34ed51fedf90dd25f925a8d
           --severity=info deploy/implantar.sh deploy/restaurar.sh deploy/backup/backup.sh
-          deploy/backup/restaurar-banco.sh deploy/postgres/init/01-papeis.sh
+          deploy/backup/restaurar-banco.sh deploy/postgres/init/01-papeis.sh deploy/caddy/publicar-site.sh
       - name: Compose válido para homologação e produção
         run: |
           docker compose version

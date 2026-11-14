@@ -119,7 +119,7 @@ Cliente:
 | Revalidação da sessão | A cada 30 s, e imediatamente ao receber aviso interno de revogação |
 | Vida máxima da conexão | 30 min; servidor encerra e o cliente reconecta com cursor |
 | Buffer por conexão | 256 eventos; estourou → conexão encerrada (cliente lento reconecta com cursor) |
-| Conexões por credencial | Máximo de 6 simultâneas; acima disso → 429 |
+| Conexões por credencial | Máximo de 6 simultâneas por conta ou visitante; acima disso → 429. Quem só olha a página da loja (sem credencial) conta apenas no teto por IP (etapa 12: várias pessoas no mesmo Wi-Fi não são "uma credencial") |
 | Conexões por IP (etapa 12) | 100 simultâneas por processo (`FILA_SSE_MAX_PER_IP`); acima → 429. Generoso: vários celulares podem sair pelo mesmo Wi-Fi da loja |
 | Conexões por processo (etapa 12) | 2000 (`FILA_SSE_MAX_CONNECTIONS`); acima → 503 com `Retry-After` (servidor cheio; o cliente tenta de novo) |
 | Timeout de escrita | Por mensagem (5 s); o `WriteTimeout` global do servidor HTTP não se aplica a esta rota |
