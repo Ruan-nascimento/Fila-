@@ -107,12 +107,25 @@ func writeProblem(w http.ResponseWriter, r *http.Request, e *Error) {
 	_ = json.NewEncoder(w).Encode(p)
 }
 
+// StatusClientClosedRequest (499) marca pedido abandonado pelo cliente (não é erro do servidor).
+const StatusClientClosedRequest = 499
+
 // WriteError escreve err como problem+json. *Error vai como está; qualquer outro erro é
 // registrado no log (só o texto do erro, sem dados da requisição) e vira 500 genérico.
 func WriteError(w http.ResponseWriter, r *http.Request, log *slog.Logger, err error) {
 	var e *Error
 	if errors.As(err, &e) {
 		writeProblem(w, r, e)
+		return
+	}
+	// O cliente foi embora no meio (mudou de página, fechou a aba, perdeu a rede): a consulta foi
+	// cancelada por isso. Não é falha do servidor — ninguém vai ler a resposta. Registra como
+	// informação e responde 499 (convenção para "cliente fechou a conexão"), sem virar alarme.
+	if r.Context().Err() != nil {
+		if log != nil {
+			log.Info("cliente desistiu da requisição", "request_id", RequestIDFrom(r.Context()), "route", r.Pattern)
+		}
+		w.WriteHeader(StatusClientClosedRequest)
 		return
 	}
 	if log != nil {
