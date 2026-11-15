@@ -334,3 +334,45 @@ func TestCursorEncoding(t *testing.T) {
 		}
 	}
 }
+
+// Exclusão de conta: enquanto a limpeza segura o publicador, nada é publicado; quando ela
+// confirma, o que sai para o event_log já é a versão limpa (sem corrida entre o publicador ler
+// a outbox e a limpeza editar a linha).
+func TestHoldPublisherSerializesCleanup(t *testing.T) {
+	pool, est, pub, _ := setup(t)
+	ctx := context.Background()
+	tx, _ := pool.Begin(ctx)
+	if err := outbox.Record(ctx, tx, event(est, 1)); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	cleanup, _ := pool.Begin(ctx)
+	defer func() { _ = cleanup.Rollback(ctx) }()
+	if err := outbox.HoldPublisher(ctx, cleanup); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan int, 1)
+	go func() {
+		n, _ := pub.PublishOnce(ctx)
+		done <- n
+	}()
+	select {
+	case n := <-done:
+		t.Fatalf("publicou %d com a limpeza em andamento", n)
+	case <-time.After(300 * time.Millisecond):
+	}
+	if _, err := cleanup.Exec(ctx, `UPDATE outbox SET payload = '{"limpo": true}'`); err != nil {
+		t.Fatal(err)
+	}
+	if err := cleanup.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	<-done
+	publishAll(t, pub)
+	var payload string
+	if err := pool.QueryRow(ctx, `SELECT payload::text FROM event_log`).Scan(&payload); err != nil || payload != `{"limpo": true}` {
+		t.Fatalf("event_log recebeu a versão antiga: %q %v", payload, err)
+	}
+}

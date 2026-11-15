@@ -237,6 +237,16 @@ func CurrentCursor(ctx context.Context, q database.Querier) (string, error) {
 	return Cursor{Epoch: h.Epoch, Position: h.Last}.Encode(), nil
 }
 
+// HoldPublisher segura o publicador até o fim da transação (a mesma trava que ele usa em
+// event_stream_state). Quem edita ou apaga eventos guardados (exclusão de conta) chama ANTES de
+// mexer na outbox: o publicador lê a outbox sem trava, então, sem isso, um evento lido antes da
+// limpeza podia ir para o event_log com o dado antigo depois dela. Também fixa a ordem das travas
+// (estado do fluxo → linhas da outbox), a mesma do publicador, sem risco de impasse.
+func HoldPublisher(ctx context.Context, tx pgx.Tx) error {
+	_, err := tx.Exec(ctx, `SELECT 1 FROM event_stream_state WHERE id = 1 FOR UPDATE`)
+	return err
+}
+
 // ForgetAccount apaga os eventos ainda guardados que pertencem à conta (audiências visit e
 // account, com a visão da própria pessoa). Usado na anonimização; eventos da equipe expiram com a
 // retenção de 24 h. Devolve quantos foram apagados.

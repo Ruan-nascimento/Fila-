@@ -678,6 +678,10 @@ func (s *Service) anonymize(ctx context.Context, tx pgx.Tx, x requestRow, now ti
 	if err := s.fault("depois_das_participacoes"); err != nil {
 		return ev, err
 	}
+	// Publicador parado até o COMMIT: nenhum evento lido antes da limpeza escapa dela.
+	if err := outbox.HoldPublisher(ctx, tx); err != nil {
+		return ev, err
+	}
 	if n, err = outbox.ForgetAccount(ctx, tx, x.AccountID); err != nil {
 		return ev, err
 	}
