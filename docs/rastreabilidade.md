@@ -188,11 +188,11 @@ Resumo: automatizado: 126 · parcial: 0 · sem teste: 1 · sem cenário: 0 · au
 | C-CMD-02 — Serviço desativado ou alterado depois da inclusão | `backend/internal/api/atendimento_test.go: TestCatalogChangesDoNotRewriteOrder` |
 | C-CMD-03 — Edição enquanto aguarda | `backend/internal/api/atendimento_test.go: TestEditItemsWhileWaiting` |
 | C-CMD-04 — Solicitação após a chamada | `backend/internal/api/atendimento_test.go: TestChangeRequests` |
-| C-CMD-05 — Item realizado não é removido pelo cliente | `backend/internal/api/atendimento_test.go: TestCompleteFreesChair` |
+| C-CMD-05 — Item realizado não é removido pelo cliente | `backend/internal/api/atendimento_test.go: TestChangeRequests` |
 | C-CMD-06 — Edição concorrente não sobrescreve | `backend/internal/api/atendimento_test.go: TestConcurrentOrderEdit` |
 | C-CMD-07 — Equipe altera serviços com auditoria | `backend/internal/api/atendimento_test.go: TestOrderAccessAndList` |
 | C-ATD-01 — Concluir libera a cadeira; financeiro fica pendente | `backend/internal/api/atendimento_test.go: TestCompleteFreesChair` |
-| C-ATD-02 — Concluir com solicitação pendente falha | `backend/internal/api/atendimento_test.go: TestCompleteFreesChair`<br>`backend/internal/api/atendimento_test.go: TestInterruptionPositive` |
+| C-ATD-02 — Concluir com solicitação pendente falha | `backend/internal/api/atendimento_test.go: TestChangeRequests`<br>`backend/internal/api/atendimento_test.go: TestInterruptionPositive` |
 | C-ATD-03 — Interrupção com valor positivo | `backend/internal/api/atendimento_test.go: TestInterruptionPositive`<br>`frontend/e2e/piloto.spec.ts: roteiro do piloto: do primeiro cliente às pendências da dona` |
 | C-ATD-04 — Interrupção com valor zero | `backend/internal/api/atendimento_test.go: TestInterruptionZero` |
 | C-ATD-05 — Correção após fechamento com Pix pendente | `backend/internal/api/atendimento_test.go: TestAdjustClosedOrder`<br>`backend/internal/api/pagamento_test.go: TestAdjustBlockedByRealPix` |
@@ -215,7 +215,7 @@ Resumo: automatizado: 126 · parcial: 0 · sem teste: 1 · sem cenário: 0 · au
 | C-FID-04 — Sem pontos para visitante, cancelado, ausente, interrompido ou gratuito | `backend/internal/api/fidelidade_test.go: TestCreditOnceAfterPaidAndConferred` |
 | C-FID-05 — Extrato explica o saldo | `backend/internal/api/fidelidade_test.go: TestCreditOnceAfterPaidAndConferred`<br>`backend/internal/api/fidelidade_test.go: TestRewardReservationLifecycle` |
 | C-FID-06 — Estorno reverte; excesso não; saldo negativo bloqueia resgate | `backend/internal/api/fidelidade_test.go: TestRefundAfterRedemption` |
-| C-FID-07 — Prêmio é cortesia separada | `backend/internal/api/fidelidade_test.go: TestDisablingProgramKeepsRights`<br>`backend/internal/api/fidelidade_test.go: TestLastUnitConcurrency`<br>`backend/internal/api/fidelidade_test.go: TestRewardReservationLifecycle` |
+| C-FID-07 — Prêmio é cortesia separada | `backend/internal/api/fidelidade_test.go: TestDisablingProgramKeepsRights`<br>`backend/internal/api/fidelidade_test.go: TestRewardReservationLifecycle` |
 | C-FID-08 — Reserva de 24 horas libera exatamente uma vez | `backend/internal/api/fidelidade_test.go: TestDeliveryVersusExpiry`<br>`backend/internal/api/fidelidade_test.go: TestRewardReservationLifecycle` |
 | C-FID-09 — Dois clientes disputam a última unidade (e gasto duplo) | `backend/internal/api/fidelidade_test.go: TestLastUnitConcurrency`<br>`backend/internal/api/fidelidade_test.go: TestNoDoubleSpend` |
 | C-FID-10 — Entrega disputando com vencimento; correção da dona | `backend/internal/api/fidelidade_test.go: TestDeliveryVersusExpiry` |
@@ -223,7 +223,7 @@ Resumo: automatizado: 126 · parcial: 0 · sem teste: 1 · sem cenário: 0 · au
 | C-EXC-01 — Exclusão simples | `backend/internal/api/exclusao_test.go: TestDeletionSimple`<br>`backend/internal/api/revisao_test.go: TestDeletionLeavesNoPersonalDataAnywhere` |
 | C-EXC-02 — Exclusão com atendimento ou pagamento pendente | `backend/internal/api/exclusao_test.go: TestDeletionWithPendingWork` |
 | C-EXC-03 — Anonimização repetível e retomável | `backend/internal/api/exclusao_test.go: TestDeletionJobResumes`<br>`backend/internal/api/revisao_test.go: TestDeletionLeavesNoPersonalDataAnywhere` |
-| C-EXC-04 — Meta de 30 dias gera alerta | `backend/internal/api/exclusao_test.go: TestDeletionJobResumes`<br>`backend/internal/api/exclusao_test.go: TestDeletionProfessional`<br>`frontend/src/pages/exclusao/exclusao.test.tsx: destaca o que está perto da meta de 30 dias, sem chamar de prazo legal` |
+| C-EXC-04 — Meta de 30 dias gera alerta | `backend/internal/api/exclusao_test.go: TestDeletionProfessional`<br>`frontend/src/pages/exclusao/exclusao.test.tsx: destaca o que está perto da meta de 30 dias, sem chamar de prazo legal` |
 | C-EXC-05 — Dona única não pode excluir a conta | `backend/internal/api/exclusao_test.go: TestDeletionSoleOwner` |
 | C-EXC-06 — Profissional exclui a própria conta | `backend/internal/api/exclusao_test.go: TestDeletionProfessional` |
 | C-SSE-01 — Comando gera atualização sem polling | `backend/internal/api/stream_test.go: TestStreamSnapshotAndLiveEvents`<br>`backend/internal/platform/outbox/outbox_test.go: TestRolledBackChangeHasNoEvent`<br>`frontend/e2e/jornadas.spec.ts: visitante no celular e Beto no computador: do link da loja ao pago, atualizando sozinho` |

@@ -70,18 +70,25 @@ def testes() -> dict[str, list[str]]:
         rel = arq.relative_to(RAIZ).as_posix()
         pendentes: list[str] = []  # ids vistos antes do próximo teste (comentário de cabeçalho)
         atual = None
+        recuo_atual = 0  # recuo da linha que abre o teste atual
         for linha in linhas:
             nome = None
             m = FUNC_GO.match(linha) if arq.suffix == ".go" else TESTE_TS.match(linha)
             if m:
                 nome = m.group(1)
+            elif arq.suffix == ".go" and linha.startswith("func "):
+                atual = None  # função auxiliar: o que vier dentro dela não é de nenhum teste
+            recuo = len(linha) - len(linha.lstrip())
             if nome:
-                atual = nome
+                atual, recuo_atual = nome, recuo
                 for c in pendentes:
                     out.setdefault(c, []).append(f"{rel}: {atual}")
                 pendentes = []
+            comentario = linha.lstrip().startswith(("//", "*", "/*"))
             for c in ID.findall(linha):
-                if nome or (atual and not linha.lstrip().startswith(("//", "*", "/*"))):
+                # Comentário mais recuado que a abertura do teste está DENTRO dele (corpo); no mesmo
+                # recuo, é cabeçalho do próximo teste.
+                if nome or (atual and (not comentario or recuo > recuo_atual)):
                     ref = f"{rel}: {atual}"
                     if ref not in out.setdefault(c, []):
                         out[c].append(ref)

@@ -27,10 +27,12 @@ Defeitos achados pelos testes e exercícios, com gravidade, como reproduzir e si
 | B-11-03 | Baixa | Erro antigo ficava ao lado do QR do Pix depois de a rede voltar | Rede caindo na geração do Pix | **Corrigido** (etapa 11), com teste |
 | B-11-04 | Baixa | Cliente que saía no meio de um pedido virava "erro 500" no log | Fechar a aba durante uma requisição | **Corrigido** (etapa 11): 499 informativo |
 
-## Defeitos dos próprios testes (etapa 13)
+## Defeitos dos próprios testes (etapa 13 e revisão)
 
 | Id | Defeito | Situação |
 |---|---|---|
+| T-R-01 | A ferramenta de rastreabilidade creditava um id de cenário citado em comentário **dentro** de um teste ao teste **seguinte** (C-CMD-05 e C-ATD-02 apareciam em `TestCompleteFreesChair`, que não os confere) | Corrigido: comentário mais recuado que a abertura do teste conta para o próprio teste; função auxiliar não herda o teste anterior. Os dois cenários continuam cobertos, agora pelo teste certo (`TestChangeRequests`) |
+| T-R-02 | Quatro cenários estavam listados como cobertos, mas os testes não conferiam todas as frases: C-EST-04 (chamar com fila pausada, fechar depois de cancelar, concluir após fechar), C-EXC-04 (alerta de **monitoramento**, só a tela era testada), C-FID-07 (ausência de campo de desconto), C-SSE-01 (transação desfeita sem evento: o teste existia, mas não estava ligado) | Corrigido: os testes agora conferem cada frase do cenário |
 | T-13-01 | O roteiro do piloto resolvia "a primeira" pendência da tela quando havia duas; no Edge, a lista se atualizava em outra ordem e o teste falhava | Corrigido: o teste mira o cartão do Pix tardio e confere a nota no servidor. Passa no Chrome e no Edge |
 | T-13-02 | O teste que confere as variáveis de implantação lia nomes sem dígitos (`FILA_CURL_IPV4` virava `FILA_CURL_IPV`) | Corrigido na expressão; pacote reexecutado |
 | T-13-03 | A 1ª versão da varredura de autorização chamava "sair" como dado próprio e deslogava os intrusos, que passavam a receber só 401 | Corrigido: só leituras próprias são chamadas, e o teste exige que cada intruso continue logado e que haja 403/404 |
