@@ -189,6 +189,16 @@ func (s *Service) Reverse(ctx context.Context, tx pgx.Tx, estID, orderID uuid.UU
 	return loyaltyChanged(ctx, tx, estID, accountID, now)
 }
 
+// ReservationIDsOf devolve os ids das reservas da conta (exclusão: o nome sai também dos eventos e
+// respostas guardados da equipe, trocado por identidade).
+func ReservationIDsOf(ctx context.Context, q database.Querier, accountID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.Query(ctx, `SELECT id FROM reward_reservation WHERE account_id = $1`, accountID)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+}
+
 // CloseForDeletion (T-RW-06 + T-LG-03): na exclusão de conta, cancela as reservas ativas
 // (libera pontos e unidade uma vez) e encerra o saldo de cada loja, sem conversão em dinheiro.
 func (s *Service) CloseForDeletion(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, now time.Time) error {

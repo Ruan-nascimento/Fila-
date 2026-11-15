@@ -35,12 +35,14 @@ import (
 	"fila/internal/atendimento"
 	"fila/internal/auditoria"
 	"fila/internal/estabelecimento"
+	"fila/internal/fidelidade"
 	"fila/internal/fila"
 	"fila/internal/identidade"
 	"fila/internal/platform/clock"
 	"fila/internal/platform/database"
 	hs "fila/internal/platform/httpserver"
 	"fila/internal/platform/idempotency"
+	"fila/internal/platform/jsonscrub"
 	"fila/internal/platform/keys"
 	"fila/internal/platform/outbox"
 	"fila/internal/platform/ratelimit"
@@ -651,17 +653,13 @@ func (s *Service) anonymize(ctx context.Context, tx pgx.Tx, x requestRow, now ti
 	ev := evidence{Categories: map[string]int64{}, At: now,
 		// O que fica (com o pseudônimo, sem perfil): necessário a reconciliação e auditoria.
 		Kept: []string{"comandas_e_itens", "correcoes", "auditoria", "participacoes_sem_nick"}}
-	// Textos pessoais (nome, e-mail, nicks das visitas) ANTES de anonimizar: também saem dos
-	// registros temporários de outros módulos (eventos e respostas guardadas da equipe, 24 h).
-	personal, err := identidade.PersonalStrings(ctx, tx, x.AccountID)
+	// Visitas e reservas da pessoa: o nick e o nome de reserva saem também dos registros
+	// temporários de outros módulos (eventos e respostas guardadas da equipe, 24 h), trocados
+	// por IDENTIDADE (id), nunca por texto: outra pessoa com o mesmo nome fica intacta (R-13-01).
+	targets, err := s.scrubTargets(ctx, tx, x.AccountID)
 	if err != nil {
 		return ev, err
 	}
-	nicks, err := fila.NicksOf(ctx, tx, x.AccountID)
-	if err != nil {
-		return ev, err
-	}
-	personal = append(personal, nicks...)
 	profile, err := s.Identity.AnonymizeAccount(ctx, tx, x.AccountID, now)
 	if err != nil {
 		return ev, err
@@ -684,19 +682,38 @@ func (s *Service) anonymize(ctx context.Context, tx pgx.Tx, x requestRow, now ti
 		return ev, err
 	}
 	ev.Categories["eventos"] = n
-	if n, err = outbox.ScrubStrings(ctx, tx, personal, fila.DeletedNick); err != nil {
+	if n, err = outbox.ScrubIdentity(ctx, tx, targets); err != nil {
 		return ev, err
 	}
 	ev.Categories["eventos_da_equipe"] = n
 	if n, err = idempotency.ForgetActor(ctx, tx, "conta:"+x.AccountID.String()); err != nil {
 		return ev, err
 	}
-	m, err := idempotency.ScrubStrings(ctx, tx, personal, fila.DeletedNick)
+	m, err := idempotency.ScrubIdentity(ctx, tx, targets)
 	if err != nil {
 		return ev, err
 	}
 	ev.Categories["respostas_guardadas"] = n + m
 	return ev, nil
+}
+
+func (s *Service) scrubTargets(ctx context.Context, tx pgx.Tx, accountID uuid.UUID) (jsonscrub.Targets, error) {
+	t := jsonscrub.Targets{Participations: map[string]bool{}, Reservations: map[string]bool{}, Replacement: fila.DeletedNick}
+	parts, err := fila.ParticipationIDsOf(ctx, tx, accountID)
+	if err != nil {
+		return t, err
+	}
+	for _, id := range parts {
+		t.Participations[id.String()] = true
+	}
+	res, err := fidelidade.ReservationIDsOf(ctx, tx, accountID)
+	if err != nil {
+		return t, err
+	}
+	for _, id := range res {
+		t.Reservations[id.String()] = true
+	}
+	return t, nil
 }
 
 // MinimizeVisitorNicks remove o nick de visitantes depois da necessidade operacional (matriz de

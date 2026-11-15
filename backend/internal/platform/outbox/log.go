@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"fila/internal/platform/database"
+	"fila/internal/platform/jsonscrub"
 )
 
 // Published é um evento já publicado (event_log), com a posição definitiva.
@@ -251,24 +252,51 @@ func ForgetAccount(ctx context.Context, q database.Querier, accountID uuid.UUID)
 	return a.RowsAffected() + b.RowsAffected(), nil
 }
 
-// ScrubStrings troca, nos eventos ainda guardados (event_log, até 24 h, e outbox), cada texto
-// pessoal pelo substituto (etapa 13: exclusão de conta). As visões da equipe levam o nick da
-// pessoa; apagar esses eventos abriria buracos na sequência do fluxo, então o texto é trocado.
-// A troca é de um VALOR JSON inteiro ("Fulana" → "Cliente"), nunca de pedaço de palavra.
-func ScrubStrings(ctx context.Context, q database.Querier, values []string, replacement string) (int64, error) {
+// ScrubIdentity troca, nos eventos ainda guardados (event_log, até 24 h, e outbox), o nick e o
+// nome de reserva da pessoa excluída pelo substituto (etapa 13: exclusão de conta). As visões da
+// equipe levam o nick; apagar esses eventos abriria buracos na sequência do fluxo, então só o
+// campo é trocado. A troca é por IDENTIDADE (id da visita ou da reserva), nunca por texto: outra
+// pessoa com o mesmo nome e valores iguais ao nome (ex.: estado "waiting") ficam como estavam.
+func ScrubIdentity(ctx context.Context, q database.Querier, t jsonscrub.Targets) (int64, error) {
+	if t.Empty() {
+		return 0, nil
+	}
 	var total int64
-	for _, v := range values {
-		if strings.TrimSpace(v) == "" {
-			continue
+	for _, table := range []string{"event_log", "outbox"} {
+		key := "position"
+		if table == "outbox" {
+			key = "id"
 		}
-		for _, table := range []string{"event_log", "outbox"} {
-			tag, err := q.Exec(ctx, `
-				UPDATE `+table+` SET payload = replace(payload::text, to_jsonb($1::text)::text, to_jsonb($2::text)::text)::jsonb
-				WHERE strpos(payload::text, to_jsonb($1::text)::text) > 0`, v, replacement)
+		rows, err := q.Query(ctx, `SELECT `+key+`, payload::text FROM `+table+`
+			WHERE EXISTS (SELECT 1 FROM unnest($1::text[]) AS i WHERE strpos(payload::text, i) > 0)
+			ORDER BY `+key+` FOR UPDATE`, t.IDs())
+		if err != nil {
+			return total, err
+		}
+		type row struct {
+			key  int64
+			body string
+		}
+		found, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (row, error) {
+			var x row
+			err := r.Scan(&x.key, &x.body)
+			return x, err
+		})
+		if err != nil {
+			return total, err
+		}
+		for _, x := range found {
+			out, changed, err := t.Rewrite([]byte(x.body))
 			if err != nil {
 				return total, err
 			}
-			total += tag.RowsAffected()
+			if !changed {
+				continue
+			}
+			if _, err := q.Exec(ctx, `UPDATE `+table+` SET payload = $2::jsonb WHERE `+key+` = $1`, x.key, string(out)); err != nil {
+				return total, err
+			}
+			total++
 		}
 	}
 	return total, nil

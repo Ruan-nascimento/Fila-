@@ -463,3 +463,69 @@ func TestInjectionStringsAreData(t *testing.T) {
 		t.Fatal("tabela de contas mudou")
 	}
 }
+
+// Revisão da etapa 13 (R-13-01): a limpeza da exclusão mexe SÓ nos dados da pessoa excluída.
+// Uma conta chamada "waiting" (igual a um estado do sistema) e outra pessoa com o MESMO nome não
+// podem ter estados nem nicks trocados nos eventos e respostas guardadas.
+func TestDeletionScrubTouchesOnlyTheDeletedPerson(t *testing.T) {
+	e := newEnv(t)
+	b := e.barbearia(t)
+	cadastro := func(email string) *browser {
+		x := e.browser()
+		x.mustStatus(x.do("POST", "/v1/auth/register", map[string]any{"name": "waiting", "email": email, "password": goodPassword}), 202)
+		x.mustStatus(x.do("POST", "/v1/auth/email-verification/confirm", map[string]any{"token": e.lastToken(email, "Confirme")}), 204)
+		x.mustStatus(x.login(email, goodPassword, "customer"), 200)
+		return x
+	}
+	sai := cadastro("sai@exemplo.com")
+	fica := cadastro("fica@exemplo.com")
+	ps, _ := visitOf(sai.mustStatus(sai.enter(b.id, b.filaBeto, b.corte), 201))
+	pf, _ := visitOf(fica.mustStatus(fica.enter(b.id, b.filaBeto, b.corte), 201))
+	// A equipe chama e devolve quem sai (respostas guardadas da equipe com os dois na fila).
+	b.betoB.mustStatus(b.betoB.callNext(b.id, b.filaBeto), 200)
+	b.owner.mustStatus(b.owner.partCmd(b.id, ps["id"].(string), "cancel", map[string]any{"expected_version": 2, "reason": "desistiu da vez"}), 200)
+	e.publish()
+	sai.reauth()
+	sai.mustStatus(sai.requestDeletion(), 202)
+	if n := e.processDeletions(); n != 1 {
+		t.Fatalf("exclusão deveria concluir: %d", n)
+	}
+	e.publish()
+
+	// Nada fora da pessoa excluída virou "Cliente": nem estados, nem o nick da outra "waiting".
+	corrompidos := e.count(t, `SELECT count(*) FROM event_log WHERE payload::text LIKE '%"status": "Cliente"%'`) +
+		e.count(t, `SELECT count(*) FROM idempotency_record WHERE position('"status":"Cliente"' in convert_from(response_body, 'UTF8')) > 0`)
+	if corrompidos != 0 {
+		t.Fatalf("a limpeza trocou estados de outras pessoas: %d registro(s)", corrompidos)
+	}
+	var nickFica string
+	if err := e.pool.QueryRow(t.Context(), `
+		SELECT e->>'nick' FROM event_log, jsonb_path_query(payload, 'strict $.**') e
+		WHERE jsonb_typeof(e) = 'object' AND (e->>'participation_id' = $1 OR e->>'id' = $1) AND e ? 'nick'
+		ORDER BY position DESC LIMIT 1`, pf["id"]).Scan(&nickFica); err != nil {
+		t.Fatalf("eventos da outra pessoa: %v", err)
+	}
+	if nickFica != "waiting" {
+		t.Fatalf("o nick da OUTRA pessoa foi trocado: %q", nickFica)
+	}
+	// Em NENHUM registro guardado (eventos e respostas da equipe) a outra pessoa aparece como "Cliente".
+	trocados := e.count(t, `
+		SELECT count(*) FROM event_log, jsonb_path_query(payload, 'strict $.**') e
+		WHERE jsonb_typeof(e) = 'object' AND (e->>'participation_id' = $1 OR e->>'id' = $1) AND e->>'nick' = 'Cliente'`, pf["id"]) +
+		e.count(t, `
+		SELECT count(*) FROM idempotency_record r, jsonb_path_query(convert_from(r.response_body, 'UTF8')::jsonb, 'strict $.**') e
+		WHERE octet_length(r.response_body) > 0 AND jsonb_typeof(e) = 'object'
+		  AND (e->>'participation_id' = $1 OR e->>'id' = $1) AND e->>'nick' = 'Cliente'`, pf["id"])
+	if trocados != 0 {
+		t.Fatalf("o nick da OUTRA pessoa foi trocado em %d objeto(s) guardado(s)", trocados)
+	}
+	// E a pessoa excluída sumiu dos eventos da equipe.
+	var nickSai string
+	_ = e.pool.QueryRow(t.Context(), `
+		SELECT e->>'nick' FROM event_log, jsonb_path_query(payload, 'strict $.**') e
+		WHERE jsonb_typeof(e) = 'object' AND (e->>'participation_id' = $1 OR e->>'id' = $1) AND e ? 'nick'
+		ORDER BY position DESC LIMIT 1`, ps["id"]).Scan(&nickSai)
+	if nickSai != "Cliente" {
+		t.Fatalf("nick da pessoa excluída nos eventos da equipe: %q", nickSai)
+	}
+}
