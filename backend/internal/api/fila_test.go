@@ -641,16 +641,29 @@ func TestQueueRulesWithRealParticipations(t *testing.T) {
 	if r := b.owner.cmd("POST", estPath(b.id, "/queues/"+b.filaBeto.String()+"/close"), map[string]any{"expected_version": 2}); r.code() != "queue_has_pending_participants" {
 		t.Fatalf("fechar com aguardando: %s", r.raw)
 	}
-	cm, _ := visitOf(b.betoB.mustStatus(b.betoB.callNext(b.id, b.filaBeto), 200))
+	called := b.betoB.mustStatus(b.betoB.callNext(b.id, b.filaBeto), 200)
+	cm, _ := visitOf(called)
+	lia := e.visitorIn(b.id, "Lia")
+	pl, _ := visitOf(lia.mustStatus(lia.enter(b.id, b.filaBeto, b.corte), 201))
 	// Pausada: entradas e chamadas recusadas, mas iniciar quem já foi chamado funciona (C-EST-04).
 	b.owner.mustStatus(b.owner.cmd("POST", estPath(b.id, "/queues/"+b.filaBeto.String()+"/pause"), map[string]any{"expected_version": 2}), 200)
 	if r := e.visitorIn(b.id, "Nova").enter(b.id, b.filaBeto, b.corte); r.code() != "queue_not_open" {
 		t.Fatalf("entrada com fila pausada: %s", r.raw)
 	}
+	if r := b.betoB.callNext(b.id, b.filaBeto); r.status != 409 || r.code() != "queue_not_open" {
+		t.Fatalf("chamar o próximo com fila pausada: %s", r.raw)
+	}
 	b.betoB.mustStatus(b.betoB.partCmd(b.id, pm["id"].(string), "start", map[string]any{"expected_version": num(cm["version"])}), 200)
+	// Lia aguardando impede o fechamento; cancelada com motivo, a fila fecha.
+	if r := b.owner.cmd("POST", estPath(b.id, "/queues/"+b.filaBeto.String()+"/close"), map[string]any{"expected_version": 3}); r.code() != "queue_has_pending_participants" {
+		t.Fatalf("fechar pausada com aguardando: %s", r.raw)
+	}
+	b.owner.mustStatus(b.owner.partCmd(b.id, pl["id"].(string), "cancel", map[string]any{"expected_version": num(pl["version"]), "reason": "fila encerrada"}), 200)
 	b.owner.mustStatus(b.owner.cmd("POST", estPath(b.id, "/queues/"+b.filaBeto.String()+"/close"), map[string]any{"expected_version": 3}), 200)
 	b.owner.reauth()
 	if r := b.owner.cmd("POST", estPath(b.id, "/professionals/"+b.beto.String()+"/deactivate"), map[string]any{"expected_version": 1, "reason": "teste"}); r.code() != "professional_has_active_participations" {
 		t.Fatalf("desativar com atendimento em curso: %s", r.raw)
 	}
+	// Fila fechada: Beto ainda conclui o atendimento em curso.
+	b.betoB.mustStatus(b.betoB.closeVisit(b.id, called, "complete", func(string) string { return "performed" }, nil), 200)
 }

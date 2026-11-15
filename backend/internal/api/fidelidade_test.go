@@ -3,6 +3,7 @@ package api_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -269,6 +270,16 @@ func TestRewardReservationLifecycle(t *testing.T) {
 	if r := b.owner.cmd("POST", estPath(b.id, "/rewards"), map[string]any{"name": "Grátis", "description": "x", "usage_instructions": "x",
 		"cost_points": 0, "stock": map[string]any{"kind": "unlimited"}}); r.status != 400 {
 		t.Fatalf("custo zero: %d", r.status)
+	}
+	// C-FID-07: prêmio é cortesia separada: não há campo de desconto/valor em dinheiro.
+	if r := b.owner.cmd("POST", estPath(b.id, "/rewards"), map[string]any{"name": "Desconto", "description": "x", "usage_instructions": "x",
+		"cost_points": 5, "stock": map[string]any{"kind": "unlimited"}, "discount_cents": 500}); r.status != 400 {
+		t.Fatalf("prêmio com desconto em dinheiro: %d", r.status)
+	}
+	for k := range cerveja {
+		if strings.Contains(k, "discount") || strings.Contains(k, "cents") || strings.Contains(k, "price") {
+			t.Fatalf("prêmio com campo de dinheiro %q: %v", k, cerveja)
+		}
 	}
 	cat := maria.mustStatus(maria.do("GET", estPath(b.id, "/reward-catalog"), nil), 200).body["data"].([]any)
 	if len(cat) != 2 {

@@ -16,6 +16,7 @@ import (
 	"fila/internal/contrato"
 	"fila/internal/estabelecimento"
 	"fila/internal/exclusao"
+	"fila/internal/operacao"
 )
 
 // ---------------------------------------------------------------------------------------------
@@ -325,6 +326,7 @@ func TestDeletionSoleOwner(t *testing.T) {
 
 // C-EXC-06 — profissional exclui a conta: perde o acesso na hora; a fila dele fica com a dona,
 // que redistribui; depois a exclusão conclui. Alerta da meta de 30 dias (operacional).
+// Cenários: C-EXC-04, C-EXC-06.
 func TestDeletionProfessional(t *testing.T) {
 	e := newEnv(t)
 	b := e.barbearia(t)
@@ -351,6 +353,20 @@ func TestDeletionProfessional(t *testing.T) {
 	}
 	if !strings.Contains(e.logs.String(), "meta operacional de 30 dias") {
 		t.Fatal("sem alerta operacional da meta")
+	}
+	// O monitoramento também acusa (C-EXC-04): indicador e alerta para dona e operador.
+	h, err := exclusao.ReadHealth(context.Background(), e.pool, e.clock.Now())
+	if err != nil || h.NearTarget != 1 || h.Processing != 1 {
+		t.Fatalf("indicador de exclusões: %+v %v", h, err)
+	}
+	var alerta *operacao.Alert
+	for _, a := range operacao.Evaluate(operacao.Indicators{At: e.clock.Now(), Deletions: h}) {
+		if a.Name == "FilaExclusaoPertoDaMeta" {
+			alerta = &a
+		}
+	}
+	if alerta == nil || alerta.Owner != operacao.OwnerBoth || strings.Contains(strings.ToLower(alerta.Summary), "prazo legal") {
+		t.Fatalf("alerta da meta: %+v", alerta)
 	}
 	b.owner.mustStatus(b.owner.login(b.email, goodPassword, "staff"), 200) // 26 dias depois: entra de novo
 	l := b.owner.mustStatus(b.owner.do("GET", estPath(b.id, "/deletion-requests"), nil), 200)

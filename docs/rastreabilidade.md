@@ -215,7 +215,7 @@ Resumo: automatizado: 126 · parcial: 0 · sem teste: 1 · sem cenário: 0 · au
 | C-FID-04 — Sem pontos para visitante, cancelado, ausente, interrompido ou gratuito | `backend/internal/api/fidelidade_test.go: TestCreditOnceAfterPaidAndConferred` |
 | C-FID-05 — Extrato explica o saldo | `backend/internal/api/fidelidade_test.go: TestCreditOnceAfterPaidAndConferred`<br>`backend/internal/api/fidelidade_test.go: TestRewardReservationLifecycle` |
 | C-FID-06 — Estorno reverte; excesso não; saldo negativo bloqueia resgate | `backend/internal/api/fidelidade_test.go: TestRefundAfterRedemption` |
-| C-FID-07 — Prêmio é cortesia separada | `backend/internal/api/fidelidade_test.go: TestDisablingProgramKeepsRights`<br>`backend/internal/api/fidelidade_test.go: TestRewardReservationLifecycle` |
+| C-FID-07 — Prêmio é cortesia separada | `backend/internal/api/fidelidade_test.go: TestDisablingProgramKeepsRights`<br>`backend/internal/api/fidelidade_test.go: TestLastUnitConcurrency`<br>`backend/internal/api/fidelidade_test.go: TestRewardReservationLifecycle` |
 | C-FID-08 — Reserva de 24 horas libera exatamente uma vez | `backend/internal/api/fidelidade_test.go: TestDeliveryVersusExpiry`<br>`backend/internal/api/fidelidade_test.go: TestRewardReservationLifecycle` |
 | C-FID-09 — Dois clientes disputam a última unidade (e gasto duplo) | `backend/internal/api/fidelidade_test.go: TestLastUnitConcurrency`<br>`backend/internal/api/fidelidade_test.go: TestNoDoubleSpend` |
 | C-FID-10 — Entrega disputando com vencimento; correção da dona | `backend/internal/api/fidelidade_test.go: TestDeliveryVersusExpiry` |
@@ -223,10 +223,10 @@ Resumo: automatizado: 126 · parcial: 0 · sem teste: 1 · sem cenário: 0 · au
 | C-EXC-01 — Exclusão simples | `backend/internal/api/exclusao_test.go: TestDeletionSimple`<br>`backend/internal/api/revisao_test.go: TestDeletionLeavesNoPersonalDataAnywhere` |
 | C-EXC-02 — Exclusão com atendimento ou pagamento pendente | `backend/internal/api/exclusao_test.go: TestDeletionWithPendingWork` |
 | C-EXC-03 — Anonimização repetível e retomável | `backend/internal/api/exclusao_test.go: TestDeletionJobResumes`<br>`backend/internal/api/revisao_test.go: TestDeletionLeavesNoPersonalDataAnywhere` |
-| C-EXC-04 — Meta de 30 dias gera alerta | `frontend/src/pages/exclusao/exclusao.test.tsx: destaca o que está perto da meta de 30 dias, sem chamar de prazo legal` |
+| C-EXC-04 — Meta de 30 dias gera alerta | `backend/internal/api/exclusao_test.go: TestDeletionJobResumes`<br>`backend/internal/api/exclusao_test.go: TestDeletionProfessional`<br>`frontend/src/pages/exclusao/exclusao.test.tsx: destaca o que está perto da meta de 30 dias, sem chamar de prazo legal` |
 | C-EXC-05 — Dona única não pode excluir a conta | `backend/internal/api/exclusao_test.go: TestDeletionSoleOwner` |
 | C-EXC-06 — Profissional exclui a própria conta | `backend/internal/api/exclusao_test.go: TestDeletionProfessional` |
-| C-SSE-01 — Comando gera atualização sem polling | `backend/internal/api/stream_test.go: TestStreamSnapshotAndLiveEvents`<br>`frontend/e2e/jornadas.spec.ts: visitante no celular e Beto no computador: do link da loja ao pago, atualizando sozinho` |
+| C-SSE-01 — Comando gera atualização sem polling | `backend/internal/api/stream_test.go: TestStreamSnapshotAndLiveEvents`<br>`backend/internal/platform/outbox/outbox_test.go: TestRolledBackChangeHasNoEvent`<br>`frontend/e2e/jornadas.spec.ts: visitante no celular e Beto no computador: do link da loja ao pago, atualizando sozinho` |
 | C-SSE-02 — Evento durante o snapshot não se perde | `backend/internal/api/stream_test.go: TestStreamEventDuringSnapshotConverges` |
 | C-SSE-03 — Recarregar a página reconstrói o estado do banco | `frontend/e2e/piloto.spec.ts: roteiro do piloto: do primeiro cliente às pendências da dona` |
 | C-SSE-04 — Rede cai e volta | `frontend/e2e/jornadas.spec.ts: cliente: cadastro, e-mail, Pix com rede caindo (sem cobrar duas vezes), pontos e prêmio`<br>`frontend/e2e/piloto.spec.ts: roteiro do piloto: do primeiro cliente às pendências da dona`<br>`frontend/src/stream/stream.test.tsx: aparelho sem internet: fecha a conexão e avisa na hora; volta com a rede, pelo cursor` |

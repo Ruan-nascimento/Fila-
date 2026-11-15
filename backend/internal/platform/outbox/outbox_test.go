@@ -122,6 +122,7 @@ func TestPublisherWaitsForOlderTransactions(t *testing.T) {
 }
 
 // Uma transação desfeita não deixa evento (o evento só existe se a mudança existir).
+// Cenários: C-SSE-01.
 func TestRolledBackChangeHasNoEvent(t *testing.T) {
 	pool, est, pub, _ := setup(t)
 	ctx := context.Background()
