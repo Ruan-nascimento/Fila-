@@ -60,7 +60,7 @@ Na revisão, 36 cenários estavam sem teste vinculado:
 | **Segredo em log** | `TestNoSecretsInLogsAuditOrDatabase` + varredura dos logs da homologação depois da suíte inteira (etapa 12) | Nenhum e-mail, token, senha ou chave |
 | **Replay** | Idempotência (`TestPixDoubleClick`, `idempotency_test`), webhook repetido (`TestWebhookConfirmsPixOnceAndDeduplicates`), conciliação repetida (`TestRestoreReconcilesBeforeWorkerResumes`) | Efeito único |
 | **Gasto duplo** | `TestNoDoubleSpend`, `TestLastUnitConcurrency`, `TestDeliveryVersusExpiry` (concorrência real no banco) | Um só vence; saldo e estoque nunca negativos |
-| **Exclusão incompleta** | `TestDeletionLeavesNoPersonalDataAnywhere` (novo): depois de concluída, procura nome, e-mail e nick em **todas as 135 colunas** de texto, JSON e binárias de todas as tabelas | Achou o defeito **B-13-01** (nick nos eventos da equipe e nas respostas guardadas por até 24 h). **Corrigido** e o teste passa |
+| **Exclusão incompleta** | `TestDeletionLeavesNoPersonalDataAnywhere` (novo): depois de concluída, procura nome, e-mail e nick em **todas as 135 colunas** de texto, JSON e binárias de todas as tabelas | Achou o defeito **B-13-01** (nick nos eventos da equipe e nas respostas guardadas por até 24 h). Corrigido; a 1ª correção era larga demais e foi refeita na revisão (B-13-02, B-13-03, seção 10) |
 | Limites de corpo e campos | `TestBodyAndFieldLimits` (novo) | 1 MiB → 413; motivo de 10 mil caracteres → 400; nada processado |
 | Menor privilégio no banco | `TestAppRoleHasLeastPrivilege` + suíte inteira com o papel restrito | ok |
 
@@ -103,6 +103,7 @@ A passagem dos 10 minutos foi simulada no banco da homologação.
 Lista completa, com gravidade e reprodução: [bugs.md](bugs.md).
 
 - **Etapa 13:** 1 defeito de **alta** gravidade (privacidade), corrigido.
+- **Revisão pós-entrega:** 2 defeitos (1 alto, 1 médio), ambos corrigidos, e 2 defeitos nos próprios testes/ferramentas (seção 10).
 - **Etapa 12:** 5 defeitos, todos corrigidos.
 - **Em aberto:** **nenhum defeito crítico** de integridade, privacidade ou dinheiro.
 
@@ -136,3 +137,58 @@ Lista completa, com gravidade e reprodução: [bugs.md](bugs.md).
 | Layout nas larguras previstas | `telas.spec.ts` (6 larguras, axe, 44 px) |
 | Sandbox financeiro e restauração têm evidências | Restauração: **sim** (etapa 12 e seção 3). Sandbox financeiro: **não** (seção 6) |
 | Falhas críticas de acesso, dinheiro ou perda de dados impedem o lançamento | Nenhuma em aberto. **O lançamento em produção continua impedido pelos bloqueios externos** (e-mail; Pix real para usar Pix) |
+
+## 10. Revisão pós-entrega (2026-11-15)
+
+Revisão da etapa 13 contra a especificação, o contrato e os critérios de aceite, lendo o código e reexecutando as verificações. Foco: regra, autorização, isolamento por loja, concorrência, idempotência, falhas e telas.
+
+### 10.1 Achados
+
+| Id | Gravidade | Onde | Problema e impacto | Correção e prova |
+|---|---|---|---|---|
+| B-13-02 | **Alta** | `exclusao.anonymize` → `outbox.ScrubStrings` / `idempotency.ScrubStrings` (removidas) | A correção de B-13-01 trocava o **texto** do nome por "Cliente" em qualquer lugar dos eventos e respostas guardados. Nome igual a outro valor (outra cliente com o mesmo nick, ou nick "waiting") corrompia estados e nicks de **terceiros** | Troca por **identidade**: só `nick` de objetos com `id`/`participation_id` da pessoa e `holder_display_name` das reservas dela (`internal/platform/jsonscrub`). Reprodução virou teste: `TestDeletionScrubTouchesOnlyTheDeletedPerson` falhava com 18 registros corrompidos; agora passa. Mutações: sem troca → falha `TestDeletionLeavesNoPersonalDataAnywhere`; troca sem olhar o id → falha o teste de escopo |
+| B-13-03 | Média | `outbox.PublishOnce` × limpeza da exclusão | O publicador lê a outbox sem trava: um evento lido antes da limpeza ia para o `event_log` com o dado antigo depois dela (até 24 h) | A exclusão segura a trava do publicador antes de mexer nos eventos (`outbox.HoldPublisher`), na mesma ordem de travas do publicador. `TestHoldPublisherSerializesCleanup`; mutação (sem trava) → falha |
+| T-R-01 | — (ferramenta) | `docs/tools/rastrear_evidencias.py` | Id de cenário em comentário **dentro** de um teste era creditado ao teste seguinte; a rastreabilidade mostrava C-CMD-05 e C-ATD-02 num teste que não os confere | Corrigido; os dois seguem cobertos pelo teste certo (`TestChangeRequests`) |
+| T-R-02 | — (testes) | C-EST-04, C-EXC-04, C-FID-07, C-SSE-01 | Listados como cobertos, mas os testes não conferiam todas as frases (chamar com fila pausada e concluir após fechar; alerta de monitoramento; ausência de campo de desconto; transação desfeita sem evento) | Testes completados; todos passam |
+
+Conferido e **sem defeito**: C-SEG-04 (a varredura chama todas as rotas, inclusive recebimento, como outro profissional da mesma loja, e confere que nada mudou); idempotência das respostas reescritas (o JSON continua equivalente; números preservados).
+
+### 10.2 Verificações reexecutadas
+
+| O quê | Resultado |
+|---|---|
+| `go test -count=1 ./...` com o papel restrito, `gofmt`, `go vet`, `staticcheck` | **22/22 pacotes ok; 235 funções de teste** (3 novas) ([saída](evidencias/check-revisao.txt)) |
+| Frontend: `check:api`, `format:check`, `lint`, `typecheck`, `test`, `build` | **tudo ok** (o frontend não mudou nesta revisão) |
+| `verificar_contrato.py`, `rastrear_evidencias.py --verificar` | OK |
+| Mutações dirigidas aos 3 testes novos | **3/3 detectadas** |
+| `go test -race` | No CI, a cada commit desta revisão (o Windows não tem compilador C) |
+| Navegador (telas, jornadas, piloto) e exercícios de operação | **Não reexecutados**: o frontend e o fluxo das telas não mudaram; vale a execução da etapa 13 (seções 3 e 5) |
+
+### 10.3 Estado de cada critério
+
+Critérios da etapa 13:
+
+| Critério | Estado |
+|---|---|
+| Revisar contra cada regra e matriz | **Atendido**: 130/131 regras com teste; R-WEB-04 parcial (só Chrome e Edge) |
+| Testes de domínio, integração, concorrência, contrato e SSE | **Atendido** (10.2) |
+| Pagamentos em sandbox | **Não verificado**: só simulador; sandbox real da AbacatePay sem chave (bloqueio externo) |
+| E2E em navegador | **Atendido** na homologação, Chrome e Edge (etapa 13); Firefox, Safari e celulares físicos **não verificados** |
+| Detector de corridas | **Atendido** (contêiner na etapa 13; CI nesta revisão) |
+| Autorização, incluindo tentativas negativas | **Atendido** (varredura de todas as rotas, 6 intrusos) |
+| Dependências, CSRF, XSS, SQLi, enumeração, segredos em log, replay, gasto duplo | **Atendido** (seção 4) |
+| Exclusão incompleta | **Atendido após a revisão**: na entrega da etapa 13 havia B-13-02 e B-13-03; corrigidos e testados |
+| Itens não testados identificados | **Atendido** (seção 8) |
+| Defeitos com gravidade e reprodução; bloqueadores corrigidos | **Atendido** ([bugs.md](bugs.md); nenhum crítico em aberto) |
+| Roteiro real de piloto | **Atendido na homologação** (navegador, 10 passos); piloto com pessoas e loja reais **não verificado** |
+| Guias por papel; plano de piloto e de volta atrás | **Atendido** como documento; volta de versão usa o mesmo mecanismo da implantação exercitada (26 s, 0 falhas); volta com migração nova **não exercitada** |
+| Não publicar nem ativar cobranças reais | **Atendido**: nada publicado; produção recusa simulador e chave de teste |
+
+Critérios de pronto do anexo (§15): mesmos estados da seção 9, com uma diferença. "Sandbox financeiro tem evidência" **falhou**: não há sandbox real.
+
+**Produção não está pronta.** Ainda faltam:
+
+- provedor de e-mail;
+- validação do Pix real na AbacatePay.
+
+Os pagamentos foram testados só contra um simulador.
