@@ -49,3 +49,8 @@ export function useCommand() {
 
   return { run, busy, problem, offline, clear };
 }
+
+/** Identificadores do contrato são UUID; outro texto no endereço não é um recurso. */
+export function isId(v: string | undefined): v is string {
+  return typeof v === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+}

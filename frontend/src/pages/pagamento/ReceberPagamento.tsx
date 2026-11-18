@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from "react";
+import { Banknote, CreditCard, Info, RefreshCw, ShieldCheck } from "lucide-react";
 import { api } from "../../api/client";
 import { formatCents, parseCents } from "../../money";
-import { Field, Notice, Submit } from "../../ui/ui";
+import { AmountRow, Badge, Button, Choice, ChoiceGroup, Field, Notice, Submit } from "../../ui/ui";
 import type { Order } from "../comanda/textos";
 import { useCommand } from "../gestao/comando";
 import { CommandError, type StaffContext } from "../gestao/comum";
@@ -57,33 +58,43 @@ export function ReceberPagamento({
   }
 
   return (
-    <section className="pay" aria-label="Pagamento">
-      <p>
-        Devido <strong>{formatCents(pay.amounts.due.amount_cents)}</strong> · recebido{" "}
-        {formatCents(pay.amounts.received.amount_cents)} · em aberto{" "}
-        <strong>{formatCents(pay.amounts.outstanding.amount_cents)}</strong>
-        {pay.method_choice && <> · meio escolhido: {methodText[pay.method_choice]}</>}
-      </p>
+    <section className="grid gap-4 border-t border-line pt-5" aria-label="Pagamento">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="m-0 text-base font-semibold">Pagamento</h3>
+        {pay.method_choice && <Badge tone="primary">Meio escolhido: {methodText[pay.method_choice]}</Badge>}
+      </div>
+      <div className="divide-y divide-line rounded-lg bg-surface-2 px-3">
+        <AmountRow label="Devido" value={formatCents(pay.amounts.due.amount_cents)} />
+        <AmountRow label="Recebido" value={formatCents(pay.amounts.received.amount_cents)} />
+        <AmountRow strong label="Em aberto" value={formatCents(pay.amounts.outstanding.amount_cents)} />
+      </div>
       {pay.charges.length > 0 && (
-        <ul className="order__items" aria-label="Cobranças Pix">
+        <div className="divide-y divide-line" role="list" aria-label="Cobranças Pix">
           {pay.charges.map((c) => (
-            <li key={c.id}>
-              <span>
-                Pix · {chargeStatusText[c.status]}
-                {c.status === "pending" && c.expires_at && <> até {time.format(new Date(c.expires_at))}</>}
-                {c.cancel_requested_at && " · cancelamento pedido (o Pix segue válido até expirar)"}
-              </span>
-              <span className="order__price">{formatCents(c.amount.amount_cents)}</span>
-            </li>
+            <div role="listitem" key={c.id}>
+              <AmountRow
+                label="Pix"
+                sub={[
+                  chargeStatusText[c.status],
+                  c.status === "pending" && c.expires_at ? `até ${time.format(new Date(c.expires_at))}` : "",
+                  c.cancel_requested_at ? "cancelamento pedido (o Pix segue válido até expirar)" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+                value={formatCents(c.amount.amount_cents)}
+              />
+            </div>
           ))}
-        </ul>
+        </div>
       )}
       {pay.open_issue_kinds.length > 0 && (
-        <div className="notice notice--info" role="note" aria-label="Pendências desta comanda">
-          <p>
-            <strong>Pendência financeira (o dono trata no painel):</strong>
-          </p>
-          <ul>
+        <div
+          className="grid gap-1 rounded-xl border border-warning/40 bg-warning-soft p-4 text-sm"
+          role="note"
+          aria-label="Pendências desta comanda"
+        >
+          <p className="m-0 font-semibold">Pendência financeira (o dono trata em Pendências):</p>
+          <ul className="m-0 grid gap-1 pl-5">
             {pay.open_issue_kinds.map((k) => (
               <li key={k}>{issueText[k]}</li>
             ))}
@@ -94,47 +105,47 @@ export function ReceberPagamento({
       <Estornos ctx={ctx} order={order} onSaved={onSaved} onConflict={onConflict} />
       <CommandError problem={cmd.problem} offline={cmd.offline} />
       {toConfer.map((r) => (
-        <button
-          key={r.id}
-          type="button"
-          className="button"
-          disabled={cmd.busy !== null}
-          onClick={() => void confer(r.id)}
-        >
+        <Button key={r.id} icon={ShieldCheck} disabled={cmd.busy !== null} onClick={() => void confer(r.id)}>
           Conferir {r.classification === "excess" ? "valor a mais" : "recebimento"} Pix de{" "}
           {formatCents(r.amount.amount_cents)}
-        </button>
+        </Button>
       ))}
       {order.status === "awaiting_payment" && pay.verifying && (
-        <p role="status">
-          Verificando um Pix com o banco. Aguarde a verificação antes de receber por outro meio, para não
-          cobrar duas vezes.
-        </p>
+        <div className="grid gap-2">
+          <Notice kind="info" title="Verificando com o banco">
+            <p>Aguardando a confirmação do pagamento via Pix.</p>
+          </Notice>
+          <p className="m-0 flex items-start gap-2 rounded-lg bg-surface-2 px-3 py-2 text-sm" role="status">
+            <Info aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-fg-muted" />
+            Verificando um Pix com o banco. Outras formas de pagamento ficam indisponíveis até a verificação
+            terminar, para não cobrar duas vezes.
+          </p>
+        </div>
       )}
       {order.status === "awaiting_payment" && active?.status === "pending" && !active.cancel_requested_at && (
-        <div className="notice notice--info">
-          <p>
+        <div className="grid gap-3 rounded-xl border border-line bg-surface-2 p-4">
+          <p className="m-0 text-sm">
             Há um Pix de {formatCents(active.amount.amount_cents)} em aberto. Para receber na loja, avise o
             cliente: o Pix continua válido até expirar e, se for pago também, o valor a mais fica para
             devolução.
           </p>
-          <div className="actions">
-            <button
-              type="button"
-              className="button button--secondary"
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="secondary"
+              icon={Banknote}
               disabled={cmd.busy !== null}
               onClick={() => void switchFromPix("cash")}
             >
               Trocar para dinheiro
-            </button>
-            <button
-              type="button"
-              className="button button--secondary"
+            </Button>
+            <Button
+              variant="secondary"
+              icon={CreditCard}
               disabled={cmd.busy !== null}
               onClick={() => void switchFromPix("card")}
             >
               Trocar para cartão
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -203,35 +214,60 @@ function ReceberNaLoja({
   }
 
   return (
-    <form onSubmit={onSubmit} noValidate aria-label="Receber na loja">
+    <form
+      onSubmit={onSubmit}
+      noValidate
+      aria-label="Receber na loja"
+      className="grid gap-4 rounded-xl border border-line p-4"
+    >
       <CommandError problem={cmd.problem} offline={cmd.offline} />
-      <fieldset className="choices">
-        <legend>Receber na loja</legend>
-        {(["cash", "card"] as const).map((m) => (
-          <label key={m} className="choice">
-            <input
-              type="radio"
-              name={`receber-${order.id}`}
-              checked={method === m}
-              onChange={() => setMethod(m)}
-            />
-            {methodText[m]}
-          </label>
-        ))}
-      </fieldset>
+      <ChoiceGroup legend="Receber na loja">
+        <div className="grid grid-cols-2 gap-2">
+          {(["cash", "card"] as const).map((m) => {
+            const Icon = m === "cash" ? Banknote : CreditCard;
+            return (
+              <Choice
+                key={m}
+                type="radio"
+                name={`receber-${order.id}`}
+                checked={method === m}
+                onChange={() => setMethod(m)}
+                label={
+                  <span className="inline-flex items-center gap-2">
+                    <Icon aria-hidden="true" className="size-5 text-fg-muted" />
+                    {methodText[m]}
+                  </span>
+                }
+              />
+            );
+          })}
+        </div>
+      </ChoiceGroup>
       {method === "cash" && (
         <>
-          <Field
-            label="Valor entregue pelo cliente (R$)"
-            inputMode="decimal"
-            placeholder={formatCents(due)}
-            value={tendered}
-            onChange={(e) => setTendered(e.target.value)}
-            error={tenderedError}
-          />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-1.5">
+              <span className="text-sm font-semibold">Valor devido</span>
+              <span className="flex min-h-11 items-center rounded-lg bg-surface-2 px-3 tabular-nums">
+                {formatCents(due)}
+              </span>
+            </div>
+            <Field
+              label="Valor entregue pelo cliente (R$)"
+              inputMode="decimal"
+              placeholder={formatCents(due)}
+              value={tendered}
+              onChange={(e) => setTendered(e.target.value)}
+              error={tenderedError}
+            />
+          </div>
           {tenderedCents !== null && !tenderedError && (
-            <p role="status">
-              Troco: <strong>{formatCents(tenderedCents - due)}</strong>
+            <p
+              role="status"
+              className="m-0 flex items-center justify-between rounded-lg bg-select px-4 py-3 text-lg font-semibold text-accent"
+            >
+              Troco:
+              <strong className="text-xl tabular-nums">{formatCents(tenderedCents - due)}</strong>
             </p>
           )}
         </>
@@ -246,9 +282,16 @@ function ReceberNaLoja({
           error={referenceError}
         />
       )}
-      <Submit busy={cmd.busy !== null}>Registrar {formatCents(due)} recebido e conferido</Submit>
+      <Submit busy={cmd.busy !== null} block>
+        Registrar {formatCents(due)} recebido e conferido
+      </Submit>
       {cmd.problem?.code === "pix_charge_active" && (
-        <Notice kind="info">Há um Pix em aberto: troque o meio antes de receber na loja.</Notice>
+        <Notice kind="info">
+          <p>
+            <RefreshCw aria-hidden="true" className="mr-1 inline size-4" />
+            Há um Pix em aberto: troque o meio antes de receber na loja.
+          </p>
+        </Notice>
       )}
     </form>
   );

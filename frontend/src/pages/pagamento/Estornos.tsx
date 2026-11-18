@@ -1,7 +1,9 @@
 import { useState, type FormEvent } from "react";
+import { Undo2 } from "lucide-react";
 import { api } from "../../api/client";
 import { formatCents } from "../../money";
-import { Field, Submit } from "../../ui/ui";
+import { AmountRow, Button, Field, Submit, TextArea } from "../../ui/ui";
+import { useInlinePanel } from "../../ui/useInlinePanel";
 import type { Order } from "../comanda/textos";
 import { useCommand } from "../gestao/comando";
 import { CommandError, type StaffContext } from "../gestao/comum";
@@ -31,21 +33,27 @@ export function Estornos({
   );
   if (pay.refunds.length === 0 && (!ctx.isOwner || refundable.length === 0)) return null;
   return (
-    <div className="pay" aria-label="Estornos">
+    <div className="grid gap-3" aria-label="Estornos" role="group">
       {pay.refunds.length > 0 && (
-        <ul className="order__items" aria-label="Estornos da comanda">
+        <div className="divide-y divide-line" role="list" aria-label="Estornos da comanda">
           {pay.refunds.map((rf) => (
-            <li key={rf.id}>
-              <span>
-                {refundStatusText[rf.status]} · pedido em {when.format(new Date(rf.requested_at))} · motivo:{" "}
-                {rf.reason}
-                {rf.evidence === "owner_documented" && " · confirmado pelo dono com evidência"}
-                {rf.evidence === "provider" && " · confirmado pelo banco"}
-              </span>
-              <span className="order__price">{formatCents(rf.amount.amount_cents)}</span>
-            </li>
+            <div role="listitem" key={rf.id}>
+              <AmountRow
+                label="Estorno"
+                sub={[
+                  refundStatusText[rf.status],
+                  `pedido em ${when.format(new Date(rf.requested_at))}`,
+                  `motivo: ${rf.reason}`,
+                  rf.evidence === "owner_documented" ? "confirmado pelo dono com evidência" : "",
+                  rf.evidence === "provider" ? "confirmado pelo banco" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+                value={formatCents(rf.amount.amount_cents)}
+              />
+            </div>
           ))}
-        </ul>
+        </div>
       )}
       {ctx.isOwner &&
         pay.refunds
@@ -88,12 +96,14 @@ function PedirEstorno({
   onSaved: (o: Order) => void;
   onConflict: () => Promise<void>;
 }) {
-  const [open, setOpen] = useState(false);
+  const panel = useInlinePanel();
   const [reason, setReason] = useState("");
+  const [tried, setTried] = useState(false);
   const cmd = useCommand();
   const label = `${methodText[receipt.method]} de ${formatCents(receipt.amount.amount_cents)}${receipt.classification === "excess" ? " (valor a mais)" : ""}`;
 
   async function submit() {
+    setTried(true);
     if (reason.trim().length < 3) return;
     const out = await cmd.run(`estornar:${receipt.id}`, (key) =>
       api.POST("/v1/establishments/{establishmentId}/orders/{orderId}/receipts/{receiptId}/refunds", {
@@ -105,46 +115,61 @@ function PedirEstorno({
       }),
     );
     if (out.ok) {
-      setOpen(false);
+      panel.hide();
       onSaved(out.data.data);
     } else if (out.problem?.status === 409) await onConflict();
   }
 
-  if (!open)
+  if (!panel.open)
     return (
-      <button type="button" className="button button--secondary" onClick={() => setOpen(true)}>
+      <Button
+        id={panel.triggerId}
+        variant="secondary"
+        icon={Undo2}
+        className="justify-self-start"
+        onClick={() => panel.show("aberto")}
+      >
         Estornar {label}
-      </button>
+      </Button>
     );
   return (
     <form
+      id={panel.panelId}
+      onKeyDown={panel.onKeyDown}
       noValidate
       aria-label={`Estornar ${label}`}
+      className="grid gap-4 rounded-xl border border-line bg-surface-2 p-4"
       onSubmit={(e: FormEvent) => {
         e.preventDefault();
         void submit();
       }}
     >
-      <p>
+      <p className="m-0 font-semibold" data-autofocus tabIndex={-1}>
+        Pedir estorno de {label}
+      </p>
+      <p className="m-0 text-sm text-fg-muted">
         O estorno é sempre do valor integral ({formatCents(receipt.amount.amount_cents)}).{" "}
         {receipt.method === "pix"
           ? "O banco faz a devolução; aqui só aparece como estornado depois da confirmação."
-          : "Devolva ao cliente e depois confirme aqui com a evidência (recibo, comprovante)."}
+          : "Devolva ao cliente e depois confirme aqui com a evidência (recibo, comprovante)."}{" "}
+        Pede a sua senha de novo.
       </p>
       <CommandError problem={cmd.problem} offline={cmd.offline} onRetry={() => void submit()} />
-      <Field
+      <TextArea
         label="Motivo do estorno"
         required
         minLength={3}
         maxLength={500}
+        rows={2}
         value={reason}
+        error={tried && reason.trim().length < 3 ? "Escreva o motivo (pelo menos 3 caracteres)." : undefined}
         onChange={(e) => setReason(e.target.value)}
       />
-      <div className="actions">
+      <div className="flex flex-wrap gap-2">
         <Submit busy={cmd.busy !== null}>Pedir estorno</Submit>
-        <button type="button" className="button button--secondary" onClick={() => setOpen(false)}>
+        <Button variant="secondary" onClick={panel.hide}>
           Voltar
-        </button>
+        </Button>
       </div>
     </form>
   );
@@ -195,43 +220,49 @@ function Revisao({
   }
 
   return (
-    <form noValidate aria-label="Resolver estorno em revisão" onSubmit={(e) => e.preventDefault()}>
-      <p>
-        <strong>Estorno de {formatCents(refund.amount.amount_cents)} em revisão.</strong> Confirme só com
-        evidência (comprovante do banco, recibo assinado); se não houve devolução, registre que não ocorreu.
-      </p>
+    <form
+      noValidate
+      aria-label="Resolver estorno em revisão"
+      onSubmit={(e) => e.preventDefault()}
+      className="grid gap-4 rounded-xl border border-warning/40 bg-warning-soft p-4"
+    >
+      <div className="grid gap-1">
+        <p className="m-0 font-semibold">Estorno de {formatCents(refund.amount.amount_cents)} em revisão</p>
+        <p className="m-0 text-sm">
+          Confirme só com evidência (comprovante do banco, recibo assinado); se não houve devolução, registre
+          que não ocorreu. A confirmação fica registrada com o texto abaixo.
+        </p>
+      </div>
       <CommandError problem={cmd.problem} offline={cmd.offline} onRetry={() => void resolve(last)} />
-      <Field
+      <TextArea
         label="Evidência (o que comprova)"
+        hint="Descreva o comprovante: banco, data, valor, quem assinou."
         required
         minLength={3}
         maxLength={500}
+        rows={2}
         value={note}
         onChange={(e) => setNote(e.target.value)}
       />
       <Field
         label="Referência externa (opcional)"
+        hint="Ex.: identificador do estorno no banco."
         maxLength={80}
         value={reference}
         onChange={(e) => setReference(e.target.value)}
       />
-      <div className="actions">
-        <button
-          type="button"
-          className="button"
-          disabled={!ready || cmd.busy !== null}
-          onClick={() => void resolve("confirm")}
-        >
+      {!ready && <p className="m-0 text-sm text-fg-muted">Escreva a evidência para habilitar as opções.</p>}
+      <div className="flex flex-wrap gap-2">
+        <Button disabled={!ready || cmd.busy !== null} onClick={() => void resolve("confirm")}>
           Confirmar estorno
-        </button>
-        <button
-          type="button"
-          className="button button--secondary"
+        </Button>
+        <Button
+          variant="secondary"
           disabled={!ready || cmd.busy !== null}
           onClick={() => void resolve("mark-failed")}
         >
           Estorno não ocorreu
-        </button>
+        </Button>
       </div>
     </form>
   );

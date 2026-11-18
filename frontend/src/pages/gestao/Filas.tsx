@@ -1,27 +1,35 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { Navigate, NavLink, useParams } from "react-router";
+import { CirclePause, CirclePlay, CircleStop, Coffee, RefreshCw, UsersRound } from "lucide-react";
 import { api } from "../../api/client";
 import { call, problemMessage } from "../../api/problem";
 import type { components } from "../../api/schema.gen";
-import { useStreamMessages, Versions } from "../../stream/context";
-import { Field, Notice } from "../../ui/ui";
-import { useCommand } from "./comando";
+import { useStale, useStreamMessages, Versions } from "../../stream/context";
+import { Badge, Button, EmptyState, Field, LoadError, Loading, PageHeader, Submit } from "../../ui/ui";
+import { cx } from "../../ui/cx";
+import { useInlinePanel } from "../../ui/useInlinePanel";
+import { isId, useCommand } from "./comando";
 import { CommandError, type StaffContext } from "./comum";
 import { Entradas } from "./Entradas";
 
 type StaffQueue = components["schemas"]["StaffQueue"];
 
-const statusText: Record<StaffQueue["status"], { icon: string; text: string }> = {
-  open: { icon: "●", text: "Aberta" },
-  paused: { icon: "Ⅱ", text: "Pausada" },
-  closed: { icon: "■", text: "Fechada" },
+const queueStatus: Record<StaffQueue["status"], { text: string; tone: "success" | "warning" | "neutral" }> = {
+  open: { text: "Fila aberta", tone: "success" },
+  paused: { text: "Fila pausada", tone: "warning" },
+  closed: { text: "Fila fechada", tone: "neutral" },
 };
 
-/** Filas: o dono abre, pausa e fecha; o profissional vê a própria e sinaliza indisponibilidade. */
+/**
+ * Filas da loja. O profissional cai direto na própria fila; o dono escolhe a fila (lista ao lado
+ * no computador, abas no celular). A fila escolhida fica no endereço: recarregar e Voltar mantêm.
+ */
 export function Filas({ ctx }: { ctx: StaffContext }) {
+  const { queueId } = useParams();
   const [queues, setQueues] = useState<StaffQueue[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const versions = useRef(new Versions());
-  const cmd = useCommand();
+  const stale = useStale();
   // Atualizações pelo fluxo SSE: snapshot e queue.updated (só versão mais nova vale).
   useStreamMessages((m) => {
     if (m.type === "stream.snapshot") {
@@ -29,14 +37,15 @@ export function Filas({ ctx }: { ctx: StaffContext }) {
       if (list) {
         versions.current.reset();
         setQueues(list);
+        setLoadError(null);
       }
     } else if (m.type === "queue.updated" && versions.current.newer(m.resource.id, m.resource.version)) {
       const q = m.data as StaffQueue;
       setQueues((list) => {
-        const cur = list ?? [];
-        return cur.some((x) => x.queue_id === q.queue_id)
-          ? cur.map((x) => (x.queue_id === q.queue_id ? q : x))
-          : [...cur, q];
+        if (list === null) return list;
+        return list.some((x) => x.queue_id === q.queue_id)
+          ? list.map((x) => (x.queue_id === q.queue_id ? q : x))
+          : [...list, q];
       });
     }
   });
@@ -76,7 +85,93 @@ export function Filas({ ctx }: { ctx: StaffContext }) {
     };
   }, [ctx.estId]);
 
-  async function change(q: StaffQueue, op: "open" | "pause" | "close") {
+  if (queueId !== undefined && !isId(queueId)) return <Navigate to={`/gestao/${ctx.estId}/filas`} replace />;
+  if (loadError && !queues) return <LoadError message={loadError} onRetry={() => void load()} />;
+  if (!queues) return <Loading>Carregando filas…</Loading>;
+  if (queues.length === 0)
+    return (
+      <>
+        <PageHeader title="Filas" />
+        <EmptyState icon={UsersRound} title="Nenhuma fila ainda">
+          {ctx.isOwner ? (
+            <p>Cadastre um profissional em Profissionais: a fila dele é criada fechada.</p>
+          ) : null}
+        </EmptyState>
+      </>
+    );
+
+  const own = queues.find((q) => q.professional.id === ctx.professionalId);
+  const selected = queues.find((q) => q.queue_id === queueId) ?? own ?? queues[0];
+  if (!selected) return null;
+  const multiple = queues.length > 1;
+  const base = `/gestao/${ctx.estId}/filas`;
+
+  return (
+    <div className={cx("grid gap-5", multiple && "lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start")}>
+      {multiple && (
+        <nav aria-label="Filas da loja" className="min-w-0 lg:sticky lg:top-8">
+          <h2 className="m-0 mb-2 hidden text-sm font-semibold text-fg-muted lg:block">Filas da equipe</h2>
+          <ul className="-mx-4 m-0 flex list-none gap-2 overflow-x-auto px-4 pb-1 sm:-mx-6 sm:px-6 lg:mx-0 lg:grid lg:overflow-visible lg:px-0">
+            {queues.map((q) => {
+              const current = q.entries.find((e) => e.status === "called" || e.status === "in_service");
+              const waiting = q.entries.filter((e) => e.status === "waiting").length;
+              return (
+                <li key={q.queue_id} className="shrink-0">
+                  <NavLink
+                    to={`${base}/${q.queue_id}`}
+                    aria-current={q.queue_id === selected.queue_id ? "page" : undefined}
+                    className={cx(
+                      "grid min-h-11 gap-0.5 rounded-xl border px-3 py-2 text-fg no-underline",
+                      q.queue_id === selected.queue_id
+                        ? "border-primary bg-select"
+                        : "border-line bg-surface hover:bg-surface-2",
+                    )}
+                  >
+                    <span className="font-semibold">{q.professional.display_name}</span>
+                    <span className="text-xs whitespace-nowrap text-fg-muted">
+                      {queueStatus[q.status].text}
+                      {current ? (current.status === "called" ? " · chamando" : " · atendendo") : ""} ·{" "}
+                      {waiting} aguardando
+                    </span>
+                  </NavLink>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+      )}
+      <FilaDetalhe
+        key={selected.queue_id}
+        ctx={ctx}
+        queue={selected}
+        queues={queues}
+        now={now}
+        stale={stale}
+        onReload={load}
+      />
+    </div>
+  );
+}
+
+function FilaDetalhe({
+  ctx,
+  queue: q,
+  queues,
+  now,
+  stale,
+  onReload,
+}: {
+  ctx: StaffContext;
+  queue: StaffQueue;
+  queues: StaffQueue[];
+  now: Date;
+  stale: boolean;
+  onReload: () => Promise<void>;
+}) {
+  const cmd = useCommand();
+  const st = queueStatus[q.status];
+
+  async function change(op: "open" | "pause" | "close") {
     const path = {
       open: "/v1/establishments/{establishmentId}/queues/{queueId}/open",
       pause: "/v1/establishments/{establishmentId}/queues/{queueId}/pause",
@@ -92,77 +187,76 @@ export function Filas({ ctx }: { ctx: StaffContext }) {
       }),
     );
     // Sucesso ou conflito: relê para mostrar o estado atual do servidor.
-    if (out.ok || out.problem?.status === 409) await load();
+    if (out.ok || out.problem?.status === 409) await onReload();
   }
 
-  if (loadError) return <Notice kind="erro">{loadError}</Notice>;
-  if (!queues) return <p role="status">Carregando filas…</p>;
-  if (queues.length === 0)
-    return <p>Nenhuma fila ainda. {ctx.isOwner ? "Cadastre um profissional para criar a fila dele." : ""}</p>;
   return (
-    <div>
-      <p className="muted">
-        A lista se atualiza sozinha.{" "}
-        <button type="button" className="link-button" onClick={() => void load()}>
-          Atualizar agora
-        </button>
-      </p>
-      <CommandError problem={cmd.problem} offline={cmd.offline} />
-      <ul className="cards">
-        {queues.map((q) => (
-          <li key={q.queue_id} className="card">
-            <h3>{q.professional.display_name}</h3>
-            <p className={`badge badge--${q.status}`}>
-              <span aria-hidden="true">{statusText[q.status].icon} </span>
-              {statusText[q.status].text}
-              {q.professional.status === "inactive" && " · profissional desativado"}
+    <section aria-labelledby="titulo-fila" className="grid min-w-0 gap-4">
+      <header className="grid gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 id="titulo-fila" className="m-0 text-2xl font-bold tracking-tight">
+              Fila de {q.professional.display_name}
+            </h1>
+            <Badge tone={st.tone} dot>
+              {st.text}
+            </Badge>
+            {q.professional.status === "inactive" && <Badge>Profissional desativado</Badge>}
+            {stale && <Badge tone="warning">Última informação conhecida</Badge>}
+          </div>
+          <Button variant="ghost" icon={RefreshCw} onClick={() => void onReload()}>
+            Atualizar
+          </Button>
+        </div>
+        {q.unavailable_signal.active && (
+          <p role="note" className="m-0 flex items-start gap-2 rounded-lg bg-warning-soft px-3 py-2 text-sm">
+            <Coffee aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning" />
+            <span>
+              <strong>Profissional indisponível</strong>
+              {q.unavailable_signal.note ? `: ${q.unavailable_signal.note}` : ""}
+            </span>
+          </p>
+        )}
+        {ctx.isOwner && (
+          <div className="grid gap-2">
+            <div className="flex flex-wrap gap-2">
+              {q.status !== "open" && (
+                <Button icon={CirclePlay} disabled={cmd.busy !== null} onClick={() => void change("open")}>
+                  Abrir fila
+                </Button>
+              )}
+              {q.status === "open" && (
+                <Button
+                  variant="secondary"
+                  icon={CirclePause}
+                  disabled={cmd.busy !== null}
+                  onClick={() => void change("pause")}
+                >
+                  Pausar fila
+                </Button>
+              )}
+              {q.status !== "closed" && (
+                <Button
+                  variant="secondary"
+                  icon={CircleStop}
+                  disabled={cmd.busy !== null}
+                  onClick={() => void change("close")}
+                >
+                  Fechar fila
+                </Button>
+              )}
+            </div>
+            <p className="m-0 text-xs text-fg-muted">
+              Pausar bloqueia novas entradas e chamadas; quem já foi chamado ainda pode ser atendido. Para
+              fechar, ninguém pode estar aguardando ou chamado.
             </p>
-            {q.unavailable_signal.active && (
-              <p role="note">
-                <strong>Profissional indisponível</strong>
-                {q.unavailable_signal.note ? `: ${q.unavailable_signal.note}` : ""}
-              </p>
-            )}
-            {ctx.isOwner && (
-              <div className="actions">
-                {q.status !== "open" && (
-                  <button
-                    type="button"
-                    className="button"
-                    disabled={cmd.busy !== null}
-                    onClick={() => void change(q, "open")}
-                  >
-                    Abrir
-                  </button>
-                )}
-                {q.status === "open" && (
-                  <button
-                    type="button"
-                    className="button button--secondary"
-                    disabled={cmd.busy !== null}
-                    onClick={() => void change(q, "pause")}
-                  >
-                    Pausar
-                  </button>
-                )}
-                {q.status !== "closed" && (
-                  <button
-                    type="button"
-                    className="button button--secondary"
-                    disabled={cmd.busy !== null}
-                    onClick={() => void change(q, "close")}
-                  >
-                    Fechar
-                  </button>
-                )}
-              </div>
-            )}
-            <Entradas ctx={ctx} queue={q} queues={queues} now={now} onDone={load} />
-            {ctx.professionalId === q.professional.id && <Sinal ctx={ctx} queue={q} onDone={load} />}
-          </li>
-        ))}
-      </ul>
-    </div>
+          </div>
+        )}
+        <CommandError problem={cmd.problem} offline={cmd.offline} />
+      </header>
+      <Entradas ctx={ctx} queue={q} queues={queues} now={now} onDone={onReload} />
+      {ctx.professionalId === q.professional.id && <Sinal ctx={ctx} queue={q} onDone={onReload} />}
+    </section>
   );
 }
 
@@ -176,10 +270,10 @@ function Sinal({
   onDone: () => Promise<void>;
 }) {
   const cmd = useCommand();
+  const panel = useInlinePanel();
   const [note, setNote] = useState("");
   const active = queue.unavailable_signal.active;
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault();
+  async function send() {
     const body = active
       ? { unavailable: false }
       : note.trim()
@@ -196,24 +290,60 @@ function Sinal({
     );
     if (out.ok) {
       setNote("");
+      panel.hide();
       await onDone();
     }
   }
+  function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    void send();
+  }
   return (
-    <form onSubmit={onSubmit} noValidate>
+    <div className="grid gap-2 border-t border-line pt-4">
       <CommandError problem={cmd.problem} offline={cmd.offline} />
-      {!active && (
-        <Field
-          label="Aviso ao dono (opcional)"
-          maxLength={200}
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          hint="Ex.: almoço até 14h. Isso só avisa o dono; não muda a fila."
-        />
+      {active ? (
+        <Button
+          variant="secondary"
+          className="justify-self-start"
+          disabled={cmd.busy !== null}
+          onClick={() => void send()}
+        >
+          Estou disponível de novo
+        </Button>
+      ) : panel.open ? (
+        <form
+          id={panel.panelId}
+          onKeyDown={panel.onKeyDown}
+          onSubmit={onSubmit}
+          noValidate
+          aria-label="Avisar indisponibilidade"
+          className="grid max-w-xl gap-3 rounded-xl border border-line bg-surface p-4"
+        >
+          <Field
+            label="Aviso ao dono (opcional)"
+            maxLength={200}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            hint="Ex.: almoço até 14h. Isso só avisa o dono; não muda a fila."
+          />
+          <div className="flex flex-wrap gap-2">
+            <Submit busy={cmd.busy !== null}>Avisar que estou indisponível</Submit>
+            <Button variant="secondary" onClick={panel.hide}>
+              Cancelar
+            </Button>
+          </div>
+        </form>
+      ) : (
+        <Button
+          id={panel.triggerId}
+          variant="ghost"
+          icon={Coffee}
+          className="justify-self-start"
+          onClick={() => panel.show("aberto")}
+        >
+          Avisar que estou indisponível
+        </Button>
       )}
-      <button type="submit" className="button button--secondary" disabled={cmd.busy !== null}>
-        {active ? "Estou disponível de novo" : "Avisar que estou indisponível"}
-      </button>
-    </form>
+    </div>
   );
 }

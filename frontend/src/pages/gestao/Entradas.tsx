@@ -1,7 +1,10 @@
 import { useState, type FormEvent } from "react";
+import { ArrowLeftRight, Ban, ChevronDown, Clock, Play, Scissors, UserX } from "lucide-react";
 import { api } from "../../api/client";
 import type { components } from "../../api/schema.gen";
-import { Field, Submit } from "../../ui/ui";
+import { Badge, Button, Card, Choice, SelectField, Submit, TextArea } from "../../ui/ui";
+import { cx } from "../../ui/cx";
+import { useInlinePanel } from "../../ui/useInlinePanel";
 import { Atendimento } from "./Atendimento";
 import { useCommand } from "./comando";
 import { CommandError, type StaffContext } from "./comum";
@@ -10,15 +13,12 @@ type StaffQueue = components["schemas"]["StaffQueue"];
 type Entry = StaffQueue["entries"][number];
 
 const time = new Intl.DateTimeFormat("pt-BR", { timeStyle: "short" });
-const statusText: Record<string, string> = {
-  waiting: "Aguardando",
-  called: "Chamado",
-  in_service: "Em atendimento",
-};
 
 /**
- * Pessoas de uma fila e as ações da equipe. A tela só mostra os botões que fazem sentido; o
- * servidor confere papel, estado, versão e o prazo de 10 minutos.
+ * Pessoas de uma fila e as ações da equipe. Ordem de leitura (e no celular, de cima para baixo):
+ * quem está chamado ou em atendimento e a ação disponível; depois quem aguarda. Em telas largas
+ * as duas partes ficam lado a lado. A tela só mostra os botões que fazem sentido; o servidor
+ * confere papel, estado, versão e o prazo de tolerância.
  */
 export function Entradas({
   ctx,
@@ -34,10 +34,10 @@ export function Entradas({
   onDone: () => Promise<void>;
 }) {
   const cmd = useCommand();
-  const [shown, setShown] = useState<string | null>(null);
   const canOperate = ctx.isOwner || ctx.professionalId === queue.professional.id;
-  const busy = queue.entries.some((e) => e.status === "called" || e.status === "in_service");
-  const waiting = queue.entries.some((e) => e.status === "waiting");
+  const current = queue.entries.find((e) => e.status === "called" || e.status === "in_service");
+  const waiting = queue.entries.filter((e) => e.status === "waiting");
+  const busy = Boolean(current);
 
   async function chamar() {
     const out = await cmd.run(
@@ -70,83 +70,245 @@ export function Entradas({
     if (out.ok || out.problem?.status === 409) await onDone();
   }
 
+  // Por que não dá para chamar agora (sempre explicado em texto).
+  const callBlocked = busy
+    ? "A cadeira está ocupada: conclua ou resolva o atendimento atual antes de chamar."
+    : queue.status === "paused"
+      ? "Fila pausada: chamadas bloqueadas até o dono reabrir."
+      : queue.status === "closed"
+        ? "Fila fechada."
+        : waiting.length === 0
+          ? "Ninguém aguardando."
+          : null;
+
   return (
-    <div>
+    <div className="@container">
       <CommandError problem={cmd.problem} offline={cmd.offline} />
-      {canOperate && queue.status === "open" && (
-        <button
-          type="button"
-          className="button"
-          disabled={cmd.busy !== null || busy || !waiting}
-          onClick={() => void chamar()}
-        >
-          Chamar próximo
-        </button>
-      )}
-      {canOperate && busy && (
-        <p className="muted">
-          A cadeira está ocupada: conclua ou resolva o atendimento atual antes de chamar.
-        </p>
-      )}
-      {queue.entries.length === 0 ? (
-        <p className="muted">Ninguém na fila.</p>
-      ) : (
-        <ol className="entries">
-          {queue.entries.map((e) => {
-            const toleranceOver = e.tolerance_ends_at ? now >= new Date(e.tolerance_ends_at) : false;
-            return (
-              <li key={e.participation_id}>
-                <strong>{e.ticket_code}</strong> · {e.nick} · {statusText[e.status] ?? e.status}
-                <span className="muted"> · {e.service_names.join(", ")}</span>
-                {e.has_pending_change_request && <strong> · pedido de alteração aguardando</strong>}
-                {e.status === "called" && e.tolerance_ends_at && (
-                  <span className="muted">
-                    {" "}
-                    · tolerância até {time.format(new Date(e.tolerance_ends_at))}
-                  </span>
-                )}
-                {canOperate && e.status === "called" && (
-                  <div className="actions">
-                    <button
-                      type="button"
-                      className="button button--secondary"
-                      disabled={cmd.busy !== null}
-                      onClick={() => void acao(e, "start")}
-                    >
-                      Iniciar atendimento
-                    </button>
-                    <button
-                      type="button"
-                      className="button button--secondary"
-                      disabled={cmd.busy !== null || !toleranceOver}
-                      title={toleranceOver ? undefined : "Disponível depois de 10 minutos da chamada"}
-                      onClick={() => void acao(e, "no-show")}
-                    >
-                      Marcar ausência
-                    </button>
-                  </div>
-                )}
-                {canOperate &&
-                  (e.status === "in_service" || shown === e.participation_id ? (
-                    <Atendimento ctx={ctx} entry={e} onDone={onDone} />
-                  ) : (
-                    <button
-                      type="button"
-                      className="link-button link-button--bloco"
-                      onClick={() => setShown(e.participation_id)}
-                    >
-                      Ver comanda de {e.ticket_code}
-                    </button>
-                  ))}
-                {ctx.isOwner && (e.status === "waiting" || e.status === "called") && (
-                  <DonoAcoes ctx={ctx} entry={e} queue={queue} queues={queues} onDone={onDone} />
-                )}
-              </li>
-            );
-          })}
-        </ol>
-      )}
+      <div className="mt-3 grid gap-5 @3xl:grid-cols-[minmax(15rem,20rem)_minmax(0,1fr)] @3xl:items-start">
+        {/* Chamado / em atendimento: primeiro na leitura; à direita em telas largas */}
+        <section aria-labelledby="titulo-atual" className="grid gap-3 @3xl:col-start-2 @3xl:row-start-1">
+          <h2 id="titulo-atual" className="sr-only">
+            Atendimento atual
+          </h2>
+          {current ? (
+            <Atual
+              ctx={ctx}
+              entry={current}
+              queue={queue}
+              queues={queues}
+              now={now}
+              canOperate={canOperate}
+              busyCmd={cmd.busy !== null}
+              onAction={acao}
+              onDone={onDone}
+            />
+          ) : (
+            <Card className="grid justify-items-start gap-2 p-5">
+              <p className="m-0 text-sm text-fg-muted">Cadeira livre</p>
+              <p className="m-0 text-lg font-semibold">
+                {waiting[0]
+                  ? `Próximo: ${waiting[0].ticket_code} · ${waiting[0].nick}`
+                  : "Ninguém chamado no momento"}
+              </p>
+              {waiting[0] && (
+                <p className="m-0 text-sm text-fg-muted">{waiting[0].service_names.join(" + ")}</p>
+              )}
+            </Card>
+          )}
+        </section>
+
+        {/* Aguardando */}
+        <section aria-labelledby="titulo-aguardando" className="grid gap-3 @3xl:col-start-1 @3xl:row-start-1">
+          <div className="flex items-center justify-between gap-2">
+            <h2 id="titulo-aguardando" className="m-0 text-base font-semibold">
+              Aguardando <span className="font-normal text-fg-muted tabular-nums">· {waiting.length}</span>
+            </h2>
+          </div>
+          {canOperate && queue.status !== "closed" && (
+            <div className="grid gap-1.5">
+              <Button
+                icon={Play}
+                block
+                disabled={cmd.busy !== null || callBlocked !== null}
+                onClick={() => void chamar()}
+              >
+                Chamar próximo
+              </Button>
+              {callBlocked && <p className="m-0 text-sm text-fg-muted">{callBlocked}</p>}
+            </div>
+          )}
+          {waiting.length === 0 ? (
+            <p className="m-0 rounded-xl border border-dashed border-line px-4 py-6 text-center text-sm text-fg-muted">
+              Ninguém na fila.
+            </p>
+          ) : (
+            <ol className="m-0 grid list-none gap-2 p-0">
+              {waiting.map((e, i) => (
+                <Aguardando
+                  key={e.participation_id}
+                  ctx={ctx}
+                  entry={e}
+                  position={i + 1}
+                  queue={queue}
+                  queues={queues}
+                  canOperate={canOperate}
+                  onDone={onDone}
+                />
+              ))}
+            </ol>
+          )}
+        </section>
+      </div>
     </div>
+  );
+}
+
+function Atual({
+  ctx,
+  entry: e,
+  queue,
+  queues,
+  now,
+  canOperate,
+  busyCmd,
+  onAction,
+  onDone,
+}: {
+  ctx: StaffContext;
+  entry: Entry;
+  queue: StaffQueue;
+  queues: StaffQueue[];
+  now: Date;
+  canOperate: boolean;
+  busyCmd: boolean;
+  onAction: (e: Entry, op: "start" | "no-show") => Promise<void>;
+  onDone: () => Promise<void>;
+}) {
+  const called = e.status === "called";
+  const tolerance = e.tolerance_ends_at ? new Date(e.tolerance_ends_at) : null;
+  const toleranceOver = tolerance ? now >= tolerance : false;
+  return (
+    <Card className={cx("grid gap-4 p-5", called && "border-primary/60")}>
+      <div className="grid gap-1">
+        <Badge tone="primary" icon={called ? Clock : Scissors}>
+          {called ? "Chamado" : "Em atendimento"}
+        </Badge>
+        <p className="m-0 text-3xl font-bold tracking-tight">
+          {e.ticket_code} · <span className="break-words">{e.nick}</span>
+        </p>
+        <p className="m-0 text-fg-muted">{e.service_names.join(" + ")}</p>
+        {e.has_pending_change_request && (
+          <Badge tone="warning" className="mt-1">
+            Pedido de alteração aguardando
+          </Badge>
+        )}
+        {called && tolerance && (
+          <p className="m-0 mt-1 text-sm">
+            Tolerância até <strong className="tabular-nums">{time.format(tolerance)}</strong>
+          </p>
+        )}
+      </div>
+      {canOperate && called && (
+        <div className="grid gap-2">
+          <Button icon={Scissors} block disabled={busyCmd} onClick={() => void onAction(e, "start")}>
+            Iniciar atendimento
+          </Button>
+          <Button
+            variant="secondary"
+            icon={UserX}
+            block
+            disabled={busyCmd || !toleranceOver}
+            aria-describedby={toleranceOver ? undefined : `ausencia-${e.participation_id}`}
+            onClick={() => void onAction(e, "no-show")}
+          >
+            Marcar ausência
+          </Button>
+          {!toleranceOver && tolerance && (
+            <p id={`ausencia-${e.participation_id}`} className="m-0 text-center text-sm text-fg-muted">
+              Disponível a partir de {time.format(tolerance)}.
+            </p>
+          )}
+        </div>
+      )}
+      {canOperate && (e.status === "in_service" || called) && (
+        <ComandaEntrada ctx={ctx} entry={e} onDone={onDone} defaultOpen={e.status === "in_service"} />
+      )}
+      {ctx.isOwner && called && (
+        <DonoAcoes ctx={ctx} entry={e} queue={queue} queues={queues} onDone={onDone} />
+      )}
+    </Card>
+  );
+}
+
+function Aguardando({
+  ctx,
+  entry: e,
+  position,
+  queue,
+  queues,
+  canOperate,
+  onDone,
+}: {
+  ctx: StaffContext;
+  entry: Entry;
+  position: number;
+  queue: StaffQueue;
+  queues: StaffQueue[];
+  canOperate: boolean;
+  onDone: () => Promise<void>;
+}) {
+  return (
+    <li className="grid gap-2 rounded-xl border border-line bg-surface p-3">
+      <div className="flex items-start gap-3">
+        <span
+          aria-hidden="true"
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-surface-2 text-sm font-semibold tabular-nums"
+        >
+          {position}
+        </span>
+        <div className="grid min-w-0 flex-1 gap-0.5">
+          <p className="m-0 font-semibold">
+            {e.ticket_code} · <span className="break-words">{e.nick}</span>
+          </p>
+          <p className="m-0 text-sm text-fg-muted">{e.service_names.join(" + ")}</p>
+          {e.has_pending_change_request && <Badge tone="warning">Pedido de alteração aguardando</Badge>}
+        </div>
+      </div>
+      {canOperate && <ComandaEntrada ctx={ctx} entry={e} onDone={onDone} />}
+      {ctx.isOwner && <DonoAcoes ctx={ctx} entry={e} queue={queue} queues={queues} onDone={onDone} />}
+    </li>
+  );
+}
+
+/** Comanda da pessoa, aberta sob demanda (em atendimento já vem aberta). */
+function ComandaEntrada({
+  ctx,
+  entry,
+  onDone,
+  defaultOpen = false,
+}: {
+  ctx: StaffContext;
+  entry: Entry;
+  onDone: () => Promise<void>;
+  defaultOpen?: boolean;
+}) {
+  const [shown, setShown] = useState(defaultOpen);
+  if (entry.status === "in_service" || shown)
+    return (
+      <div className="border-t border-line pt-3">
+        <Atendimento ctx={ctx} entry={entry} onDone={onDone} />
+      </div>
+    );
+  return (
+    <button
+      type="button"
+      aria-expanded={false}
+      onClick={() => setShown(true)}
+      className="inline-flex min-h-11 w-fit items-center gap-1 rounded-lg px-2 text-sm font-semibold text-accent hover:bg-select"
+    >
+      <ChevronDown aria-hidden="true" className="size-4" />
+      Ver comanda de {entry.ticket_code}
+    </button>
   );
 }
 
@@ -165,10 +327,12 @@ function DonoAcoes({
   onDone: () => Promise<void>;
 }) {
   const cmd = useCommand();
-  const [mode, setMode] = useState<"" | "cancelar" | "transferir">("");
+  const panel = useInlinePanel<"cancelar" | "transferir">();
+  const mode = panel.open;
   const [reason, setReason] = useState("");
   const [target, setTarget] = useState("");
   const [consent, setConsent] = useState(false);
+  const [tried, setTried] = useState(false);
   const targets = queues.filter(
     (q) => q.queue_id !== queue.queue_id && q.status === "open" && q.professional.status === "active",
   );
@@ -177,6 +341,7 @@ function DonoAcoes({
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    setTried(true);
     // Sem motivo, ou transferência sem destino ou sem a concordância marcada, nada é enviado.
     if (!ready) return;
     const out =
@@ -199,80 +364,99 @@ function DonoAcoes({
             }),
           );
     if (out.ok) {
-      setMode("");
+      panel.hide();
       setReason("");
+      setTried(false);
       await onDone();
     } else if (out.problem?.status === 409) await onDone();
   }
 
   if (!mode) {
     return (
-      <div className="actions">
-        <button type="button" className="button button--secondary" onClick={() => setMode("cancelar")}>
-          Cancelar participação
-        </button>
+      <div className="flex flex-wrap gap-2">
         {entry.status === "waiting" && targets.length > 0 && (
-          <button type="button" className="button button--secondary" onClick={() => setMode("transferir")}>
+          <Button
+            id={panel.triggerId}
+            variant="secondary"
+            icon={ArrowLeftRight}
+            onClick={() => panel.show("transferir")}
+          >
             Transferir
-          </button>
+          </Button>
         )}
+        <Button variant="danger-ghost" icon={Ban} onClick={() => panel.show("cancelar")}>
+          Cancelar participação
+        </Button>
       </div>
     );
   }
+  const targetName = targets.find((q) => q.queue_id === target)?.professional.display_name;
   return (
     <form
+      id={panel.panelId}
+      onKeyDown={panel.onKeyDown}
       onSubmit={onSubmit}
       noValidate
-      className="card"
+      className="grid gap-4 rounded-xl border border-line bg-surface-2 p-4"
       aria-label={mode === "cancelar" ? "Cancelar participação" : "Transferir participação"}
     >
+      <p className="m-0 font-semibold">
+        {mode === "cancelar"
+          ? `Cancelar ${entry.ticket_code} · ${entry.nick}`
+          : `Transferir ${entry.ticket_code} · ${entry.nick}`}
+      </p>
       <CommandError problem={cmd.problem} offline={cmd.offline} />
       {mode === "transferir" && (
         <>
-          <label htmlFor={`destino-${entry.participation_id}`}>Fila de destino</label>
-          <select
-            id={`destino-${entry.participation_id}`}
-            value={target}
-            onChange={(e) => setTarget(e.target.value)}
-            className="select"
-          >
+          <SelectField label="Fila de destino" value={target} onChange={(e) => setTarget(e.target.value)}>
             <option value="">Escolha…</option>
             {targets.map((q) => (
               <option key={q.queue_id} value={q.queue_id}>
                 {q.professional.display_name}
               </option>
             ))}
-          </select>
-          <p className="muted">
-            O cliente vai para o FIM da fila escolhida, com nova senha, e mantém os preços.
+          </SelectField>
+          <p className="m-0 rounded-lg bg-surface px-3 py-2 text-sm">
+            {targetName
+              ? `${entry.nick} vai para o fim da fila de ${targetName}`
+              : "A pessoa vai para o fim da fila escolhida"}
+            , recebe outra senha e mantém os preços registrados na comanda.
           </p>
-          <label className="choice">
-            <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />O
-            cliente concordou pessoalmente com a transferência
-          </label>
+          <Choice
+            type="checkbox"
+            checked={consent}
+            onChange={(e) => setConsent(e.target.checked)}
+            label="O cliente concordou pessoalmente com a transferência"
+          />
         </>
       )}
-      <Field
+      {mode === "cancelar" && (
+        <p className="m-0 text-sm text-fg-muted">
+          A pessoa sai da fila e a comanda é encerrada sem cobrança.
+        </p>
+      )}
+      <TextArea
         label="Motivo"
         required
         minLength={3}
         maxLength={500}
+        rows={2}
         value={reason}
         onChange={(e) => setReason(e.target.value)}
       />
-      <div className="actions">
-        <Submit busy={cmd.busy !== null}>
-          {mode === "cancelar" ? "Confirmar cancelamento" : "Confirmar transferência"}
-        </Submit>
-        <button type="button" className="button button--secondary" onClick={() => setMode("")}>
-          Voltar
-        </button>
-      </div>
-      {!ready && (
-        <p className="muted">
+      {tried && !ready && (
+        <p role="alert" className="m-0 text-sm font-semibold text-danger">
           Preencha o motivo{mode === "transferir" ? ", o destino e a concordância" : ""} para confirmar.
         </p>
       )}
+      <div className="flex flex-wrap gap-2">
+        <Submit busy={cmd.busy !== null} variant={mode === "cancelar" ? "danger" : "primary"}>
+          {mode === "cancelar" ? "Confirmar cancelamento" : "Confirmar transferência"}
+        </Submit>
+        <Button variant="secondary" onClick={panel.hide}>
+          Voltar
+        </Button>
+      </div>
     </form>
   );
 }

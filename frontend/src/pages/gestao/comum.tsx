@@ -2,7 +2,7 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import { api } from "../../api/client";
 import { call, problemMessage, type Problem } from "../../api/problem";
 import { SessaoExpirada } from "../../ui/estados";
-import { Field, Notice, Submit } from "../../ui/ui";
+import { Notice, PasswordField, Submit } from "../../ui/ui";
 
 export type StaffContext = {
   estId: string;
@@ -27,7 +27,11 @@ export function CommandError({
   if (!problem && !offline) return null;
   if (problem?.code === "reauthentication_required" && onRetry) return <Reauth onDone={onRetry} />;
   if (problem?.code === "unauthenticated") return <SessaoExpirada />;
-  return <Notice kind="erro">{problemMessage(problem, offline)}</Notice>;
+  return (
+    <Notice kind="erro">
+      <p>{problemMessage(problem, offline)}</p>
+    </Notice>
+  );
 }
 
 function Reauth({ onDone }: { onDone: () => void }) {
@@ -50,19 +54,34 @@ function Reauth({ onDone }: { onDone: () => void }) {
     }
   }
   return (
-    <form onSubmit={onSubmit} noValidate className="card" aria-labelledby="titulo-reauth">
-      <h3 id="titulo-reauth">Confirme sua senha</h3>
-      <p className="muted">Por segurança, esta ação exige sua senha de novo (vale por 10 minutos).</p>
-      {error && <Notice kind="erro">{error}</Notice>}
-      <Field
+    <form
+      onSubmit={onSubmit}
+      noValidate
+      className="grid gap-3 rounded-xl border border-primary/40 bg-select p-4"
+      aria-labelledby="titulo-reauth"
+    >
+      <h3 id="titulo-reauth" className="m-0 text-base font-semibold">
+        Confirme sua senha
+      </h3>
+      <p className="m-0 text-sm text-fg-muted">
+        Por segurança, esta ação exige sua senha de novo (vale por 10 minutos).
+      </p>
+      {error && (
+        <Notice kind="erro">
+          <p>{error}</p>
+        </Notice>
+      )}
+      <PasswordField
         label="Sua senha"
-        type="password"
         autoComplete="current-password"
         required
+        autoFocus
         value={password}
         onChange={(e) => setPassword(e.target.value)}
       />
-      <Submit busy={busy}>Confirmar e continuar</Submit>
+      <div>
+        <Submit busy={busy}>Confirmar e continuar</Submit>
+      </div>
     </form>
   );
 }
