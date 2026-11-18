@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSession } from "../session/context";
+import { RefreshCw } from "lucide-react";
 import { Notice } from "../ui/ui";
 import { StreamClient, type AudienceKind, type StreamMessage, type StreamStatus } from "./client";
 import { StreamContext, useStreamStatus } from "./context";
@@ -45,17 +46,33 @@ export function StreamProvider({
   return <StreamContext.Provider value={value}>{children}</StreamContext.Provider>;
 }
 
-/** Aviso de conexão: sem tempo real, os dados podem estar desatualizados (R-WEB-03). */
+/**
+ * Aviso de conexão: sem tempo real, os dados podem estar desatualizados (R-WEB-03). Durante a
+ * reconexão a tela continua mostrando a última informação conhecida, marcada como tal; ao
+ * reconectar, o snapshot do servidor reconcilia o estado.
+ */
 export function StreamStatusNotice() {
   const status = useStreamStatus();
   if (status === "live") return null;
   if (status === "unsupported")
-    return <Notice kind="info">Este navegador não recebe atualizações automáticas. Use “Atualizar”.</Notice>;
+    return (
+      <Notice kind="info">
+        <p>Este navegador não recebe atualizações automáticas. Use “Atualizar”.</p>
+      </Notice>
+    );
+  if (status === "connecting")
+    return (
+      <p role="status" className="m-0 flex items-center gap-2 text-sm text-fg-muted">
+        <RefreshCw aria-hidden="true" className="size-4 animate-spin" />
+        Conectando para receber atualizações…
+      </p>
+    );
   return (
-    <Notice kind="info">
-      {status === "connecting"
-        ? "Conectando para receber atualizações…"
-        : "Reconectando… os dados podem estar desatualizados."}
+    <Notice kind="aviso" title="Reconectando…">
+      <p>
+        A conexão com a loja caiu. Os dados abaixo são a última informação conhecida e podem estar
+        desatualizados.
+      </p>
     </Notice>
   );
 }

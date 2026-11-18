@@ -15,6 +15,11 @@ export function useStreamStatus(): StreamStatus {
   return useContext(StreamContext).status;
 }
 
+/** true durante a reconexão: a tela marca os dados como "última informação conhecida". */
+export function useStale(): boolean {
+  return useContext(StreamContext).status === "reconnecting";
+}
+
 /**
  * Recebe as mensagens do fluxo da página. O handler mais recente é usado sem reinscrever (assim a
  * tela pode usar o próprio estado dentro dele).

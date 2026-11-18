@@ -19,19 +19,17 @@ export function SessaoExpirada() {
   return null;
 }
 
-function AvisoSessaoTerminou() {
-  return (
-    <Notice kind="erro">
-      Sua sessão terminou e a ação não foi feita. <Link to="/entrar">Entre de novo</Link> para continuar.
-    </Notice>
-  );
-}
-
 /** Aviso no topo da página enquanto a sessão encerrada durante o uso não for retomada. */
 export function AvisoSessaoEncerrada() {
   const { state, expired } = useSession();
   if (!expired || (state.status === "ready" && state.session.account)) return null;
-  return <AvisoSessaoTerminou />;
+  return (
+    <Notice kind="erro" title="Sua sessão terminou e a ação não foi feita.">
+      <p>
+        <Link to="/entrar">Entre de novo</Link> para continuar.
+      </p>
+    </Notice>
+  );
 }
 
 /**
@@ -53,9 +51,21 @@ export function AvisoSemInternet() {
   }, []);
   if (online) return null;
   return (
-    <Notice kind="erro">
-      Sem internet neste aparelho. O que já foi confirmado na tela está guardado; quando a conexão voltar,
-      repita a última ação (ela não será aplicada duas vezes).
+    <Notice kind="erro" title="Sem internet neste aparelho.">
+      <p>
+        O que já foi confirmado na tela está guardado; quando a conexão voltar, repita a última ação (ela não
+        será aplicada duas vezes).
+      </p>
     </Notice>
+  );
+}
+
+/** Avisos que valem para qualquer tela (topo do conteúdo). */
+export function AvisosGerais() {
+  return (
+    <div className="grid gap-3 empty:hidden">
+      <AvisoSemInternet />
+      <AvisoSessaoEncerrada />
+    </div>
   );
 }
