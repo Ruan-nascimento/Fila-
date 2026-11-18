@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router";
+import { CircleCheck, Clock, Search, Trash2 } from "lucide-react";
 import { api } from "../../api/client";
 import { call, problemMessage } from "../../api/problem";
-import { Field, Notice, Submit } from "../../ui/ui";
+import { Card, Choice, CopyButton, Field, Notice, PageHeader, PasswordField, Submit } from "../../ui/ui";
 import { useCommand } from "../gestao/comando";
 import { CommandError } from "../gestao/comum";
 import { blockerText, metaText, type DeletionRequest } from "./textos";
@@ -13,31 +14,36 @@ const dateTime = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyl
 export function SituacaoExclusao({ request }: { request: DeletionRequest }) {
   if (request.status === "completed") {
     return (
-      <Notice kind="ok">
-        Exclusão concluída
-        {request.completed_at ? ` em ${dateTime.format(new Date(request.completed_at))}` : ""}. Seus dados de
-        perfil foram removidos; comandas e pagamentos ficam guardados sem eles, para conferência.
+      <Notice kind="ok" title="Exclusão concluída">
+        <p>
+          {request.completed_at ? `Concluída em ${dateTime.format(new Date(request.completed_at))}. ` : ""}
+          Seus dados de perfil foram removidos; comandas e pagamentos ficam guardados sem eles, para
+          conferência.
+        </p>
       </Notice>
     );
   }
   return (
-    <div role="status">
-      <p>
-        <strong>Em processamento</strong> desde {dateTime.format(new Date(request.requested_at))}.
-      </p>
-      {request.blockers.length === 0 ? (
-        <p>Não há pendências: o sistema conclui em instantes.</p>
-      ) : (
-        <>
-          <p>Ainda falta resolver (a loja cuida disso; você não precisa fazer nada):</p>
-          <ul>
-            {request.blockers.map((b) => (
-              <li key={b}>{blockerText[b]}</li>
-            ))}
-          </ul>
-        </>
-      )}
-      <p className="muted">{metaText}</p>
+    <div role="status" className="flex gap-3 rounded-xl border border-select-line/60 bg-select p-4">
+      <Clock aria-hidden="true" className="mt-0.5 size-6 shrink-0 text-accent" />
+      <div className="grid gap-2 text-sm">
+        <p className="m-0 text-base font-semibold text-accent">
+          Em processamento desde {dateTime.format(new Date(request.requested_at))}
+        </p>
+        {request.blockers.length === 0 ? (
+          <p className="m-0">Não há pendências: o sistema conclui em instantes.</p>
+        ) : (
+          <>
+            <p className="m-0">Ainda falta resolver (a loja cuida disso; você não precisa fazer nada):</p>
+            <ul className="m-0 grid gap-1 pl-5">
+              {request.blockers.map((b) => (
+                <li key={b}>{blockerText[b]}</li>
+              ))}
+            </ul>
+          </>
+        )}
+        <p className="m-0 text-fg-muted">{metaText}</p>
+      </div>
     </div>
   );
 }
@@ -47,14 +53,15 @@ export function SituacaoExclusao({ request }: { request: DeletionRequest }) {
  * A resposta traz o protocolo completo UMA vez (também vai por e-mail).
  */
 export function ExcluirConta({ onRequested }: { onRequested: (r: DeletionRequest) => void }) {
-  const [open, setOpen] = useState(false);
   const [understood, setUnderstood] = useState(false);
   const [password, setPassword] = useState("");
   const [reauthError, setReauthError] = useState<string | null>(null);
+  const [tried, setTried] = useState(false);
   const cmd = useCommand();
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    setTried(true);
     if (!understood || password === "") return;
     setReauthError(null);
     const re = await call(() => api.POST("/v1/auth/reauthenticate", { body: { password } }));
@@ -72,95 +79,84 @@ export function ExcluirConta({ onRequested }: { onRequested: (r: DeletionRequest
     if (out.ok) onRequested(out.data.data);
   }
 
-  if (!open) {
-    return (
-      <section aria-labelledby="titulo-excluir">
-        <h3 id="titulo-excluir">Excluir conta</h3>
-        <button type="button" className="button button--secondary" onClick={() => setOpen(true)}>
-          Quero excluir minha conta…
-        </button>
-      </section>
-    );
-  }
   return (
-    <form onSubmit={onSubmit} noValidate className="card" aria-labelledby="titulo-excluir">
-      <h3 id="titulo-excluir">Excluir conta</h3>
-      <p>Antes de confirmar, veja o que acontece:</p>
-      <ul>
-        <li>Você sai de todas as sessões, inclusive em outros aparelhos, na hora.</li>
-        <li>Se estiver aguardando ou chamado em alguma fila, a participação é cancelada, sem cobrança.</li>
-        <li>Pontos e prêmios, quando existirem, são encerrados, sem conversão em dinheiro.</li>
-        <li>
-          Atendimento em andamento e pagamento pendente continuam com a equipe da loja; a exclusão só termina
-          depois.
-        </li>
-        <li>Comandas e pagamentos ficam guardados sem seus dados pessoais, para a conferência da loja.</li>
-        <li>
-          Se você for a única pessoa dona de uma loja, antes é preciso transferir a administração ou encerrar
-          a loja (fale com o suporte).
-        </li>
-      </ul>
-      <p className="muted">{metaText}</p>
+    <form onSubmit={onSubmit} noValidate className="grid gap-5" aria-labelledby="titulo-efeitos">
+      <Card className="grid gap-3 p-5">
+        <h2 id="titulo-efeitos" className="m-0 text-base font-semibold">
+          O que acontece ao excluir
+        </h2>
+        <ul className="m-0 grid gap-2 pl-5 text-sm">
+          <li>Você sai de todas as sessões, inclusive em outros aparelhos, na hora.</li>
+          <li>Se estiver aguardando ou chamado em alguma fila, a participação é cancelada, sem cobrança.</li>
+          <li>Pontos e prêmios, quando existirem, são encerrados, sem conversão em dinheiro.</li>
+          <li>
+            Atendimento em andamento e pagamento pendente continuam com a equipe da loja; a exclusão só
+            termina depois.
+          </li>
+          <li>Comandas e pagamentos ficam guardados sem seus dados pessoais, para a conferência da loja.</li>
+          <li>
+            Se você for a única pessoa dona de uma loja, antes é preciso transferir a administração ou
+            encerrar a loja (fale com o suporte).
+          </li>
+        </ul>
+        <p className="m-0 text-sm text-fg-muted">{metaText}</p>
+      </Card>
       {reauthError && <Notice kind="erro">{reauthError}</Notice>}
       <CommandError problem={cmd.problem} offline={cmd.offline} />
-      <label className="choice">
-        <input type="checkbox" checked={understood} onChange={(e) => setUnderstood(e.target.checked)} />
-        Li e entendi os efeitos da exclusão
-      </label>
-      <Field
+      <Choice
+        type="checkbox"
+        checked={understood}
+        onChange={(e) => setUnderstood(e.target.checked)}
+        label="Li e entendi os efeitos da exclusão"
+      />
+      <PasswordField
         label="Sua senha (confirmação)"
-        type="password"
         autoComplete="current-password"
         required
         value={password}
         onChange={(e) => setPassword(e.target.value)}
       />
-      <div className="actions">
-        <Submit busy={cmd.busy !== null}>Excluir minha conta</Submit>
-        <button type="button" className="button button--secondary" onClick={() => setOpen(false)}>
-          Voltar
-        </button>
-      </div>
-      {(!understood || password === "") && (
-        <p className="muted">Marque que entendeu os efeitos e digite sua senha para confirmar.</p>
+      {tried && (!understood || password === "") && (
+        <p role="alert" className="m-0 text-sm font-semibold text-danger">
+          Marque que entendeu os efeitos e digite sua senha para confirmar.
+        </p>
       )}
+      <div className="flex flex-wrap gap-2">
+        <Submit busy={cmd.busy !== null} variant="danger" icon={Trash2}>
+          Excluir minha conta
+        </Submit>
+        <Link to="/conta" className="inline-flex min-h-11 items-center px-3 font-semibold">
+          Voltar
+        </Link>
+      </div>
     </form>
   );
 }
 
 /** Mostra o protocolo (uma única vez) e a situação depois do pedido. */
 export function ExclusaoSolicitada({ request }: { request: DeletionRequest }) {
-  const [copied, setCopied] = useState(false);
   return (
-    <section aria-labelledby="titulo-exclusao-pedida">
-      <h2 id="titulo-exclusao-pedida">Pedido de exclusão recebido</h2>
-      <Notice kind="info">
-        <p>
-          <strong>Guarde o protocolo.</strong> Ele aparece só agora (também foi enviado ao seu e-mail) e serve
-          para consultar a situação.
+    <section aria-labelledby="titulo-exclusao-pedida" className="grid gap-5">
+      <PageHeader id="titulo-exclusao-pedida" title="Pedido de exclusão recebido" />
+      <Card className="grid gap-3 p-5">
+        <p className="m-0 flex items-center gap-2 font-semibold">
+          <CircleCheck aria-hidden="true" className="size-5 text-success" />
+          Guarde o protocolo.
         </p>
-        <p className="code" aria-label="Protocolo">
+        <p className="m-0 text-sm text-fg-muted">
+          Ele aparece só agora (também foi enviado ao seu e-mail) e serve para consultar a situação.
+        </p>
+        <p
+          id="protocolo"
+          className="m-0 rounded-lg bg-surface-2 px-3 py-3 text-center font-mono text-lg font-bold tracking-wider break-all"
+        >
           {request.protocol}
         </p>
-        <p>
-          <button
-            type="button"
-            className="button button--secondary"
-            onClick={() =>
-              void navigator.clipboard
-                .writeText(request.protocol)
-                .then(() => setCopied(true))
-                .catch(() => setCopied(false))
-            }
-          >
-            Copiar protocolo
-          </button>{" "}
-          <span role="status">{copied ? "Copiado." : ""}</span>
-        </p>
-      </Notice>
-      <p>Você saiu da conta em todos os aparelhos.</p>
+        <CopyButton text={request.protocol} label="Copiar protocolo" />
+      </Card>
+      <p className="m-0">Você saiu da conta em todos os aparelhos.</p>
       <SituacaoExclusao request={request} />
-      <p>
+      <p className="m-0">
         <Link to="/exclusao">Consultar a situação depois</Link>
       </p>
     </section>
@@ -190,21 +186,40 @@ export function ConsultarExclusao() {
     }
   }
   return (
-    <section aria-labelledby="titulo-consulta-exclusao">
-      <h2 id="titulo-consulta-exclusao">Situação da exclusão de conta</h2>
-      <form onSubmit={onSubmit} noValidate className="card">
-        {error && <Notice kind="erro">{error}</Notice>}
+    <section aria-labelledby="titulo-consulta-exclusao" className="grid gap-5">
+      <PageHeader
+        id="titulo-consulta-exclusao"
+        title="Situação da exclusão"
+        description="Acompanhe o pedido de exclusão de conta pelo protocolo."
+      />
+      <form
+        onSubmit={onSubmit}
+        noValidate
+        className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
+      >
+        {error && (
+          <div className="sm:col-span-2">
+            <Notice kind="erro">
+              <p>{error}</p>
+            </Notice>
+          </div>
+        )}
         <Field
           label="Protocolo"
           required
           autoComplete="off"
           spellCheck={false}
           maxLength={64}
+          className="font-mono"
           value={protocol}
           hint="Recebido ao pedir a exclusão (também por e-mail)."
           onChange={(e) => setProtocol(e.target.value)}
         />
-        <Submit busy={busy}>Consultar</Submit>
+        <div className="sm:mb-7">
+          <Submit busy={busy} icon={Search} block>
+            Consultar
+          </Submit>
+        </div>
       </form>
       {result && <SituacaoExclusao request={result} />}
     </section>

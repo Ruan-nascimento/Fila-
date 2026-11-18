@@ -1,8 +1,10 @@
 import { useState, type FormEvent } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
+import { MailCheck } from "lucide-react";
 import { api } from "../api/client";
-import { Field, Notice, Submit } from "../ui/ui";
+import { Field, Notice, PageHeader, PasswordField, Submit } from "../ui/ui";
 import { useForm } from "../ui/useForm";
+import { safeReturn } from "../ui/retorno";
 
 type Sent = { message: string } | null;
 
@@ -13,7 +15,9 @@ function SentNotice({ sent }: { sent: Sent }) {
     <Notice kind="ok">
       <p>{sent.message}</p>
       {import.meta.env.DEV && (
-        <p>Em desenvolvimento, os e-mails ficam na pasta backend/.correio (veja o README).</p>
+        <p className="text-sm text-fg-muted">
+          Em desenvolvimento, os e-mails ficam na pasta backend/.correio (veja o README).
+        </p>
       )}
     </Notice>
   );
@@ -21,6 +25,8 @@ function SentNotice({ sent }: { sent: Sent }) {
 
 export function Cadastro() {
   const form = useForm();
+  const [params] = useSearchParams();
+  const voltar = safeReturn(params.get("voltar"));
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -35,14 +41,27 @@ export function Cadastro() {
     }
   }
 
+  const entrar = voltar ? `/entrar?voltar=${encodeURIComponent(voltar)}` : "/entrar";
   return (
-    <section aria-labelledby="titulo-cadastro">
-      <h2 id="titulo-cadastro">Criar conta de cliente</h2>
-      <p>Com conta você acompanha seu histórico e, quando a barbearia ativar, acumula pontos.</p>
+    <section aria-labelledby="titulo-cadastro" className="grid gap-5">
+      <PageHeader
+        id="titulo-cadastro"
+        title="Criar conta de cliente"
+        description="Com conta você acompanha seu histórico e, quando a barbearia ativar, acumula pontos."
+      />
       {form.generalError}
-      <SentNotice sent={sent} />
+      {sent && (
+        <div className="grid gap-3">
+          <MailCheck aria-hidden="true" className="size-8 text-accent" />
+          <SentNotice sent={sent} />
+          <p className="m-0 text-sm text-fg-muted">
+            Abra o link do e-mail para confirmar a conta. Não chegou?{" "}
+            <Link to="/reenviar-verificacao">Reenviar confirmação</Link>
+          </p>
+        </div>
+      )}
       {!sent && (
-        <form onSubmit={onSubmit} noValidate>
+        <form onSubmit={onSubmit} noValidate className="grid gap-4">
           <Field
             label="Nome"
             autoComplete="name"
@@ -56,14 +75,14 @@ export function Cadastro() {
             label="E-mail"
             type="email"
             autoComplete="email"
+            inputMode="email"
             required
             value={email}
             error={form.errors.email}
             onChange={(e) => setEmail(e.target.value)}
           />
-          <Field
+          <PasswordField
             label="Senha"
-            type="password"
             autoComplete="new-password"
             required
             minLength={10}
@@ -73,11 +92,19 @@ export function Cadastro() {
             error={form.errors.password}
             onChange={(e) => setPassword(e.target.value)}
           />
-          <Submit busy={form.busy}>Criar conta</Submit>
+          <Submit busy={form.busy} block>
+            Criar conta
+          </Submit>
         </form>
       )}
-      <p>
-        Já tem conta? <Link to="/entrar">Entrar</Link>
+      <p className="m-0 text-center text-sm">
+        Já tem conta?{" "}
+        <Link to={entrar} className="font-semibold">
+          Entrar
+        </Link>
+      </p>
+      <p className="m-0 text-center text-xs text-fg-muted">
+        Este cadastro cria uma conta de cliente. A equipe da barbearia entra pelo convite do dono.
       </p>
     </section>
   );
@@ -103,27 +130,31 @@ function EmailOnly({
     if (out.ok) setSent(out.data.data);
   }
   return (
-    <section aria-labelledby="titulo-email">
-      <h2 id="titulo-email">{title}</h2>
-      <p>{intro}</p>
+    <section aria-labelledby="titulo-email" className="grid gap-5">
+      <PageHeader id="titulo-email" title={title} description={intro} />
       {form.generalError}
       <SentNotice sent={sent} />
       {!sent && (
-        <form onSubmit={onSubmit} noValidate>
+        <form onSubmit={onSubmit} noValidate className="grid gap-4">
           <Field
             label="E-mail"
             type="email"
             autoComplete="email"
+            inputMode="email"
             required
             value={email}
             error={form.errors.email}
             onChange={(e) => setEmail(e.target.value)}
           />
-          <Submit busy={form.busy}>{button}</Submit>
+          <Submit busy={form.busy} block>
+            {button}
+          </Submit>
         </form>
       )}
-      <p>
-        <Link to="/entrar">Voltar para entrar</Link>
+      <p className="m-0 text-center text-sm">
+        <Link to="/entrar" className="font-semibold">
+          Voltar para entrar
+        </Link>
       </p>
     </section>
   );
