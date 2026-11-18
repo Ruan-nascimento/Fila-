@@ -143,7 +143,7 @@ npm ci
 npm run dev
 ```
 
-Abra http://127.0.0.1:5173. A página inicial mostra "API pronta" quando a API (passo 5) está rodando e o banco está migrado.
+Abra http://127.0.0.1:5173. Se a API (passo 5) não estiver rodando ou o banco não estiver migrado, a página inicial mostra um aviso; com tudo pronto, ela só explica como entrar pela loja.
 O Vite repassa `/v1` e `/healthz` para a API, então frontend e API ficam na mesma origem, como em produção.
 
 Telas desta etapa:
@@ -154,11 +154,11 @@ Telas desta etapa:
 | `/entrar` | Entrar como **Cliente** ou como **Equipe da barbearia** |
 | `/conta` | Ver a conta, trocar a senha e sair |
 | `/esqueci-senha` | Pedir link para criar senha nova (vale 30 minutos) |
-| `/loja/barbearia-teste` | Página pública da loja (use o `-slug` do passo 5.2): serviços com preço, profissionais e situação das filas; entrar sem conta com um apelido (e guardar o **código de recuperação**) ou com a conta, **entrar na fila** e acompanhar senha, posição e espera estimada; sair da fila; ver a **comanda item a item**, trocar serviços enquanto aguarda, pedir alteração depois de chamado e ver o valor a pagar |
-| `/gestao` | Área da equipe (entre como **Equipe**). Dono: filas (abrir, pausar, fechar; chamar o próximo, iniciar, marcar ausência, cancelar com motivo e transferir com a concordância do cliente), profissionais (cadastrar, convidar, renomear, desativar), serviços (preço, duração, pontos, quem atende) e dados da loja. Profissional: vê a própria fila, chama o próximo, inicia, marca ausência, avisa indisponibilidade e consulta os serviços. Na fila, cada pessoa tem a **comanda**: aprovar/recusar pedido do cliente, marcar serviço realizado, alterar serviços (com motivo), **concluir** ou **interromper**. Aba **Comandas**: lista; o dono revisa interrupções e corrige valor fechado (pede a senha de novo) |
-| `/conta` → "Excluir conta" | Mostra os efeitos, pede a senha de novo e dá um **protocolo** (também por e-mail). Atendimento em andamento ou pagamento pendente ficam com a loja: a exclusão aparece "em processamento" até resolver |
+| `/loja/barbearia-teste` | Página pública da loja (use o `-slug` do passo 5.2): serviços com preço, profissionais e situação das filas; entrar sem conta com um apelido (e guardar o **código de recuperação**) ou com a conta, **entrar na fila** e acompanhar senha, posição e espera estimada; sair da fila; ver a **comanda item a item**, trocar serviços enquanto aguarda, pedir alteração depois de chamado e ver o valor a pagar. Com conta, as abas `/loja/…/historico` e `/loja/…/pontos` mostram histórico e fidelidade da loja |
+| `/gestao` | Área da equipe (entre como **Equipe**). Dono: filas (abrir, pausar, fechar; chamar o próximo, iniciar, marcar ausência, cancelar com motivo e transferir com a concordância do cliente), profissionais (cadastrar, convidar, renomear, desativar), serviços (preço, duração, pontos, quem atende) e dados da loja. Profissional: vê a própria fila, chama o próximo, inicia, marca ausência, avisa indisponibilidade e consulta os serviços. Na fila, cada pessoa tem a **comanda**: aprovar/recusar pedido do cliente, marcar serviço realizado, alterar serviços (com motivo), **concluir** ou **interromper**. **Comandas**: lista e detalhe (`/gestao/…/comandas/:id`, filtro em `?mostrar=`); o dono revisa interrupções e corrige valor fechado (pede a senha de novo). No computador a navegação é lateral, agrupada em Operação, Cadastros e Administração; no celular e no tablet, Filas · Comandas · Mais |
+| `/conta/excluir` (link "Excluir conta" em `/conta`) | Mostra os efeitos, pede a senha de novo e dá um **protocolo** (também por e-mail). Atendimento em andamento ou pagamento pendente ficam com a loja: a exclusão aparece "em processamento" até resolver |
 | `/exclusao` | Consultar a situação da exclusão pelo protocolo |
-| `/gestao` → aba **Exclusões** (dono) | Exclusões que dependem da loja e o que falta resolver; destaque perto da meta operacional de 30 dias |
+| `/gestao` → **Exclusões** (dono) | Exclusões que dependem da loja e o que falta resolver; destaque perto da meta operacional de 30 dias |
 | `/verificar-email`, `/redefinir-senha`, `/convite` | Abertos pelos links dos e-mails |
 
 Use sempre o mesmo endereço (`http://127.0.0.1:5173` ou `http://localhost:5173`) durante o uso: cada um tem seus próprios cookies.

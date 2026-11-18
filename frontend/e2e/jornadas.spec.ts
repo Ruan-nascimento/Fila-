@@ -55,9 +55,9 @@ test("visitante no celular e Beto no computador: do link da loja ao pago, atuali
   const s = await sctx.newPage();
 
   await v.goto(`/loja/${loja.slug}`);
-  await v.getByLabel("Como quer ser chamado").fill("Lia");
+  await v.getByLabel("Apelido").fill("Lia");
   await v.getByRole("button", { name: "Continuar" }).click();
-  await expect(v.getByText("Guarde seu código de recuperação.")).toBeVisible();
+  await expect(v.getByRole("heading", { name: "Guarde seu código de recuperação" })).toBeVisible();
   await entrarNaFilaPelaTela(v);
   await expect(
     v
@@ -87,6 +87,11 @@ test("visitante no celular e Beto no computador: do link da loja ao pago, atuali
 
   await s.goto(`/gestao/${loja.estId}/comandas`);
   await s.getByLabel("Mostrar").selectOption("awaiting_payment");
+  // Lista e detalhe: abre a comanda pela lista.
+  await s
+    .getByRole("link", { name: /R\$\s*45,00/ })
+    .first()
+    .click();
   const receber = s.getByRole("form", { name: "Receber na loja" });
   await receber.getByLabel(/Valor entregue/).fill("50");
   await expect(receber.getByText(/Troco:/)).toContainText("5,00");
@@ -107,7 +112,7 @@ test("cliente: cadastro, e-mail, Pix com rede caindo (sem cobrar duas vezes), po
   await c.goto("/cadastro");
   await c.getByLabel("Nome").fill("Maria Cliente");
   await c.getByLabel("E-mail").fill(email);
-  await c.getByLabel("Senha").fill(senha);
+  await c.getByLabel("Senha", { exact: true }).fill(senha);
   await c.getByRole("button", { name: "Criar conta" }).click();
   await expect(
     c
@@ -140,7 +145,8 @@ test("cliente: cadastro, e-mail, Pix com rede caindo (sem cobrar duas vezes), po
   await gerar.click();
   await expect(c.getByText(/Sem internet neste aparelho/)).toBeVisible();
   await expect(c.getByRole("alert").filter({ hasText: /Sem conexão com o servidor/ })).toBeVisible();
-  await expect(c.getByText(/Reconectando… os dados podem estar desatualizados/)).toBeVisible();
+  await expect(c.getByText(/Reconectando…/)).toBeVisible();
+  await expect(c.getByText(/última informação conhecida/).first()).toBeVisible();
   await cctx.setOffline(false);
   await expect(c.getByText(/Sem internet neste aparelho/)).toHaveCount(0);
 
@@ -231,12 +237,13 @@ test("conta: senha esquecida, sessão encerrada em outro aparelho e exclusão co
   await p.getByRole("button", { name: "Salvar nome" }).click();
   await expect(p.getByText("Nome atualizado.")).toBeVisible();
 
-  await p.getByRole("button", { name: /Excluir conta|Quero excluir/ }).click();
+  // A exclusão fica numa área separada da conta.
+  await p.getByRole("link", { name: "Excluir conta" }).click();
   await p.getByRole("checkbox", { name: /Li e entendi/ }).check();
   await p.getByLabel("Sua senha (confirmação)").fill(senha);
   await p.getByRole("button", { name: "Excluir minha conta" }).click();
   await expect(p.getByRole("heading", { name: "Pedido de exclusão recebido" })).toBeVisible();
-  const protocolo = (await p.getByLabel("Protocolo").textContent())?.trim() ?? "";
+  const protocolo = (await p.locator("#protocolo").textContent())?.trim() ?? "";
   expect(protocolo.length).toBeGreaterThan(15);
   await p.goto("/exclusao");
   await p.getByLabel("Protocolo").fill(protocolo);
@@ -263,19 +270,19 @@ test("dona no tablet: convida e cancela convite (com senha), vê pendências e a
   await caio.getByRole("button", { name: "Enviar convite" }).click();
   // Convite exige senha recente: a tela pede a senha e repete a MESMA ação (mesma chave).
   const senhaDeNovo = caio.getByLabel("Sua senha", { exact: true });
-  await expect(senhaDeNovo.or(caio.getByText(/convite pendente/)).first()).toBeVisible();
+  await expect(senhaDeNovo.or(caio.getByText(/convite pendente/i)).first()).toBeVisible();
   if (await senhaDeNovo.isVisible()) {
     await senhaDeNovo.fill(senha);
     await caio.getByRole("button", { name: "Confirmar e continuar" }).click();
   }
-  await expect(caio.getByText(/convite pendente/)).toBeVisible();
+  await expect(caio.getByText(/convite pendente/i)).toBeVisible();
   await caio.getByRole("button", { name: "Cancelar convite" }).click();
-  await expect(caio.getByText("sem acesso")).toBeVisible();
+  await expect(caio.getByText(/sem acesso/i)).toBeVisible();
 
   await p.getByRole("link", { name: "Pendências" }).click();
   await expect(p.getByRole("list", { name: "Resumo" })).toBeVisible();
   await p.getByRole("link", { name: "Auditoria" }).click();
-  await expect(p.getByText("T-IN-03").first()).toBeVisible();
+  await expect(p.getByText(/T-IN-03/).first()).toBeVisible();
   // Profissional não vê as abas do dono.
   const pctx = await browser.newContext({ viewport: { width: 1024, height: 768 } });
   const pp = await pctx.newPage();

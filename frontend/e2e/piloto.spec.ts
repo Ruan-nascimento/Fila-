@@ -83,9 +83,9 @@ test("roteiro do piloto: do primeiro cliente às pendências da dona", async ({ 
   // 1. Visitante entra pelo link da loja e guarda o código de recuperação.
   const [lctx, lia] = await abrir(browser, celular);
   await lia.goto(`/loja/${loja.slug}`);
-  await lia.getByLabel("Como quer ser chamado").fill("Lia");
+  await lia.getByLabel("Apelido").fill("Lia");
   await lia.getByRole("button", { name: "Continuar" }).click();
-  await expect(lia.getByText("Guarde seu código de recuperação.")).toBeVisible();
+  await expect(lia.getByRole("heading", { name: "Guarde seu código de recuperação" })).toBeVisible();
   const codigo = (await lia
     .getByText(/^[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}$/)
     .textContent())!.trim();
