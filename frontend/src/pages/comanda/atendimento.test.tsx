@@ -1,7 +1,9 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { MemoryRouter, Route, Routes } from "react-router";
 import { describe, expect, it } from "vitest";
 import { fakeApi, problem } from "../../test/fake-api";
 import { MinhaVisita } from "../fila/MinhaVisita";
+import { StoreDataProvider } from "../fila/dados";
 import { Atendimento } from "../gestao/Atendimento";
 import { Comandas } from "../gestao/Comandas";
 import { ItensDaComanda } from "./comanda";
@@ -122,11 +124,15 @@ describe("Comanda do cliente", () => {
         });
       },
     });
-    render(<MinhaVisita shopId={EST} />);
+    render(
+      <StoreDataProvider shopId={EST}>
+        <MinhaVisita shopId={EST} />
+      </StoreDataProvider>,
+    );
     fireEvent.click(await screen.findByRole("button", { name: "Alterar serviços" }));
     const form = await screen.findByRole("form", { name: "Alterar serviços" });
     // O Corte aceito continua pelo preço aceito (4500), mesmo com o catálogo em 5000.
-    expect(within(form).getByLabelText(/Corte — R\$\s*45,00/)).toBeChecked();
+    expect(within(form).getByLabelText(/Corte\s*R\$\s*45,00/)).toBeChecked();
     fireEvent.click(within(form).getByLabelText(/Barba/));
     expect(within(form).getByText(/Novo total previsto: R\$\s*75,00/)).toBeInTheDocument();
     fireEvent.click(within(form).getByRole("button", { name: "Salvar serviços" }));
@@ -159,7 +165,11 @@ describe("Comanda do cliente", () => {
         );
       },
     });
-    render(<MinhaVisita shopId={EST} />);
+    render(
+      <StoreDataProvider shopId={EST}>
+        <MinhaVisita shopId={EST} />
+      </StoreDataProvider>,
+    );
     fireEvent.click(await screen.findByRole("button", { name: "Pedir alteração ao profissional" }));
     const form = await screen.findByRole("form", { name: "Pedir alteração" });
     fireEvent.click(await within(form).findByLabelText(/Barba/));
@@ -182,7 +192,8 @@ describe("Comanda do cliente", () => {
       total: brl(4500),
     });
     render(<ItensDaComanda order={frozen as never} />);
-    expect(screen.getByText(/Barba · não realizado · motivo: cliente desistiu/)).toBeInTheDocument();
+    expect(screen.getByText("Barba")).toBeInTheDocument();
+    expect(screen.getByText(/^não realizado · motivo: cliente desistiu$/)).toBeInTheDocument();
     expect(screen.getByText(/não cobrado/)).toBeInTheDocument();
     expect(screen.getByText("Total cobrado")).toBeInTheDocument();
   });
@@ -288,6 +299,16 @@ describe("Atendimento pela equipe", () => {
   });
 });
 
+function renderComandas(ctx: Parameters<typeof Comandas>[0]["ctx"]) {
+  return render(
+    <MemoryRouter initialEntries={[`/gestao/${EST}/comandas`]}>
+      <Routes>
+        <Route path="/gestao/:estId/comandas/:orderId?" element={<Comandas ctx={ctx} />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
 describe("Comandas do dono", () => {
   const ctx = { estId: EST, estName: "Loja", isOwner: true, professionalId: null };
   const participation = {
@@ -321,11 +342,17 @@ describe("Comandas do dono", () => {
         });
       },
     });
-    render(<Comandas ctx={ctx} />);
+    renderComandas(ctx);
+    // Lista com senha e apelido; o detalhe abre pelo endereço da comanda.
+    fireEvent.click(await screen.findByRole("link", { name: /A007 · Lia/ }));
     expect(await screen.findByText(/motivo informado: cliente precisou sair/)).toBeInTheDocument();
     expect(requests[0]?.url).toContain("status=pending_review");
     const form = screen.getByRole("form", { name: "Revisar interrupção" });
-    expect(within(form).getByText(/Valor depois da revisão:/).textContent).toMatch(/45,00/);
+    expect(
+      within(form)
+        .getByText(/Valor depois da revisão:/)
+        .closest("div")?.parentElement?.textContent,
+    ).toMatch(/45,00/);
     fireEvent.change(within(form).getByLabelText("Nota da revisão"), { target: { value: "Corte inteiro" } });
     fireEvent.click(within(form).getByRole("button", { name: "Fechar revisão" }));
     await waitFor(() => expect(bodies).toHaveLength(1));
@@ -362,8 +389,9 @@ describe("Comandas do dono", () => {
         return Response.json({ data: { ...closed, status: "closed_no_charge", total: brl(0) } });
       },
     });
-    render(<Comandas ctx={{ ...ctx }} />);
+    renderComandas({ ...ctx });
     fireEvent.change(await screen.findByLabelText("Mostrar"), { target: { value: "awaiting_payment" } });
+    fireEvent.click(await screen.findByRole("link", { name: /A007 · Lia/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Corrigir valor" }));
     const form = screen.getByRole("form", { name: "Corrigir valor" });
     fireEvent.click(within(form).getByLabelText(/Corte/));
@@ -373,6 +401,7 @@ describe("Comandas do dono", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirmar e continuar" }));
     await waitFor(() => expect(keys).toHaveLength(2));
     expect(keys[0]).toBe(keys[1]);
-    expect(await screen.findByText(/Encerrada sem cobrança/)).toBeInTheDocument();
+    // A situação nova aparece na lista e no detalhe da comanda.
+    expect((await screen.findAllByText(/Encerrada sem cobrança/)).length).toBeGreaterThanOrEqual(2);
   });
 });
