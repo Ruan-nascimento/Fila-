@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
+import { CalendarClock, Gift, Star } from "lucide-react";
 import { api } from "../../api/client";
 import { call, problemMessage } from "../../api/problem";
 import { useStreamMessages } from "../../stream/context";
-import { Notice } from "../../ui/ui";
+import { Badge, Button, Card, LoadError, Loading, Notice, Section } from "../../ui/ui";
 import { useCommand } from "../gestao/comando";
 import { CommandError } from "../gestao/comum";
 import {
@@ -73,30 +74,48 @@ export function Pontos({ shopId }: { shopId: string }) {
     }
   });
 
-  if (error) return <Notice kind="erro">{error}</Notice>;
-  if (!summary) return <p role="status">Carregando seus pontos…</p>;
+  if (error) return <LoadError message={error} onRetry={() => void reload()} />;
+  if (!summary) return <Loading>Carregando seus pontos…</Loading>;
   return (
-    <section className="card" aria-labelledby="titulo-pontos">
-      <h3 id="titulo-pontos">Seus pontos nesta loja</h3>
+    <section className="grid max-w-4xl gap-6" aria-labelledby="titulo-pontos">
+      <div className="grid gap-1">
+        <h2 id="titulo-pontos" className="m-0 text-lg font-semibold">
+          Seus pontos nesta loja
+        </h2>
+        <p className="m-0 text-sm text-fg-muted">Saldo, reserva e prêmios desta barbearia.</p>
+      </div>
       {!summary.program_enabled && (
         <Notice kind="info">
-          O programa de pontos está desligado no momento. Seu saldo continua guardado e uma reserva já feita
-          continua valendo.
+          <p>
+            O programa de pontos está desligado no momento. Seu saldo continua guardado e uma reserva já feita
+            continua valendo.
+          </p>
         </Notice>
       )}
-      <ul className="cards" aria-label="Saldo">
-        <li className="card">
-          <strong>{summary.available}</strong> disponíveis
+      <ul className="m-0 grid list-none grid-cols-2 gap-3 p-0 sm:grid-cols-3" aria-label="Saldo">
+        <li className="col-span-2 flex items-center gap-3 rounded-xl border border-select-line/60 bg-select p-4 sm:col-span-1">
+          <Star aria-hidden="true" className="size-7 shrink-0 text-accent" />
+          <span className="grid">
+            <strong className="text-3xl tabular-nums text-accent">{summary.available}</strong>
+            <span className="text-sm">disponíveis</span>
+          </span>
         </li>
-        <li className="card">
-          <strong>{summary.held}</strong> reservados
+        <li className="flex items-center gap-3 rounded-xl border border-line bg-surface p-4">
+          <CalendarClock aria-hidden="true" className="size-6 shrink-0 text-fg-muted" />
+          <span className="grid">
+            <strong className="text-2xl tabular-nums">{summary.held}</strong>
+            <span className="text-sm text-fg-muted">reservados</span>
+          </span>
         </li>
-        <li className="card">
-          <strong>{summary.balance}</strong> no saldo
+        <li className="flex items-center gap-3 rounded-xl border border-line bg-surface p-4">
+          <span className="grid">
+            <strong className="text-2xl tabular-nums">{summary.balance}</strong>
+            <span className="text-sm text-fg-muted">no saldo</span>
+          </span>
         </li>
       </ul>
       {summary.balance < 0 && (
-        <p className="muted">
+        <p className="m-0 text-sm text-fg-muted">
           Seu saldo ficou negativo porque um pagamento com pontos já usados foi devolvido. Não há cobrança em
           dinheiro; novos prêmios ficam disponíveis quando o saldo voltar a ser suficiente.
         </p>
@@ -106,20 +125,25 @@ export function Pontos({ shopId }: { shopId: string }) {
       )}
       <Catalogo shopId={shopId} summary={summary} rewards={rewards} onDone={reload} />
       {ledger.length > 0 && (
-        <>
-          <h4>Extrato</h4>
-          <ul className="order__items" aria-label="Extrato de pontos">
+        <Section title="Extrato de pontos" level={3}>
+          <ul
+            className="m-0 grid list-none divide-y divide-line rounded-xl border border-line bg-surface p-0"
+            aria-label="Extrato de pontos"
+          >
             {ledger.map((e) => (
-              <li key={e.id}>
-                <span>
-                  {ledgerText[e.kind]} · {when.format(new Date(e.occurred_at))}
-                  {e.held_delta !== 0 && <> · reservados {signed(e.held_delta)}</>}
+              <li key={e.id} className="flex items-start justify-between gap-3 px-4 py-3">
+                <span className="grid">
+                  <span className="font-medium">{ledgerText[e.kind]}</span>
+                  <span className="text-sm text-fg-muted tabular-nums">
+                    {when.format(new Date(e.occurred_at))}
+                    {e.held_delta !== 0 && <> · reservados {signed(e.held_delta)}</>}
+                  </span>
                 </span>
-                <span className="order__price">{signed(e.balance_delta)}</span>
+                <span className="font-semibold tabular-nums">{signed(e.balance_delta)} pontos</span>
               </li>
             ))}
           </ul>
-        </>
+        </Section>
       )}
     </section>
   );
@@ -149,22 +173,32 @@ function Reservado({
   }
   const t = reservation.accepted_terms;
   return (
-    <div className="notice notice--ok" role="status" aria-label="Prêmio reservado">
-      <p>
-        <strong>Prêmio reservado: {t.name}</strong> ({t.cost_points} pontos). Válido até{" "}
-        {when.format(new Date(reservation.expires_at))}. Mostre esta tela na loja para receber.
-      </p>
-      <p>{t.usage_instructions}</p>
+    <Card className="grid gap-3 border-success/40 p-4 sm:p-5" role="status" aria-label="Prêmio reservado">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl bg-success-soft text-success">
+            <Gift aria-hidden="true" className="size-6" />
+          </span>
+          <div className="grid gap-0.5">
+            <p className="m-0 font-semibold">Prêmio reservado: {t.name}</p>
+            <p className="m-0 text-sm text-fg-muted tabular-nums">
+              {t.cost_points} pontos · válido até {when.format(new Date(reservation.expires_at))}
+            </p>
+          </div>
+        </div>
+        <Badge tone="success">Reservado</Badge>
+      </div>
+      <p className="m-0 text-sm">Mostre esta tela na loja para receber. {t.usage_instructions}</p>
       <CommandError problem={cmd.problem} offline={cmd.offline} />
-      <button
-        type="button"
-        className="button button--secondary"
+      <Button
+        variant="secondary"
+        className="justify-self-start"
         disabled={cmd.busy !== null}
         onClick={() => void cancel()}
       >
         Cancelar reserva (os pontos voltam)
-      </button>
-    </div>
+      </Button>
+    </Card>
   );
 }
 
@@ -192,14 +226,13 @@ function Catalogo({
   }
   if (rewards.length === 0) return null;
   return (
-    <>
-      <h4>Prêmios</h4>
-      <p className="muted">
-        Prêmio é uma cortesia separada: não dá desconto na comanda nem prioridade na fila. A reserva vale 24
-        horas.
-      </p>
+    <Section
+      title="Prêmios"
+      level={3}
+      description="Prêmio é uma cortesia separada: não dá desconto na comanda nem prioridade na fila. A reserva vale 24 horas."
+    >
       <CommandError problem={cmd.problem} offline={cmd.offline} />
-      <ul className="cards">
+      <ul className="m-0 grid list-none gap-3 p-0 sm:grid-cols-2">
         {rewards.map((r) => {
           const out = r.stock.kind === "limited" && (r.stock.units_available ?? 0) === 0;
           const blocked =
@@ -208,32 +241,35 @@ function Catalogo({
             summary.available < r.cost_points ||
             out;
           return (
-            <li key={r.id} className="card">
-              <h5>
-                {r.name} — {r.cost_points} pontos
-              </h5>
-              <p>{r.description}</p>
-              <p className="muted">
-                {r.usage_instructions} · {stockText(r)}
-              </p>
-              <button
-                type="button"
-                className="button"
-                disabled={blocked || cmd.busy !== null}
-                onClick={() => void reserve(r)}
-              >
+            <li key={r.id} className="grid gap-3 rounded-xl border border-line bg-surface p-4">
+              <div className="flex items-start gap-3">
+                <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl bg-surface-2 text-fg-muted">
+                  <Gift aria-hidden="true" className="size-5" />
+                </span>
+                <div className="grid min-w-0 gap-0.5">
+                  <h4 className="m-0 font-semibold">{r.name}</h4>
+                  <p className="m-0 text-sm tabular-nums text-fg-muted">
+                    {r.cost_points} pontos · {stockText(r)}
+                  </p>
+                </div>
+              </div>
+              <p className="m-0 text-sm">{r.description}</p>
+              <p className="m-0 text-sm text-fg-muted">{r.usage_instructions}</p>
+              <Button disabled={blocked || cmd.busy !== null} onClick={() => void reserve(r)}>
                 Reservar {r.name}
-              </button>
+              </Button>
               {!out &&
                 summary.program_enabled &&
                 !summary.active_reservation &&
                 summary.available < r.cost_points && (
-                  <p className="muted">Faltam {r.cost_points - summary.available} pontos.</p>
+                  <p className="m-0 text-sm text-fg-muted">
+                    Faltam {r.cost_points - summary.available} pontos.
+                  </p>
                 )}
             </li>
           );
         })}
       </ul>
-    </>
+    </Section>
   );
 }

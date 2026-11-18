@@ -141,7 +141,7 @@ test("implantação com gente na fila: nada se perde, ninguém vê erro e as tel
     await browser.newContext({ viewport: { width: 360, height: 780 }, ignoreHTTPSErrors })
   ).newPage();
   await v.goto(`/loja/${loja.slug}`);
-  await v.getByLabel("Como quer ser chamado").fill("Lia");
+  await v.getByLabel("Apelido").fill("Lia");
   await v.getByRole("button", { name: "Continuar" }).click();
   const form = v.getByRole("form", { name: "Entrar na fila" });
   await form.getByRole("radio", { name: /Beto/ }).check();

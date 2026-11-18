@@ -174,14 +174,17 @@ test("só teclado: pular para o conteúdo, entrar e foco sempre visível", async
   await expect(page.getByRole("link", { name: "Pular para o conteúdo" })).toBeFocused();
   expect(await focoVisivel()).toBe("ok");
   await page.keyboard.press("Enter");
-  // Do conteúdo, Tab leva ao e-mail; tudo é preenchido e enviado sem mouse.
-  await page.getByLabel("E-mail").focus();
+  // Do conteúdo, a ordem é: Cliente/Equipe, e-mail, senha, mostrar senha, Entrar — tudo sem mouse.
+  await page.getByRole("radio", { name: "Cliente" }).focus();
+  expect(await focoVisivel()).toBe("ok");
+  await page.keyboard.press("Tab");
+  await expect(page.getByLabel("E-mail")).toBeFocused();
   await page.keyboard.type(clienteEmail);
   await page.keyboard.press("Tab");
   expect(await focoVisivel()).toBe("ok");
   await page.keyboard.type("senha-e2e-forte-1");
   await page.keyboard.press("Tab");
-  await expect(page.getByRole("radio", { name: "Cliente" })).toBeFocused();
+  await expect(page.getByRole("button", { name: "Mostrar senha" })).toBeFocused();
   expect(await focoVisivel()).toBe("ok");
   await page.keyboard.press("Tab");
   await expect(page.getByRole("button", { name: "Entrar" })).toBeFocused();

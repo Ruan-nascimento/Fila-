@@ -3,7 +3,7 @@ import { MemoryRouter } from "react-router";
 import { describe, expect, it } from "vitest";
 import { SessionProvider } from "../../session/session";
 import { anonymousSession, fakeApi, problem } from "../../test/fake-api";
-import { Conta } from "../Conta";
+import { Conta, ExcluirContaPagina } from "../Conta";
 import { Historico } from "../fila/Historico";
 import { Exclusoes } from "../gestao/Exclusoes";
 import { ConsultarExclusao } from "./Exclusao";
@@ -48,6 +48,17 @@ function renderConta() {
   );
 }
 
+/** A exclusão fica numa área separada (/conta/excluir), aberta pelo link da conta. */
+function renderExcluir() {
+  return render(
+    <MemoryRouter>
+      <SessionProvider>
+        <ExcluirContaPagina />
+      </SessionProvider>
+    </MemoryRouter>,
+  );
+}
+
 describe("Excluir conta", () => {
   it("mostra os efeitos, pede a senha, reautentica antes e exibe o protocolo uma vez", async () => {
     let loggedIn = true;
@@ -65,9 +76,8 @@ describe("Excluir conta", () => {
         return Response.json({ data: request({ blockers: ["service_in_progress"] }) }, { status: 202 });
       },
     });
-    renderConta();
-    fireEvent.click(await screen.findByRole("button", { name: "Quero excluir minha conta…" }));
-    expect(screen.getByText(/Pontos e prêmios, quando existirem, são encerrados/)).toBeInTheDocument();
+    renderExcluir();
+    expect(await screen.findByText(/Pontos e prêmios, quando existirem, são encerrados/)).toBeInTheDocument();
     expect(screen.getByText(/não é prazo legal/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Excluir minha conta" }));
     await new Promise((r) => setTimeout(r, 20));
@@ -100,15 +110,25 @@ describe("Excluir conta", () => {
           "Antes de excluir a conta, peça ao suporte para transferir a administração.",
         ),
     });
-    renderConta();
-    fireEvent.click(await screen.findByRole("button", { name: "Quero excluir minha conta…" }));
-    fireEvent.click(screen.getByLabelText(/Li e entendi os efeitos/));
+    renderExcluir();
+    fireEvent.click(await screen.findByLabelText(/Li e entendi os efeitos/));
     fireEvent.change(screen.getByLabelText("Sua senha (confirmação)"), {
       target: { value: "senha-de-teste" },
     }); // gitleaks:allow
     fireEvent.click(screen.getByRole("button", { name: "Excluir minha conta" }));
     expect(await screen.findByText(/transferir a administração/)).toBeInTheDocument();
     expect(screen.queryByText(/Guarde o protocolo/)).toBeNull();
+  });
+});
+
+describe("Minha conta e exclusão", () => {
+  it("a exclusão não fica entre as edições comuns: a conta só leva à área separada", async () => {
+    fakeApi({ "GET /v1/session": () => Response.json(logged) });
+    renderConta();
+    const link = await screen.findByRole("link", { name: "Excluir conta" });
+    expect(link).toHaveAttribute("href", "/conta/excluir");
+    expect(screen.queryByLabelText(/Li e entendi os efeitos/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Excluir minha conta" })).toBeNull();
   });
 });
 
@@ -190,10 +210,16 @@ describe("Histórico", () => {
       },
     });
     render(<Historico shopId={EST} />);
-    expect(await screen.findByText("Corte")).toBeInTheDocument();
-    expect(screen.getByText(/não cobrado/)).toBeInTheDocument();
+    // Linha escaneável (serviços, situação, valor); os itens abrem sob demanda.
+    const linha = await screen.findByRole("button", { name: /Corte \+ Barba/ });
+    expect(linha).toHaveTextContent(/Concluído/);
+    expect(linha).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText(/não cobrado/)).toBeNull();
+    fireEvent.click(linha);
+    expect(linha).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText(/R\$\s*30,00 \(não cobrado\)/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Carregar mais" }));
-    expect(await screen.findByText("Sobrancelha")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Sobrancelha \+ Barba/ })).toBeInTheDocument();
     expect(requests[0]?.url).toContain(`establishment_id=${EST}`);
     expect(requests[1]?.url).toContain("cursor=c1");
     expect(screen.queryByRole("button", { name: "Carregar mais" })).toBeNull();

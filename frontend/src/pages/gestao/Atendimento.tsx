@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { Check, CircleCheck, Pause, Pencil, X } from "lucide-react";
 import { api } from "../../api/client";
 import { call, problemMessage } from "../../api/problem";
 import type { components } from "../../api/schema.gen";
 import { formatCents } from "../../money";
 import { useStreamMessages } from "../../stream/context";
-import { Field, Notice, Submit } from "../../ui/ui";
+import { Button, Choice, ChoiceGroup, LoadError, Loading, Notice, Submit, TextArea } from "../../ui/ui";
+import { cx } from "../../ui/cx";
+import { useInlinePanel } from "../../ui/useInlinePanel";
 import { ItensDaComanda } from "../comanda/comanda";
 import { describeRequest, liveItems, reportedText, type Order } from "../comanda/textos";
 import { useCommand } from "./comando";
@@ -12,7 +15,7 @@ import { CommandError, type StaffContext } from "./comum";
 
 type Entry = components["schemas"]["StaffQueue"]["entries"][number];
 type Service = components["schemas"]["Service"];
-type Mode = "" | "editar" | "concluir" | "interromper" | "recusar";
+type Mode = "editar" | "concluir" | "interromper" | "recusar";
 
 /**
  * Comanda de quem está na fila, vista pela equipe do atendimento: decidir o pedido do cliente,
@@ -30,7 +33,8 @@ export function Atendimento({
 }) {
   const [order, setOrder] = useState<Order | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<Mode>("");
+  const panel = useInlinePanel<Mode>();
+  const mode = panel.open;
   const cmd = useCommand();
 
   const fetchOrder = useCallback(
@@ -44,8 +48,10 @@ export function Atendimento({
   );
   const reload = useCallback(async () => {
     const out = await fetchOrder();
-    if (out.ok) setOrder(out.data.data);
-    else setError(problemMessage(out.problem, out.offline));
+    if (out.ok) {
+      setOrder(out.data.data);
+      setError(null);
+    } else setError(problemMessage(out.problem, out.offline));
   }, [fetchOrder]);
   useEffect(() => {
     let active = true;
@@ -66,8 +72,8 @@ export function Atendimento({
     setOrder((cur) => (cur && cur.id === next.id && next.version > cur.version ? next : cur));
   });
 
-  if (error) return <Notice kind="erro">{error}</Notice>;
-  if (!order) return <p role="status">Carregando comanda…</p>;
+  if (error && !order) return <LoadError message={error} onRetry={() => void reload()} />;
+  if (!order) return <Loading>Carregando comanda…</Loading>;
   const o = order;
   const inService = entry.status === "in_service";
   const pending = o.pending_change_request;
@@ -102,7 +108,7 @@ export function Atendimento({
           ),
         );
     if (out.ok) {
-      setMode("");
+      panel.hide();
       setOrder(out.data.data);
       await onDone(); // o aviso de pedido pendente some da fila
     } else if (out.problem?.status === 409) await onConflict();
@@ -119,94 +125,95 @@ export function Atendimento({
     else if (out.problem?.status === 409) await onConflict();
   }
 
+  const toMark = liveItems(o).filter((i) => i.status === "accepted");
   return (
-    <div className="card" aria-label={`Comanda de ${entry.nick}`}>
+    <div className="grid gap-4" aria-label={`Comanda de ${entry.nick}`} role="group">
       <ItensDaComanda order={o} />
       <CommandError problem={cmd.problem} offline={cmd.offline} />
       {pending && (
-        <div role="group" aria-label="Pedido do cliente">
-          <p>
-            <strong>Pedido do cliente:</strong> {describeRequest(o, pending)}.
+        <div
+          role="group"
+          aria-label="Pedido do cliente"
+          className="grid gap-3 rounded-xl border border-warning/40 bg-warning-soft p-4"
+        >
+          <p className="m-0 flex items-start gap-2">
+            <Pencil aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning" />
+            <span>
+              <strong>Pedido do cliente:</strong> {describeRequest(o, pending)}.
+            </span>
           </p>
-          {mode !== "recusar" && (
-            <div className="actions">
-              <button
-                type="button"
-                className="button"
-                disabled={cmd.busy !== null}
-                onClick={() => void decidir(true)}
-              >
+          {mode !== "recusar" ? (
+            <div className="flex flex-wrap gap-2">
+              <Button icon={Check} disabled={cmd.busy !== null} onClick={() => void decidir(true)}>
                 Aprovar pedido
-              </button>
-              <button type="button" className="button button--secondary" onClick={() => setMode("recusar")}>
+              </Button>
+              <Button id={panel.triggerId} variant="secondary" icon={X} onClick={() => panel.show("recusar")}>
                 Recusar pedido
-              </button>
+              </Button>
             </div>
-          )}
-          {mode === "recusar" && (
+          ) : (
             <Recusar
+              panelId={panel.panelId}
+              onKeyDown={panel.onKeyDown}
               busy={cmd.busy !== null}
               onSubmit={(r) => void decidir(false, r)}
-              onBack={() => setMode("")}
+              onBack={panel.hide}
             />
           )}
         </div>
       )}
-      {o.status === "open" && inService && (
-        <ul className="order__items" aria-label="Marcar serviços realizados">
-          {liveItems(o)
-            .filter((i) => i.status === "accepted")
-            .map((i) => (
-              <li key={i.id}>
-                <span>{i.name}</span>
-                <button
-                  type="button"
-                  className="button button--secondary"
-                  disabled={cmd.busy !== null}
-                  onClick={() => void marcar(i.id)}
-                >
-                  Marcar {i.name} como realizado
-                </button>
-              </li>
+      {o.status === "open" && inService && toMark.length > 0 && (
+        <div className="grid gap-2" role="group" aria-label="Marcar serviços realizados">
+          <p className="m-0 text-sm font-semibold">Marcar como realizado</p>
+          <div className="flex flex-wrap gap-2">
+            {toMark.map((i) => (
+              <Button
+                key={i.id}
+                variant="secondary"
+                icon={CircleCheck}
+                disabled={cmd.busy !== null}
+                aria-label={`Marcar ${i.name} como realizado`}
+                onClick={() => void marcar(i.id)}
+              >
+                {i.name}
+              </Button>
             ))}
-        </ul>
+          </div>
+        </div>
       )}
       {o.status === "open" && !mode && (
-        <div className="actions">
-          {!pending && (
-            <button type="button" className="button button--secondary" onClick={() => setMode("editar")}>
-              Alterar serviços
-            </button>
-          )}
-          {inService && (
-            <>
-              <button
-                type="button"
-                className="button"
-                disabled={Boolean(pending)}
-                onClick={() => setMode("concluir")}
-              >
+        <div className="grid gap-2">
+          <div className="flex flex-wrap gap-2">
+            {inService && (
+              <Button icon={CircleCheck} disabled={Boolean(pending)} onClick={() => panel.show("concluir")}>
                 Concluir atendimento
-              </button>
-              <button
-                type="button"
-                className="button button--secondary"
-                onClick={() => setMode("interromper")}
-              >
+              </Button>
+            )}
+            {!pending && (
+              <Button variant="secondary" icon={Pencil} onClick={() => panel.show("editar")}>
+                Alterar serviços
+              </Button>
+            )}
+            {inService && (
+              <Button variant="secondary" icon={Pause} onClick={() => panel.show("interromper")}>
                 Interromper
-              </button>
-            </>
+              </Button>
+            )}
+          </div>
+          {pending && inService && (
+            <p className="m-0 text-sm text-fg-muted">Decida o pedido do cliente antes de concluir.</p>
           )}
         </div>
       )}
-      {pending && inService && <p className="muted">Decida o pedido do cliente antes de concluir.</p>}
       {mode === "editar" && (
         <Editar
           ctx={ctx}
           order={o}
-          onBack={() => setMode("")}
+          panelId={panel.panelId}
+          onKeyDown={panel.onKeyDown}
+          onBack={panel.hide}
           onSaved={(n) => {
-            setMode("");
+            panel.hide();
             setOrder(n);
             void onDone();
           }}
@@ -219,9 +226,11 @@ export function Atendimento({
           entry={entry}
           order={o}
           interrupt={mode === "interromper"}
-          onBack={() => setMode("")}
+          panelId={panel.panelId}
+          onKeyDown={panel.onKeyDown}
+          onBack={panel.hide}
           onFinished={() => {
-            setMode("");
+            panel.hide();
             void onDone();
           }}
           onConflict={onConflict}
@@ -231,37 +240,54 @@ export function Atendimento({
   );
 }
 
+type PanelProps = {
+  panelId: string;
+  onKeyDown: (e: React.KeyboardEvent) => void;
+};
+
+const panelForm = "grid gap-4 rounded-xl border border-line bg-surface-2 p-4";
+
 function Recusar({
   busy,
   onSubmit,
   onBack,
+  panelId,
+  onKeyDown,
 }: {
   busy: boolean;
   onSubmit: (reason: string) => void;
   onBack: () => void;
-}) {
+} & PanelProps) {
   const [reason, setReason] = useState("");
+  const [tried, setTried] = useState(false);
   return (
     <form
+      id={panelId}
+      onKeyDown={onKeyDown}
       noValidate
+      aria-label="Recusar pedido"
+      className="grid gap-3"
       onSubmit={(e) => {
         e.preventDefault();
+        setTried(true);
         if (reason.trim().length >= 3) onSubmit(reason);
       }}
     >
-      <Field
+      <TextArea
         label="Motivo da recusa"
         required
         minLength={3}
         maxLength={500}
+        rows={2}
         value={reason}
+        error={tried && reason.trim().length < 3 ? "Escreva o motivo (pelo menos 3 caracteres)." : undefined}
         onChange={(e) => setReason(e.target.value)}
       />
-      <div className="actions">
+      <div className="flex flex-wrap gap-2">
         <Submit busy={busy}>Confirmar recusa</Submit>
-        <button type="button" className="button button--secondary" onClick={onBack}>
+        <Button variant="secondary" onClick={onBack}>
           Voltar
-        </button>
+        </Button>
       </div>
     </form>
   );
@@ -274,17 +300,20 @@ function Editar({
   onBack,
   onSaved,
   onConflict,
+  panelId,
+  onKeyDown,
 }: {
   ctx: StaffContext;
   order: Order;
   onBack: () => void;
   onSaved: (o: Order) => void;
   onConflict: () => Promise<void>;
-}) {
+} & PanelProps) {
   const [services, setServices] = useState<Service[] | null>(null);
   const current = liveItems(order);
   const [chosen, setChosen] = useState(() => current.map((i) => i.service_id));
   const [reason, setReason] = useState("");
+  const [tried, setTried] = useState(false);
   const cmd = useCommand();
   useEffect(() => {
     let active = true;
@@ -303,6 +332,7 @@ function Editar({
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    setTried(true);
     if (reason.trim().length < 3 || chosen.length === 0) return;
     const out = await cmd.run(`editar:${order.id}:${order.version}:${[...chosen].sort().join(",")}`, (key) =>
       api.PUT("/v1/establishments/{establishmentId}/orders/{orderId}/items", {
@@ -317,43 +347,53 @@ function Editar({
     else if (out.problem?.status === 409) await onConflict();
   }
   return (
-    <form onSubmit={onSubmit} noValidate aria-label="Alterar serviços da comanda">
+    <form
+      id={panelId}
+      onKeyDown={onKeyDown}
+      onSubmit={onSubmit}
+      noValidate
+      aria-label="Alterar serviços da comanda"
+      className={panelForm}
+    >
       <CommandError problem={cmd.problem} offline={cmd.offline} />
-      {!services && <p role="status">Carregando serviços…</p>}
-      <fieldset className="choices">
-        <legend>Serviços</legend>
+      {!services && <Loading>Carregando serviços…</Loading>}
+      <ChoiceGroup
+        legend="Serviços"
+        hint="Preço registrado na comanda é mantido; serviço novo entra pelo preço atual."
+      >
         {(services ?? []).map((s) => (
-          <label key={s.id} className="choice">
-            <input
-              type="checkbox"
-              disabled={performed.has(s.id)}
-              checked={chosen.includes(s.id)}
-              onChange={(e) =>
-                setChosen((c) => (e.target.checked ? [...c, s.id] : c.filter((x) => x !== s.id)))
-              }
-            />
-            {s.name} —{" "}
-            {formatCents(
+          <Choice
+            key={s.id}
+            type="checkbox"
+            disabled={performed.has(s.id)}
+            checked={chosen.includes(s.id)}
+            onChange={(e) =>
+              setChosen((c) => (e.target.checked ? [...c, s.id] : c.filter((x) => x !== s.id)))
+            }
+            label={s.name}
+            description={performed.has(s.id) ? "já realizado" : undefined}
+            trailing={formatCents(
               current.find((i) => i.service_id === s.id)?.unit_price.amount_cents ?? s.price.amount_cents,
             )}
-            {performed.has(s.id) && " (já realizado)"}
-          </label>
+          />
         ))}
-      </fieldset>
-      <Field
+      </ChoiceGroup>
+      <TextArea
         label="Motivo"
         required
         minLength={3}
         maxLength={500}
+        rows={2}
         value={reason}
+        error={tried && reason.trim().length < 3 ? "Escreva o motivo (pelo menos 3 caracteres)." : undefined}
         onChange={(e) => setReason(e.target.value)}
         hint="Ex.: cliente pediu na cadeira."
       />
-      <div className="actions">
+      <div className="flex flex-wrap gap-2">
         <Submit busy={cmd.busy !== null}>Salvar serviços</Submit>
-        <button type="button" className="button button--secondary" onClick={onBack}>
+        <Button variant="secondary" onClick={onBack}>
           Voltar
-        </button>
+        </Button>
       </div>
     </form>
   );
@@ -371,6 +411,8 @@ function Encerrar({
   onBack,
   onFinished,
   onConflict,
+  panelId,
+  onKeyDown,
 }: {
   ctx: StaffContext;
   entry: Entry;
@@ -379,17 +421,18 @@ function Encerrar({
   onBack: () => void;
   onFinished: () => void;
   onConflict: () => Promise<void>;
-}) {
+} & PanelProps) {
   const items = liveItems(order);
   const [outcome, setOutcome] = useState<Record<string, string>>({});
   const [why, setWhy] = useState<Record<string, string>>({});
   const [reason, setReason] = useState("");
+  const [tried, setTried] = useState(false);
   const cmd = useCommand();
   const options = interrupt
     ? (["fully_performed", "partially_performed", "not_started"] as const)
     : (["performed", "not_performed"] as const);
   const label = (v: string) =>
-    v === "performed" ? "realizado" : v === "not_performed" ? "não realizado" : reportedText[v];
+    v === "performed" ? "realizado" : v === "not_performed" ? "não realizado" : (reportedText[v] ?? v);
   const complete = items.every((i) => outcome[i.id]);
   const reasonsOk = interrupt
     ? reason.trim().length >= 3
@@ -398,6 +441,7 @@ function Encerrar({
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    setTried(true);
     if (!complete || !reasonsOk) return;
     const list = items.map((i) => {
       const value = outcome[i.id] ?? "";
@@ -437,33 +481,50 @@ function Encerrar({
 
   return (
     <form
+      id={panelId}
+      onKeyDown={onKeyDown}
       onSubmit={onSubmit}
       noValidate
       aria-label={interrupt ? "Interromper atendimento" : "Concluir atendimento"}
+      className={panelForm}
     >
+      <div className="grid gap-1">
+        <p className="m-0 font-semibold" data-autofocus tabIndex={-1}>
+          {interrupt ? "Interromper atendimento" : "Concluir atendimento"}
+        </p>
+        <p className="m-0 text-sm text-fg-muted">
+          {interrupt
+            ? "Use quando o atendimento parou no meio. O dono revisa depois: só serviços feitos por inteiro são cobrados e a interrupção não gera pontos."
+            : "Informe o resultado de cada serviço. A comanda vai para pagamento com o que foi realizado."}
+        </p>
+      </div>
       <CommandError problem={cmd.problem} offline={cmd.offline} />
       {items.map((i) => (
-        <fieldset key={i.id} className="choices">
-          <legend>
-            {i.name} — {formatCents(i.unit_price.amount_cents)}
+        <fieldset key={i.id} className="m-0 grid gap-2 border-0 p-0">
+          <legend className="mb-2 flex w-full justify-between gap-3 p-0 font-semibold">
+            <span>
+              {i.name} — {formatCents(i.unit_price.amount_cents)}
+            </span>
           </legend>
-          {options.map((v) => (
-            <label key={v} className="choice">
-              <input
+          <div className={cx("grid gap-2", options.length === 2 ? "grid-cols-2" : "sm:grid-cols-3")}>
+            {options.map((v) => (
+              <Choice
+                key={v}
                 type="radio"
                 name={`resultado-${i.id}`}
                 checked={outcome[i.id] === v}
                 onChange={() => setOutcome((m) => ({ ...m, [i.id]: v }))}
+                label={label(v)}
               />
-              {label(v)}
-            </label>
-          ))}
+            ))}
+          </div>
           {outcome[i.id] === "not_performed" && (
-            <Field
+            <TextArea
               label={`Por que ${i.name} não foi feito?`}
               required
               minLength={3}
               maxLength={500}
+              rows={2}
               value={why[i.id] ?? ""}
               onChange={(e) => setWhy((m) => ({ ...m, [i.id]: e.target.value }))}
             />
@@ -471,36 +532,35 @@ function Encerrar({
         </fieldset>
       ))}
       {interrupt && (
-        <>
-          <Field
-            label="Motivo da interrupção"
-            required
-            minLength={3}
-            maxLength={500}
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-          />
-          <p className="muted">
-            O dono revisa depois: só serviços feitos por inteiro são cobrados. Interrupção não gera pontos.
-          </p>
-        </>
+        <TextArea
+          label="Motivo da interrupção"
+          required
+          minLength={3}
+          maxLength={500}
+          rows={2}
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+        />
       )}
       {!interrupt && complete && !someDone && (
-        <Notice kind="info">Nenhum serviço realizado: use “Interromper” em vez de concluir.</Notice>
+        <Notice kind="info">
+          <p>Nenhum serviço realizado: use “Interromper” em vez de concluir.</p>
+        </Notice>
       )}
-      <div className="actions">
+      {tried && (!complete || !reasonsOk) && (
+        <p role="alert" className="m-0 text-sm font-semibold text-danger">
+          Escolha o resultado de cada serviço{interrupt ? " e o motivo" : " e explique o que não foi feito"}{" "}
+          para confirmar.
+        </p>
+      )}
+      <div className="flex flex-wrap gap-2">
         <Submit busy={cmd.busy !== null}>
           {interrupt ? "Confirmar interrupção" : "Confirmar conclusão"}
         </Submit>
-        <button type="button" className="button button--secondary" onClick={onBack}>
+        <Button variant="secondary" onClick={onBack}>
           Voltar
-        </button>
+        </Button>
       </div>
-      {(!complete || !reasonsOk) && (
-        <p className="muted">
-          Escolha o resultado de cada serviço{interrupt ? " e o motivo" : ""} para confirmar.
-        </p>
-      )}
     </form>
   );
 }

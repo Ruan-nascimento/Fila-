@@ -138,6 +138,12 @@ describe("Serviços", () => {
     expect(await screen.findByText("Corte")).toBeInTheDocument();
     expect(screen.queryByRole("form", { name: "Novo serviço" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Profissionais" })).toBeNull();
+    // "Mais" (celular) também não oferece destinos do dono ao profissional.
+    fireEvent.click(screen.getByRole("button", { name: "Mais" }));
+    const mais = screen.getByRole("dialog", { name: "Mais" });
+    expect(within(mais).queryByRole("link", { name: "Profissionais" })).toBeNull();
+    expect(within(mais).queryByRole("link", { name: "Auditoria" })).toBeNull();
+    expect(within(mais).getByRole("link", { name: "Serviços" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Editar" })).toBeNull();
   });
 });
@@ -163,9 +169,9 @@ describe("Filas", () => {
       },
     });
     renderGestao(`/gestao/${EST}/filas`);
-    fireEvent.click(await screen.findByRole("button", { name: "Abrir" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir fila" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Outra pessoa alterou");
-    expect(await screen.findByRole("button", { name: "Pausar" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Pausar fila" })).toBeInTheDocument();
     const open = requests.find((r) => r.path.endsWith("/open"));
     expect(open?.body).toEqual({ expected_version: 1 });
   });
@@ -219,7 +225,9 @@ describe("Abas da gestão", () => {
       ["Loja", "loja"],
       ["Filas", "filas"],
     ] as const) {
-      fireEvent.click(await screen.findByRole("link", { name: aba }));
+      // Lateral (computador) e inferior (celular) existem no DOM; o CSS mostra uma por largura.
+      const [link] = await screen.findAllByRole("link", { name: aba });
+      fireEvent.click(link!);
       await waitFor(() => expect(endereco()).toBe(`/gestao/${EST}/${caminho}`));
     }
   });

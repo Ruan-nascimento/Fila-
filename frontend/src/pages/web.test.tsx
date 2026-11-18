@@ -109,10 +109,14 @@ describe("Auditoria", () => {
           : Response.json({ data: [ev("e1", "T-IN-03")], page: { next_cursor: "cur1", has_more: true } }),
     });
     render(<Auditoria ctx={{ estId: EST, estName: "Loja", isOwner: true, professionalId: null }} />);
-    expect(await screen.findByText("T-IN-03")).toBeInTheDocument();
-    expect(screen.getByText(/convite · Dono/)).toBeInTheDocument();
+    // Frase legível + código da matriz de transições; ator só pelo tipo; alvo traduzido.
+    expect(await screen.findByText("Cancelou convite")).toBeInTheDocument();
+    expect(screen.getByText(/^T-IN-03 · pending → revoked$/)).toBeInTheDocument();
+    expect(screen.getByText("(convite)")).toBeInTheDocument();
+    expect(screen.getByText("Dono")).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/maria@|Maria/);
     fireEvent.click(screen.getByRole("button", { name: "Carregar mais" }));
-    expect(await screen.findByText("T-IN-01")).toBeInTheDocument();
+    expect(await screen.findByText("Enviou convite")).toBeInTheDocument();
     expect(requests.at(-1)?.url).toContain("cursor=cur1");
     expect(screen.queryByRole("button", { name: "Carregar mais" })).toBeNull();
   });

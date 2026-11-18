@@ -1,8 +1,22 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { Check, Gift, Pencil, Plus, Power } from "lucide-react";
 import { api } from "../../api/client";
 import { call, problemMessage } from "../../api/problem";
 import { useStreamMessages } from "../../stream/context";
-import { Field, Notice, Submit } from "../../ui/ui";
+import {
+  Badge,
+  Button,
+  Choice,
+  EmptyState,
+  Field,
+  LoadError,
+  PageHeader,
+  Section,
+  Segmented,
+  Submit,
+  TextArea,
+} from "../../ui/ui";
+import { useInlinePanel } from "../../ui/useInlinePanel";
 import {
   reservationStatusText,
   stockText,
@@ -22,10 +36,18 @@ type Filter = "active" | "delivered" | "";
  */
 export function Premios({ ctx }: { ctx: StaffContext }) {
   return (
-    <div>
+    <div className="grid gap-8">
+      <PageHeader
+        title="Prêmios"
+        description="Reservas para entregar no balcão. Prêmio é cortesia: não muda a comanda nem a fila."
+      />
       <Reservas ctx={ctx} />
-      {ctx.isOwner && <Programa ctx={ctx} />}
-      {ctx.isOwner && <Catalogo ctx={ctx} />}
+      {ctx.isOwner && (
+        <div className="grid gap-8 border-t border-line pt-6">
+          <Programa ctx={ctx} />
+          <Catalogo ctx={ctx} />
+        </div>
+      )}
     </div>
   );
 }
@@ -48,8 +70,10 @@ function Reservas({ ctx }: { ctx: StaffContext }) {
   );
   const reload = useCallback(async () => {
     const out = await fetchList();
-    if (out.ok) setList(out.data.data);
-    else setError(problemMessage(out.problem, out.offline));
+    if (out.ok) {
+      setList(out.data.data);
+      setError(null);
+    } else setError(problemMessage(out.problem, out.offline));
   }, [fetchList]);
   useEffect(() => {
     let active = true;
@@ -73,33 +97,49 @@ function Reservas({ ctx }: { ctx: StaffContext }) {
     );
 
   return (
-    <section aria-labelledby="titulo-reservas">
-      <h3 id="titulo-reservas">Reservas de prêmio</h3>
-      <label htmlFor="filtro-reservas">Mostrar</label>{" "}
-      <select
-        id="filtro-reservas"
-        className="select"
-        value={filter}
-        onChange={(e) => setFilter(e.target.value as Filter)}
-      >
-        <option value="active">Para entregar</option>
-        <option value="delivered">Entregues</option>
-        <option value="">Todas</option>
-      </select>
-      {error && <Notice kind="erro">{error}</Notice>}
-      {list?.length === 0 && <p>Nenhuma reserva aqui.</p>}
-      <ul className="cards">
+    <Section title="Reservas de prêmio">
+      <div className="max-w-md">
+        <Segmented
+          legend="Mostrar"
+          name="filtro-reservas"
+          value={filter}
+          onChange={setFilter}
+          options={[
+            { value: "active", label: "Para entregar" },
+            { value: "delivered", label: "Entregues" },
+            { value: "", label: "Todas" },
+          ]}
+        />
+      </div>
+      {error && <LoadError message={error} onRetry={() => void reload()} />}
+      {list?.length === 0 && (
+        <EmptyState icon={Gift} title="Nenhuma reserva aqui">
+          <p>{filter === "active" ? "Nenhum prêmio esperando entrega." : "Nada nesta lista."}</p>
+        </EmptyState>
+      )}
+      <ul className="m-0 grid list-none gap-3 p-0 md:grid-cols-2">
         {(list ?? []).map((r) => (
-          <li key={r.id} className="card">
-            <h4>
-              {r.accepted_terms.name} — {r.holder_display_name ?? "Cliente"}
-            </h4>
-            <p className="muted">
-              {reservationStatusText[r.status]} · {r.accepted_terms.cost_points} pontos · reservado em{" "}
-              {when.format(new Date(r.created_at))}
-              {r.status === "active" && <> · vence em {when.format(new Date(r.expires_at))}</>}
-            </p>
-            <p>{r.accepted_terms.usage_instructions}</p>
+          <li key={r.id} className="grid gap-3 rounded-xl border border-line bg-surface p-4">
+            <div className="flex items-start gap-3">
+              <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl bg-surface-2 text-fg-muted">
+                <Gift aria-hidden="true" className="size-5" />
+              </span>
+              <div className="grid min-w-0 flex-1 gap-0.5">
+                <h3 className="m-0 text-base font-semibold">
+                  {r.accepted_terms.name} — {r.holder_display_name ?? "Cliente"}
+                </h3>
+                <p className="m-0 text-sm text-fg-muted tabular-nums">
+                  {r.accepted_terms.cost_points} pontos · reservado em {when.format(new Date(r.created_at))}
+                  {r.status === "active" && <> · vence em {when.format(new Date(r.expires_at))}</>}
+                </p>
+              </div>
+              <Badge
+                tone={r.status === "active" ? "primary" : r.status === "delivered" ? "success" : "neutral"}
+              >
+                {reservationStatusText[r.status]}
+              </Badge>
+            </div>
+            <p className="m-0 text-sm">{r.accepted_terms.usage_instructions}</p>
             {r.status === "active" && (
               <Entregar ctx={ctx} reservation={r} onSaved={replace} onConflict={reload} />
             )}
@@ -109,7 +149,7 @@ function Reservas({ ctx }: { ctx: StaffContext }) {
           </li>
         ))}
       </ul>
-    </section>
+    </Section>
   );
 }
 
@@ -141,9 +181,9 @@ function Entregar({
   return (
     <>
       <CommandError problem={cmd.problem} offline={cmd.offline} />
-      <button type="button" className="button" disabled={cmd.busy !== null} onClick={() => void deliver()}>
+      <Button icon={Check} disabled={cmd.busy !== null} onClick={() => void deliver()}>
         Confirmar entrega de {reservation.accepted_terms.name}
-      </button>
+      </Button>
     </>
   );
 }
@@ -159,11 +199,13 @@ function Corrigir({
   onSaved: (r: Reservation) => void;
   onConflict: () => Promise<void>;
 }) {
-  const [open, setOpen] = useState(false);
+  const panel = useInlinePanel();
   const [reason, setReason] = useState("");
+  const [tried, setTried] = useState(false);
   const cmd = useCommand();
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    setTried(true);
     if (reason.trim().length < 3) return;
     const out = await cmd.run(`corrigir-entrega:${reservation.id}:${reservation.version}`, (key) =>
       api.POST("/v1/establishments/{establishmentId}/reward-reservations/{reservationId}/revert-delivery", {
@@ -177,25 +219,44 @@ function Corrigir({
     if (out.ok) onSaved(out.data.data);
     else if (out.problem?.status === 409) await onConflict();
   }
-  if (!open)
+  if (!panel.open)
     return (
-      <button type="button" className="button button--secondary" onClick={() => setOpen(true)}>
+      <Button
+        id={panel.triggerId}
+        variant="secondary"
+        className="justify-self-start"
+        onClick={() => panel.show("aberto")}
+      >
         Corrigir entrega
-      </button>
+      </Button>
     );
   return (
-    <form noValidate aria-label="Corrigir entrega" onSubmit={onSubmit}>
+    <form
+      id={panel.panelId}
+      onKeyDown={panel.onKeyDown}
+      noValidate
+      aria-label="Corrigir entrega"
+      onSubmit={onSubmit}
+      className="grid gap-3 rounded-xl border border-line bg-surface-2 p-4"
+    >
       <CommandError problem={cmd.problem} offline={cmd.offline} />
-      <Field
+      <TextArea
         label="Motivo da correção"
         hint="Os pontos e a unidade voltam para o cliente."
         required
         minLength={3}
         maxLength={500}
+        rows={2}
         value={reason}
+        error={tried && reason.trim().length < 3 ? "Escreva o motivo (pelo menos 3 caracteres)." : undefined}
         onChange={(e) => setReason(e.target.value)}
       />
-      <Submit busy={cmd.busy !== null}>Desfazer entrega</Submit>
+      <div className="flex flex-wrap gap-2">
+        <Submit busy={cmd.busy !== null}>Desfazer entrega</Submit>
+        <Button variant="secondary" onClick={panel.hide}>
+          Voltar
+        </Button>
+      </div>
     </form>
   );
 }
@@ -228,19 +289,29 @@ function Programa({ ctx }: { ctx: StaffContext }) {
     if (out.ok) setProgram(out.data.data);
   }
   return (
-    <section aria-labelledby="titulo-programa" className="card">
-      <h3 id="titulo-programa">Programa de pontos</h3>
-      <p role="status">
-        Situação: <strong>{current.enabled ? "ligado" : "desligado"}</strong>.
-      </p>
-      <p className="muted">
+    <section aria-labelledby="titulo-programa" className="grid max-w-2xl gap-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 id="titulo-programa" className="m-0 text-lg font-semibold">
+          Programa de pontos
+        </h2>
+        <Badge tone={current.enabled ? "success" : "neutral"} dot>
+          <span role="status">{current.enabled ? "Ligado" : "Desligado"}</span>
+        </Badge>
+      </div>
+      <p className="m-0 text-sm text-fg-muted">
         Vale para novas visitas e novas reservas. Desligar não apaga saldos, não retira pontos já prometidos e
-        mantém as reservas feitas. Os pontos de cada serviço são definidos na aba Serviços.
+        mantém as reservas feitas. Os pontos de cada serviço ficam em Serviços.
       </p>
       <CommandError problem={cmd.problem} offline={cmd.offline} />
-      <button type="button" className="button" disabled={cmd.busy !== null} onClick={() => void toggle()}>
+      <Button
+        variant={current.enabled ? "secondary" : "primary"}
+        icon={Power}
+        className="justify-self-start"
+        disabled={cmd.busy !== null}
+        onClick={() => void toggle()}
+      >
         {current.enabled ? "Desligar programa" : "Ligar programa"}
-      </button>
+      </Button>
     </section>
   );
 }
@@ -270,9 +341,17 @@ function Catalogo({ ctx }: { ctx: StaffContext }) {
     };
   }, [ctx.estId]);
   return (
-    <section aria-labelledby="titulo-premios">
-      <h3 id="titulo-premios">Prêmios cadastrados</h3>
-      {editing ? (
+    <Section
+      title="Prêmios cadastrados"
+      action={
+        !editing && (
+          <Button icon={Plus} onClick={() => setEditing("new")}>
+            Novo prêmio
+          </Button>
+        )
+      }
+    >
+      {editing && (
         <PremioForm
           ctx={ctx}
           reward={editing === "new" ? null : editing}
@@ -281,33 +360,39 @@ function Catalogo({ ctx }: { ctx: StaffContext }) {
             await reload();
           }}
         />
-      ) : (
-        <button type="button" className="button" onClick={() => setEditing("new")}>
-          Novo prêmio
-        </button>
       )}
-      <ul className="cards">
-        {list.map((r) => (
-          <li key={r.id} className="card">
-            <h4>
-              {r.name} — {r.cost_points} pontos {r.status === "inactive" && "(inativo)"}
-            </h4>
-            <p>{r.description}</p>
-            <p className="muted">
-              {r.usage_instructions} · {stockText(r)}
-            </p>
-            {r.status === "active" && (
-              <div className="actions">
-                <button type="button" className="button button--secondary" onClick={() => setEditing(r)}>
-                  Editar {r.name}
-                </button>
-                <Inativar ctx={ctx} reward={r} onDone={reload} />
+      {list.length === 0 && !editing && (
+        <EmptyState icon={Gift} title="Nenhum prêmio cadastrado">
+          <p>Cadastre cortesias que os clientes podem reservar com pontos.</p>
+        </EmptyState>
+      )}
+      {list.length > 0 && (
+        <ul className="m-0 grid list-none divide-y divide-line rounded-xl border border-line bg-surface p-0">
+          {list.map((r) => (
+            <li key={r.id} className="grid gap-2 px-4 py-3">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="grid min-w-0 gap-0.5">
+                  <h3 className="m-0 text-base font-semibold">
+                    {r.name} — {r.cost_points} pontos {r.status === "inactive" && "(inativo)"}
+                  </h3>
+                  <p className="m-0 text-sm text-fg-muted">{r.description}</p>
+                </div>
+                <Badge tone={r.status === "active" ? "neutral" : "neutral"}>Estoque: {stockText(r)}</Badge>
               </div>
-            )}
-          </li>
-        ))}
-      </ul>
-    </section>
+              <p className="m-0 text-sm text-fg-muted">{r.usage_instructions}</p>
+              {r.status === "active" && (
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="secondary" icon={Pencil} onClick={() => setEditing(r)}>
+                    Editar {r.name}
+                  </Button>
+                  <Inativar ctx={ctx} reward={r} onDone={reload} />
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Section>
   );
 }
 
@@ -336,14 +421,9 @@ function Inativar({
   return (
     <>
       <CommandError problem={cmd.problem} offline={cmd.offline} />
-      <button
-        type="button"
-        className="button button--secondary"
-        disabled={cmd.busy !== null}
-        onClick={() => void deactivate()}
-      >
+      <Button variant="ghost" disabled={cmd.busy !== null} onClick={() => void deactivate()}>
         Inativar {reward.name}
-      </button>
+      </Button>
     </>
   );
 }
@@ -365,6 +445,7 @@ function PremioForm({
   const [cost, setCost] = useState(reward ? String(reward.cost_points) : "");
   const [limited, setLimited] = useState(reward?.stock.kind === "limited");
   const [units, setUnits] = useState(String(reward?.stock.units_available ?? 0));
+  const [tried, setTried] = useState(false);
   const cmd = useCommand();
   const errors: Record<string, string> = {};
   if (!/^\d+$/.test(cost) || Number(cost) < 1) errors.cost = "Use um número inteiro de pontos (1 ou mais).";
@@ -373,6 +454,7 @@ function PremioForm({
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    setTried(true);
     if (!ready) return;
     const stock = limited
       ? { kind: "limited" as const, units_available: Number(units) }
@@ -396,41 +478,60 @@ function PremioForm({
         );
     if (out.ok) await onDone();
   }
+  const required = (v: string) => (tried && !v.trim() ? "Preencha este campo." : undefined);
   return (
     <form
       noValidate
       aria-label={reward ? `Editar ${reward.name}` : "Novo prêmio"}
       onSubmit={onSubmit}
-      className="card"
+      className="grid max-w-2xl gap-4 rounded-xl border border-line bg-surface p-4 sm:p-5"
     >
+      <h3 className="m-0 text-base font-semibold">{reward ? `Editar ${reward.name}` : "Novo prêmio"}</h3>
       <CommandError problem={cmd.problem} offline={cmd.offline} />
-      <Field label="Nome" required maxLength={60} value={name} onChange={(e) => setName(e.target.value)} />
       <Field
+        label="Nome"
+        required
+        maxLength={60}
+        value={name}
+        error={required(name)}
+        onChange={(e) => setName(e.target.value)}
+      />
+      <TextArea
         label="Descrição"
         required
         maxLength={500}
+        rows={2}
         value={description}
+        error={required(description)}
         onChange={(e) => setDescription(e.target.value)}
       />
-      <Field
+      <TextArea
         label="Instruções de uso"
         required
         maxLength={500}
+        rows={2}
         value={instructions}
+        error={required(instructions)}
         onChange={(e) => setInstructions(e.target.value)}
       />
-      <Field
-        label="Custo em pontos"
-        inputMode="numeric"
-        required
-        value={cost}
-        error={cost ? errors.cost : undefined}
-        onChange={(e) => setCost(e.target.value)}
-      />
-      <label className="choice">
-        <input type="checkbox" checked={limited} onChange={(e) => setLimited(e.target.checked)} />
-        Quantidade limitada
-      </label>
+      <div className="grid gap-4 sm:grid-cols-2 sm:items-start">
+        <Field
+          label="Custo em pontos"
+          inputMode="numeric"
+          required
+          value={cost}
+          error={cost || tried ? errors.cost : undefined}
+          onChange={(e) => setCost(e.target.value)}
+        />
+        <div className="sm:pt-7">
+          <Choice
+            type="checkbox"
+            checked={limited}
+            onChange={(e) => setLimited(e.target.checked)}
+            label="Quantidade limitada"
+          />
+        </div>
+      </div>
       {limited && (
         <Field
           label="Unidades disponíveis"
@@ -441,12 +542,12 @@ function PremioForm({
           hint="Reservas ativas já descontaram as suas unidades."
         />
       )}
-      {reward && <p className="muted">Quem já reservou mantém as condições aceitas.</p>}
-      <div className="actions">
+      {reward && <p className="m-0 text-sm text-fg-muted">Quem já reservou mantém as condições aceitas.</p>}
+      <div className="flex flex-wrap gap-2">
         <Submit busy={cmd.busy !== null}>{reward ? "Salvar prêmio" : "Criar prêmio"}</Submit>
-        <button type="button" className="button button--secondary" onClick={() => void onDone()}>
+        <Button variant="secondary" onClick={() => void onDone()}>
           Voltar
-        </button>
+        </Button>
       </div>
     </form>
   );

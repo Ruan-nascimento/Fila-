@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router";
+import { Mail } from "lucide-react";
 import { api } from "../api/client";
 import { call, problemMessage, type Problem } from "../api/problem";
 import { takeFragmentToken } from "../ui/fragment";
-import { Field, Notice, Submit } from "../ui/ui";
+import { ButtonLink, Field, Loading, Notice, PageHeader, PasswordField, Submit } from "../ui/ui";
 import { useForm } from "../ui/useForm";
 
 /** Lê o token do link uma única vez (e apaga da barra de endereço). */
@@ -12,10 +13,35 @@ function useLinkToken(): string | null {
   return token;
 }
 
-function MissingToken() {
+function MissingToken({ again }: { again: { to: string; label: string } }) {
+  return (
+    <Notice kind="erro" title="Link incompleto.">
+      <p>Abra o link exatamente como chegou no e-mail.</p>
+      <p>
+        <Link to={again.to}>{again.label}</Link>
+      </p>
+    </Notice>
+  );
+}
+
+/** Erro de link usado, vencido ou inválido: sempre com uma saída. */
+function LinkError({
+  problem,
+  offline,
+  again,
+}: {
+  problem: Problem | null;
+  offline: boolean;
+  again: { to: string; label: string };
+}) {
+  const message = problemMessage(problem, offline);
+  if (problem?.errors?.length) return null;
   return (
     <Notice kind="erro">
-      <p>Link incompleto. Abra o link exatamente como chegou no e-mail.</p>
+      <p>{message}</p>
+      <p>
+        <Link to={again.to}>{again.label}</Link>
+      </p>
     </Notice>
   );
 }
@@ -42,27 +68,20 @@ export function VerificarEmail() {
     });
   }, [token]);
 
+  const again = { to: "/reenviar-verificacao", label: "Pedir um novo link" };
   return (
-    <section aria-labelledby="titulo-verificar">
-      <h2 id="titulo-verificar">Confirmação de e-mail</h2>
-      {!token && <MissingToken />}
-      {token && state === "enviando" && <p role="status">Confirmando…</p>}
+    <section aria-labelledby="titulo-verificar" className="grid gap-5">
+      <PageHeader id="titulo-verificar" title="Confirmação de e-mail" />
+      {!token && <MissingToken again={again} />}
+      {token && state === "enviando" && <Loading>Confirmando…</Loading>}
       {state === "ok" && (
-        <Notice kind="ok">
-          <p>E-mail confirmado! Sua conta está ativa.</p>
-          <p>
-            <Link to="/entrar">Entrar</Link>
+        <Notice kind="ok" title="E-mail confirmado! Sua conta está ativa.">
+          <p className="mt-2">
+            <ButtonLink to="/entrar">Entrar</ButtonLink>
           </p>
         </Notice>
       )}
-      {state === "erro" && (
-        <Notice kind="erro">
-          <p>{problemMessage(problem, offline)}</p>
-          <p>
-            <Link to="/reenviar-verificacao">Pedir um novo link</Link>
-          </p>
-        </Notice>
-      )}
+      {state === "erro" && <LinkError problem={problem} offline={offline} again={again} />}
     </section>
   );
 }
@@ -86,23 +105,33 @@ export function RedefinirSenha() {
   }
 
   return (
-    <section aria-labelledby="titulo-redefinir">
-      <h2 id="titulo-redefinir">Criar senha nova</h2>
-      {!token && <MissingToken />}
-      {form.generalError}
+    <section aria-labelledby="titulo-redefinir" className="grid gap-5">
+      <PageHeader
+        id="titulo-redefinir"
+        title="Criar senha nova"
+        description="Defina uma nova senha para acessar sua conta no Fila."
+      />
+      {!token && <MissingToken again={{ to: "/esqueci-senha", label: "Pedir um novo link" }} />}
+      {form.generalError && (
+        <div className="grid gap-2">
+          {form.generalError}
+          <p className="m-0 text-sm">
+            <Link to="/esqueci-senha">Pedir um novo link</Link>
+          </p>
+        </div>
+      )}
       {done ? (
-        <Notice kind="ok">
-          <p>Senha alterada. Por segurança, todas as sessões abertas da conta foram encerradas.</p>
-          <p>
-            <Link to="/entrar">Entrar com a senha nova</Link>
+        <Notice kind="ok" title="Senha alterada.">
+          <p>Por segurança, todas as sessões abertas da conta foram encerradas.</p>
+          <p className="mt-2">
+            <ButtonLink to="/entrar">Entrar com a senha nova</ButtonLink>
           </p>
         </Notice>
       ) : (
         token && (
-          <form onSubmit={onSubmit} noValidate>
-            <Field
+          <form onSubmit={onSubmit} noValidate className="grid gap-4">
+            <PasswordField
               label="Senha nova"
-              type="password"
               autoComplete="new-password"
               required
               minLength={10}
@@ -112,7 +141,9 @@ export function RedefinirSenha() {
               error={form.errors.new_password}
               onChange={(e) => setPassword(e.target.value)}
             />
-            <Submit busy={form.busy}>Salvar senha</Submit>
+            <Submit busy={form.busy} block>
+              Salvar senha
+            </Submit>
           </form>
         )
       )}
@@ -139,23 +170,38 @@ export function AceitarConvite() {
   }
 
   return (
-    <section aria-labelledby="titulo-convite">
-      <h2 id="titulo-convite">Aceitar convite da equipe</h2>
-      {!token && <MissingToken />}
-      {form.generalError}
+    <section aria-labelledby="titulo-convite" className="grid gap-5">
+      <span className="inline-flex size-12 items-center justify-center rounded-xl bg-select text-accent">
+        <Mail aria-hidden="true" className="size-6" />
+      </span>
+      <PageHeader
+        id="titulo-convite"
+        title="Aceitar convite da equipe"
+        description="Você foi convidado para a equipe de uma barbearia. Confirme seus dados e a senha para acessar."
+      />
+      {!token && <MissingToken again={{ to: "/", label: "Peça ao dono da loja um convite novo" }} />}
+      {form.generalError && (
+        <div className="grid gap-2">
+          {form.generalError}
+          <p className="m-0 text-sm text-fg-muted">
+            Convite usado, cancelado ou vencido? Peça ao dono da loja para enviar outro.
+          </p>
+        </div>
+      )}
       {done ? (
-        <Notice kind="ok">
-          <p>Acesso ativado. Para trabalhar na barbearia, entre escolhendo “Equipe da barbearia”.</p>
-          <p>
-            <Link to="/entrar">Entrar</Link>
+        <Notice kind="ok" title="Acesso ativado.">
+          <p>Para trabalhar na barbearia, entre escolhendo “Equipe da barbearia”.</p>
+          <p className="mt-2">
+            <ButtonLink to="/entrar?como=equipe">Entrar</ButtonLink>
           </p>
         </Notice>
       ) : (
         token && (
-          <form onSubmit={onSubmit} noValidate>
-            <p>
-              Se você <strong>já tem conta</strong> com o e-mail que recebeu o convite, deixe o nome em branco
-              e digite a senha dessa conta. Se <strong>não tem</strong>, informe seu nome e crie uma senha.
+          <form onSubmit={onSubmit} noValidate className="grid gap-4">
+            <p className="m-0 text-sm text-fg-muted">
+              Se você <strong className="text-fg">já tem conta</strong> com o e-mail que recebeu o convite,
+              deixe o nome em branco e digite a senha dessa conta. Se{" "}
+              <strong className="text-fg">não tem</strong>, informe seu nome e crie uma senha.
             </p>
             <Field
               label="Nome (só para conta nova)"
@@ -165,9 +211,8 @@ export function AceitarConvite() {
               error={form.errors.name}
               onChange={(e) => setName(e.target.value)}
             />
-            <Field
+            <PasswordField
               label="Senha"
-              type="password"
               autoComplete="current-password"
               required
               maxLength={128}
@@ -176,7 +221,9 @@ export function AceitarConvite() {
               error={form.errors.password}
               onChange={(e) => setPassword(e.target.value)}
             />
-            <Submit busy={form.busy}>Aceitar convite</Submit>
+            <Submit busy={form.busy} block>
+              Aceitar convite
+            </Submit>
           </form>
         )
       )}

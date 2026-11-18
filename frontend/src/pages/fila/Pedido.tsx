@@ -1,9 +1,11 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { Pencil } from "lucide-react";
 import { api } from "../../api/client";
 import { call } from "../../api/problem";
 import type { components } from "../../api/schema.gen";
 import { formatCents } from "../../money";
-import { Notice, Submit } from "../../ui/ui";
+import { Button, Choice, ChoiceGroup, Loading, Notice, Submit } from "../../ui/ui";
+import { useInlinePanel } from "../../ui/useInlinePanel";
 import { describeRequest, liveItems, type Order } from "../comanda/textos";
 import { useCommand } from "../gestao/comando";
 import { CommandError } from "../gestao/comum";
@@ -50,7 +52,8 @@ export function Pedido({
 }) {
   const p = visit.participation;
   const o = visit.order;
-  const [open, setOpen] = useState(false);
+  const panel = useInlinePanel();
+  const open = panel.open !== null;
   const direct = p.status === "waiting";
   const services = useServicesFor(shopId, p.professional_id, open);
   const cmd = useCommand();
@@ -65,6 +68,7 @@ export function Pedido({
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (direct ? chosen.length === 0 : add.length === 0 && remove.length === 0) return;
     const out = direct
       ? await cmd.run(`itens:${o.id}:${o.version}:${[...chosen].sort().join(",")}`, (key) =>
           api.PUT("/v1/establishments/{establishmentId}/orders/{orderId}/items", {
@@ -79,7 +83,7 @@ export function Pedido({
           }),
         );
     if (out.ok) {
-      setOpen(false);
+      panel.hide();
       setAdd([]);
       setRemove([]);
       onOrder(out.data.data);
@@ -95,106 +99,129 @@ export function Pedido({
       const accepted = current.find((i) => i.service_id === s.id);
       return sum + (accepted ? accepted.unit_price.amount_cents : s.price.amount_cents);
     }, 0);
+  const label = direct ? "Alterar serviços" : "Pedir alteração";
 
   return (
-    <div>
+    <div className="grid gap-3">
       {pending && (
-        <Notice kind="info">
-          Pedido enviado: {describeRequest(o, pending)}. Aguardando o profissional. O total continua{" "}
-          {formatCents(o.total.amount_cents)} até a decisão.
+        <Notice kind="info" title="Pedido de alteração enviado">
+          <p>
+            {describeRequest(o, pending)}. Aguardando o profissional. O total continua{" "}
+            {formatCents(o.total.amount_cents)} até a decisão.
+          </p>
         </Notice>
       )}
       {!pending && decided?.status === "rejected" && (
-        <Notice kind="info">Seu último pedido de alteração foi recusado: {decided.decision_reason}</Notice>
+        <Notice kind="info">
+          <p>Seu último pedido de alteração foi recusado: {decided.decision_reason}</p>
+        </Notice>
       )}
       {!pending && decided?.status === "approved" && (
-        <Notice kind="ok">Seu último pedido de alteração foi aprovado.</Notice>
+        <Notice kind="ok">
+          <p>Seu último pedido de alteração foi aprovado.</p>
+        </Notice>
       )}
       {!pending && !open && (
-        <button
-          type="button"
-          className="button button--secondary"
+        <Button
+          id={panel.triggerId}
+          variant="secondary"
+          icon={Pencil}
           onClick={() => {
             setChosen(current.map((i) => i.service_id));
-            setOpen(true);
+            panel.show("aberto");
           }}
         >
           {direct ? "Alterar serviços" : "Pedir alteração ao profissional"}
-        </button>
+        </Button>
       )}
       {open && (
         <form
+          id={panel.panelId}
+          tabIndex={-1}
+          onKeyDown={panel.onKeyDown}
           onSubmit={onSubmit}
           noValidate
-          className="card"
-          aria-label={direct ? "Alterar serviços" : "Pedir alteração"}
+          className="grid gap-4 rounded-xl border border-line bg-surface-2 p-4"
+          aria-label={label}
         >
+          <p className="m-0 font-semibold" data-autofocus tabIndex={-1}>
+            {label}
+          </p>
+          {!direct && (
+            <p className="m-0 text-sm text-fg-muted">
+              O profissional aprova ou recusa. Até lá, o total da comanda não muda.
+            </p>
+          )}
           <CommandError problem={cmd.problem} offline={cmd.offline} />
-          {!services && <p role="status">Carregando serviços…</p>}
+          {!services && <Loading>Carregando serviços…</Loading>}
           {services && direct && (
-            <fieldset className="choices">
-              <legend>Serviços</legend>
+            <ChoiceGroup legend="Serviços">
               {services.map((s) => (
-                <label key={s.id} className="choice">
-                  <input
-                    type="checkbox"
-                    checked={chosen.includes(s.id)}
-                    onChange={(e) => setChosen((c) => toggle(c, s.id, e.target.checked))}
-                  />
-                  {s.name} —{" "}
-                  {formatCents(
+                <Choice
+                  key={s.id}
+                  type="checkbox"
+                  checked={chosen.includes(s.id)}
+                  onChange={(e) => setChosen((c) => toggle(c, s.id, e.target.checked))}
+                  label={s.name}
+                  trailing={formatCents(
                     current.find((i) => i.service_id === s.id)?.unit_price.amount_cents ??
                       s.price.amount_cents,
                   )}
-                </label>
+                />
               ))}
-              {chosen.length > 0 && (
-                <p>Novo total previsto: {formatCents(preview)} (confirmado pelo servidor).</p>
+              {chosen.length > 0 ? (
+                <p className="m-0 text-sm">
+                  Novo total previsto: {formatCents(preview)} (confirmado pelo servidor).
+                </p>
+              ) : (
+                <p className="m-0 text-sm text-danger">Escolha pelo menos um serviço.</p>
               )}
-            </fieldset>
+            </ChoiceGroup>
           )}
           {services && !direct && (
             <>
-              <fieldset className="choices">
-                <legend>Incluir</legend>
+              <ChoiceGroup legend="Incluir">
                 {services
                   .filter((s) => !inOrder.has(s.id))
                   .map((s) => (
-                    <label key={s.id} className="choice">
-                      <input
-                        type="checkbox"
-                        checked={add.includes(s.id)}
-                        onChange={(e) => setAdd((c) => toggle(c, s.id, e.target.checked))}
-                      />
-                      {s.name} — {formatCents(s.price.amount_cents)}
-                    </label>
+                    <Choice
+                      key={s.id}
+                      type="checkbox"
+                      checked={add.includes(s.id)}
+                      onChange={(e) => setAdd((c) => toggle(c, s.id, e.target.checked))}
+                      label={s.name}
+                      trailing={`+ ${formatCents(s.price.amount_cents)}`}
+                    />
                   ))}
-              </fieldset>
-              <fieldset className="choices">
-                <legend>Retirar</legend>
+                {services.every((s) => inOrder.has(s.id)) && (
+                  <p className="m-0 text-sm text-fg-muted">
+                    Todos os serviços deste profissional já estão na comanda.
+                  </p>
+                )}
+              </ChoiceGroup>
+              <ChoiceGroup legend="Retirar">
                 {current
                   .filter((i) => i.status === "accepted")
                   .map((i) => (
-                    <label key={i.id} className="choice">
-                      <input
-                        type="checkbox"
-                        checked={remove.includes(i.id)}
-                        onChange={(e) => setRemove((c) => toggle(c, i.id, e.target.checked))}
-                      />
-                      {i.name}
-                    </label>
+                    <Choice
+                      key={i.id}
+                      type="checkbox"
+                      checked={remove.includes(i.id)}
+                      onChange={(e) => setRemove((c) => toggle(c, i.id, e.target.checked))}
+                      label={i.name}
+                    />
                   ))}
                 {current.some((i) => i.status === "performed") && (
-                  <p className="muted">Serviços já realizados não podem ser retirados.</p>
+                  <p className="m-0 text-sm text-fg-muted">Serviços já realizados não podem ser retirados.</p>
                 )}
-              </fieldset>
+              </ChoiceGroup>
             </>
           )}
-          <div className="actions">
+          <div className="flex flex-wrap gap-2">
             <Submit busy={cmd.busy !== null}>{direct ? "Salvar serviços" : "Enviar pedido"}</Submit>
-            <button type="button" className="button button--secondary" onClick={() => setOpen(false)}>
+            <Button variant="secondary" onClick={panel.hide}>
               Voltar
-            </button>
+            </Button>
           </div>
         </form>
       )}

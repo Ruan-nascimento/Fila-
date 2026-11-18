@@ -1,6 +1,7 @@
 import { act, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MinhaVisita } from "../pages/fila/MinhaVisita";
+import { StoreDataProvider } from "../pages/fila/dados";
 import { SessionProvider } from "../session/session";
 import { fakeApi } from "../test/fake-api";
 import { backoffDelay, StreamClient, type StreamStatus } from "./client";
@@ -263,11 +264,13 @@ describe("visita atualizada pelo fluxo", () => {
       <SessionProvider>
         <StreamProvider estId={EST} channels={["public", "visit"]}>
           <StreamStatusNotice />
-          <MinhaVisita shopId={EST} />
+          <StoreDataProvider shopId={EST}>
+            <MinhaVisita shopId={EST} />
+          </StoreDataProvider>
         </StreamProvider>
       </SessionProvider>,
     );
-    expect(await screen.findByText(/Aguardando/)).toBeInTheDocument();
+    expect(await screen.findByText("Aguardando atendimento")).toBeInTheDocument();
     expect(screen.getByText(/Conectando para receber atualizações/)).toBeInTheDocument();
     const es = FakeES.last();
     act(() =>
@@ -319,7 +322,7 @@ describe("visita atualizada pelo fluxo", () => {
         "c9",
       ),
     );
-    expect(screen.getByText(/Em atendimento/)).toBeInTheDocument();
+    expect(screen.getByText("Em atendimento")).toBeInTheDocument();
     // Participação e comanda mudam juntas (conclusão): os dois eventos chegam no mesmo instante e
     // nenhum pode apagar o outro com uma cópia velha da visita.
     act(() => {
@@ -335,8 +338,8 @@ describe("visita atualizada pelo fluxo", () => {
         "c11",
       );
     });
-    expect(screen.getByText(/Atendimento concluído/)).toBeInTheDocument();
-    expect(screen.getByText(/Comanda: Aguardando pagamento/)).toBeInTheDocument();
+    expect(screen.getByText("Atendimento concluído")).toBeInTheDocument();
+    expect(screen.getByText("Aguardando pagamento")).toBeInTheDocument(); // situação da comanda
     expect(requests.filter((r) => r.path.endsWith("/my-visit"))).toHaveLength(1);
     expect(FakeES.all).toHaveLength(1); // uma conexão para a página inteira
   });
@@ -362,7 +365,9 @@ describe("visita atualizada pelo fluxo", () => {
     render(
       <SessionProvider>
         <StreamProvider estId={EST} channels={["public", "visit"]}>
-          <MinhaVisita shopId={EST} />
+          <StoreDataProvider shopId={EST}>
+            <MinhaVisita shopId={EST} />
+          </StoreDataProvider>
         </StreamProvider>
       </SessionProvider>,
     );

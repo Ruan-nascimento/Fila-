@@ -1,16 +1,22 @@
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
+import { Store, UserRound } from "lucide-react";
 import { api } from "../api/client";
 import { call, fieldErrors, problemMessage, type Problem } from "../api/problem";
 import { useSession } from "../session/context";
-import { Field, Notice, Submit } from "../ui/ui";
+import { safeReturn } from "../ui/retorno";
+import { Field, Notice, PageHeader, PasswordField, Segmented, Submit } from "../ui/ui";
 
 export function Entrar() {
   const { refresh } = useSession();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const voltar = safeReturn(params.get("voltar"));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [context, setContext] = useState<"customer" | "staff">("customer");
+  const [context, setContext] = useState<"customer" | "staff">(
+    params.get("como") === "equipe" ? "staff" : "customer",
+  );
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<Problem | null>(null);
   const [offline, setOffline] = useState(false);
@@ -23,7 +29,8 @@ export function Entrar() {
     if (out.ok) {
       setPassword("");
       await refresh();
-      navigate("/conta");
+      // Volta para a loja de onde veio (contexto mantido); equipe vai para a gestão.
+      navigate(voltar ?? (context === "staff" ? "/gestao" : "/conta"));
       return;
     }
     setProblem(out.problem);
@@ -32,8 +39,12 @@ export function Entrar() {
 
   const errors = fieldErrors(problem);
   return (
-    <section aria-labelledby="titulo-entrar">
-      <h2 id="titulo-entrar">Entrar</h2>
+    <section aria-labelledby="titulo-entrar" className="grid gap-5">
+      <PageHeader
+        id="titulo-entrar"
+        title="Entrar"
+        description="Acesse sua conta para acompanhar a fila ou atender clientes."
+      />
       {(problem || offline) && !problem?.errors?.length && (
         <Notice kind="erro">
           <p>{problemMessage(problem, offline)}</p>
@@ -44,53 +55,55 @@ export function Entrar() {
           )}
         </Notice>
       )}
-      <form onSubmit={onSubmit} noValidate>
+      <form onSubmit={onSubmit} noValidate className="grid gap-4">
+        <Segmented
+          legend="Entrar como"
+          name="contexto"
+          value={context}
+          onChange={setContext}
+          options={[
+            { value: "customer", label: "Cliente", icon: UserRound },
+            { value: "staff", label: "Equipe da barbearia", icon: Store },
+          ]}
+        />
         <Field
           label="E-mail"
           type="email"
           autoComplete="email"
+          inputMode="email"
           required
           value={email}
           error={errors.email}
           onChange={(e) => setEmail(e.target.value)}
         />
-        <Field
+        <PasswordField
           label="Senha"
-          type="password"
           autoComplete="current-password"
           required
           value={password}
           error={errors.password}
           onChange={(e) => setPassword(e.target.value)}
         />
-        <fieldset className="choices">
-          <legend>Entrar como</legend>
-          <label className="choice">
-            <input
-              type="radio"
-              name="contexto"
-              value="customer"
-              checked={context === "customer"}
-              onChange={() => setContext("customer")}
-            />
-            Cliente
-          </label>
-          <label className="choice">
-            <input
-              type="radio"
-              name="contexto"
-              value="staff"
-              checked={context === "staff"}
-              onChange={() => setContext("staff")}
-            />
-            Equipe da barbearia
-          </label>
-        </fieldset>
-        <Submit busy={busy}>Entrar</Submit>
+        <Submit busy={busy} block>
+          Entrar
+        </Submit>
       </form>
-      <p>
-        <Link to="/esqueci-senha">Esqueci minha senha</Link> · <Link to="/cadastro">Criar conta</Link>
+      <p className="m-0 flex flex-wrap justify-center gap-x-4 gap-y-1 text-sm">
+        <Link to="/esqueci-senha" className="inline-flex min-h-11 items-center font-semibold">
+          Esqueci minha senha
+        </Link>
+        <Link
+          to={voltar ? `/cadastro?voltar=${encodeURIComponent(voltar)}` : "/cadastro"}
+          className="inline-flex min-h-11 items-center font-semibold"
+        >
+          Criar conta de cliente
+        </Link>
       </p>
+      {voltar?.startsWith("/loja/") && (
+        <p className="m-0 text-center text-sm text-fg-muted">
+          Depois de entrar, você volta para a loja. <Link to={voltar}>Voltar sem entrar</Link>
+        </p>
+      )}
     </section>
   );
 }

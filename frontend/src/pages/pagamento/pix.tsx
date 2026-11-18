@@ -1,6 +1,8 @@
 import qrcode from "qrcode-generator";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
+import { Clock } from "lucide-react";
 import { formatCents } from "../../money";
+import { AmountRow, CopyButton } from "../../ui/ui";
 import { methodText, type PixCharge, type Receipt } from "./textos";
 
 const time = new Intl.DateTimeFormat("pt-BR", { timeStyle: "short" });
@@ -22,7 +24,7 @@ export function QrPix({ code, amountCents }: { code: string; amountCents: number
   }, [code]);
   return (
     <svg
-      className="pix__qr"
+      className="h-auto w-full max-w-60 rounded-lg border border-line bg-white"
       viewBox={`0 0 ${path.size} ${path.size}`}
       role="img"
       aria-label={`QR Code do Pix de ${formatCents(amountCents)}`}
@@ -36,50 +38,54 @@ export function QrPix({ code, amountCents }: { code: string; amountCents: number
 
 /** Copia-e-cola com botão de copiar (anuncia o resultado para leitores de tela). */
 export function CopiaECola({ code }: { code: string }) {
-  const [copied, setCopied] = useState<"" | "ok" | "erro">("");
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(code);
-      setCopied("ok");
-    } catch {
-      setCopied("erro");
-    }
-  }
   return (
-    <div className="pix__code">
-      <label htmlFor="pix-copia-e-cola">Pix copia e cola</label>
+    <div className="grid w-full gap-2">
+      <label htmlFor="pix-copia-e-cola" className="text-sm font-semibold">
+        Pix copia e cola
+      </label>
       <textarea
         id="pix-copia-e-cola"
         readOnly
         rows={3}
         value={code}
         onFocus={(e) => e.currentTarget.select()}
+        className="w-full resize-none rounded-lg border border-line bg-surface-2 px-3 py-2 font-mono text-xs break-all text-fg"
       />
-      <button type="button" className="button" onClick={() => void copy()}>
-        Copiar código
-      </button>
-      <p role="status" aria-live="polite" className="muted">
-        {copied === "ok" && "Código copiado. Cole no app do seu banco."}
-        {copied === "erro" && "Não foi possível copiar. Selecione o texto e copie manualmente."}
-      </p>
+      <CopyButton
+        text={code}
+        label="Copiar código"
+        copiedText="Código copiado. Cole no app do seu banco."
+        block
+      />
     </div>
   );
 }
 
-/** Cobrança Pix em aberto: QR, copia-e-cola e validade. */
+/** Cobrança Pix em aberto: QR, copia-e-cola, validade e situação. */
 export function PixAberto({ charge }: { charge: PixCharge }) {
   if (!charge.br_code) return null;
   return (
-    <div className="pix">
-      <p>
-        Pague <strong>{formatCents(charge.amount.amount_cents)}</strong> pelo app do seu banco
-        {charge.expires_at && <> até {time.format(new Date(charge.expires_at))}</>}.
+    <div className="grid justify-items-center gap-4">
+      <p className="m-0 text-center">
+        Pague <strong className="tabular-nums">{formatCents(charge.amount.amount_cents)}</strong> pelo app do
+        seu banco
+        {charge.expires_at && (
+          <>
+            {" "}
+            até <strong className="tabular-nums">{time.format(new Date(charge.expires_at))}</strong>
+          </>
+        )}
+        .
       </p>
       <QrPix code={charge.br_code} amountCents={charge.amount.amount_cents} />
       <CopiaECola code={charge.br_code} />
-      <p className="muted">
-        Esta tela atualiza sozinha quando o banco confirmar. Comprovante ou print não confirmam o pagamento.
-      </p>
+      <div className="flex w-full gap-3 rounded-xl bg-select p-3 text-sm">
+        <Clock aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-accent" />
+        <p className="m-0">
+          <strong className="block text-accent">Aguardando confirmação do banco</strong>
+          Esta tela atualiza sozinha quando o banco confirmar. Comprovante ou print não confirmam o pagamento.
+        </p>
+      </div>
     </div>
   );
 }
@@ -93,27 +99,27 @@ const receiptStatusText: Record<Receipt["status"], string> = {
 export function Recebimentos({ receipts }: { receipts: Receipt[] }) {
   if (receipts.length === 0) return null;
   return (
-    <ul className="order__items" aria-label="Recebimentos">
-      {receipts.map((r) => (
-        <li key={r.id}>
-          <span>
-            {methodText[r.method]} · {receiptStatusText[r.status]}
-            {r.classification === "excess" && " · valor a mais (devolução pendente)"}
-            {r.change_given && r.change_given.amount_cents > 0 && (
-              <>
-                {" "}
-                · entregue {formatCents(r.cash_tendered?.amount_cents ?? 0)}, troco{" "}
-                {formatCents(r.change_given.amount_cents)}
-              </>
-            )}
-            {r.card_reference && <> · ref. {r.card_reference}</>}
-            {(r.refunded?.amount_cents ?? 0) > 0 && (
-              <> · estornado {formatCents(r.refunded?.amount_cents ?? 0)}</>
-            )}
-          </span>
-          <span className="order__price">{formatCents(r.amount.amount_cents)}</span>
-        </li>
-      ))}
-    </ul>
+    <div className="divide-y divide-line" role="list" aria-label="Recebimentos">
+      {receipts.map((r) => {
+        const sub = [
+          receiptStatusText[r.status],
+          r.classification === "excess" ? "valor a mais (devolução pendente)" : "",
+          r.change_given && r.change_given.amount_cents > 0
+            ? `entregue ${formatCents(r.cash_tendered?.amount_cents ?? 0)}, troco ${formatCents(r.change_given.amount_cents)}`
+            : "",
+          r.card_reference ? `ref. ${r.card_reference}` : "",
+          (r.refunded?.amount_cents ?? 0) > 0
+            ? `estornado ${formatCents(r.refunded?.amount_cents ?? 0)}`
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" · ");
+        return (
+          <div role="listitem" key={r.id}>
+            <AmountRow label={methodText[r.method]} sub={sub} value={formatCents(r.amount.amount_cents)} />
+          </div>
+        );
+      })}
+    </div>
   );
 }

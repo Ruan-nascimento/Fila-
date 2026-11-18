@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { fakeApi } from "../../test/fake-api";
 import { Entradas } from "../gestao/Entradas";
 import { MinhaVisita } from "./MinhaVisita";
+import { StoreDataProvider } from "./dados";
 
 const EST = "0190a000-0000-7000-8000-0000000000e1";
 const Q1 = "0190a000-0000-7000-8000-0000000000a1";
@@ -110,14 +111,21 @@ describe("Minha visita", () => {
         return Response.json({ data: visit("waiting", 1) }, { status: 201 });
       },
     });
-    render(<MinhaVisita shopId={EST} />);
+    render(
+      <StoreDataProvider shopId={EST}>
+        <MinhaVisita shopId={EST} />
+      </StoreDataProvider>,
+    );
     fireEvent.click(await screen.findByLabelText(/Beto/));
     fireEvent.click(await screen.findByLabelText(/Corte/));
     fireEvent.click(screen.getByRole("button", { name: "Entrar na fila" }));
     expect(await screen.findByText("A007")).toBeInTheDocument();
     expect(posts).toEqual([{ queue_id: Q1, service_ids: [SVC] }]);
-    expect(screen.getByText(/3º da fila/)).toBeInTheDocument();
-    expect(screen.getByText(/estimativa/)).toBeInTheDocument();
+    // Só depois de a participação existir: "Você entrou na fila".
+    expect(screen.getByText("Você entrou na fila.")).toBeInTheDocument();
+    expect(screen.getByText(/você é o 3º da fila/)).toBeInTheDocument(); // frase para o leitor de tela
+    expect(screen.getByText("3º")).toBeInTheDocument(); // destaque visual
+    expect(screen.getByText("Espera (estimativa)")).toBeInTheDocument();
     const post = requests.find((r) => r.method === "POST");
     expect(post?.headers.get("Idempotency-Key")).toMatch(/^[A-Za-z0-9_-]{16,}$/);
   });
@@ -133,9 +141,17 @@ describe("Minha visita", () => {
         return Response.json({ data: visit("cancelled", 5) });
       },
     });
-    render(<MinhaVisita shopId={EST} />);
+    render(
+      <StoreDataProvider shopId={EST}>
+        <MinhaVisita shopId={EST} />
+      </StoreDataProvider>,
+    );
     fireEvent.click(await screen.findByRole("button", { name: "Sair da fila" }));
-    expect(await screen.findByText("Você saiu da fila")).toBeInTheDocument();
+    // A consequência aparece antes: nada é enviado sem confirmar.
+    expect(screen.getByText(/Você perde a posição atual/)).toBeInTheDocument();
+    expect(bodies).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "Sim, sair da fila" }));
+    expect(await screen.findByText("Você saiu da fila.")).toBeInTheDocument();
     expect(bodies).toEqual([{ expected_version: 4 }]);
   });
 });

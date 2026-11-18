@@ -95,7 +95,7 @@ describe("Pontos do cliente", () => {
     fireEvent.click(screen.getByRole("button", { name: "Reservar Pomada" }));
     await waitFor(() => expect(bodies).toEqual([{ reward_id: REWARD, expected_reward_version: 3 }]));
     expect(await screen.findByRole("status", { name: "Prêmio reservado" })).toHaveTextContent(
-      /Pomada.*Válido até/,
+      /Pomada.*válido até/,
     );
     expect(
       requests.find((r) => r.path.endsWith("/reward-reservations"))?.headers.get("Idempotency-Key"),

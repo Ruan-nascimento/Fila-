@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 import { fakeApi, problem } from "../../test/fake-api";
 import type { Order } from "../comanda/textos";
@@ -228,7 +229,11 @@ describe("Painel de pendências do dono", () => {
         });
       },
     });
-    render(<Pendencias ctx={owner} />);
+    render(
+      <MemoryRouter>
+        <Pendencias ctx={owner} />
+      </MemoryRouter>,
+    );
     const resumo = await screen.findByRole("list", { name: "Resumo" });
     expect(
       within(resumo)
@@ -281,7 +286,11 @@ describe("Painel de pendências do dono", () => {
           page: { next_cursor: null, has_more: false },
         }),
     });
-    render(<Pendencias ctx={owner} />);
+    render(
+      <MemoryRouter>
+        <Pendencias ctx={owner} />
+      </MemoryRouter>,
+    );
     expect(await screen.findByText(/backup restaurado não conhecia/)).toBeInTheDocument();
     const card = screen.getByText(/sem comanda/);
     expect(card).toHaveTextContent(/referência na AbacatePay pix_char_abc123/);

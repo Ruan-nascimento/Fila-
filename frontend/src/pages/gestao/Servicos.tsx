@@ -1,9 +1,22 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { Pencil, Plus, Scissors } from "lucide-react";
 import { api } from "../../api/client";
 import { call, fieldErrors, problemMessage } from "../../api/problem";
 import type { components } from "../../api/schema.gen";
 import { centsToInput, formatCents, parseCents } from "../../money";
-import { Field, Notice, Submit } from "../../ui/ui";
+import {
+  Badge,
+  Button,
+  Choice,
+  ChoiceGroup,
+  EmptyState,
+  Field,
+  LoadError,
+  Loading,
+  PageHeader,
+  Submit,
+} from "../../ui/ui";
+import { useInlinePanel } from "../../ui/useInlinePanel";
 import { useCommand } from "./comando";
 import { CommandError, type StaffContext } from "./comum";
 
@@ -16,6 +29,7 @@ export function Servicos({ ctx }: { ctx: StaffContext }) {
   const [services, setServices] = useState<Service[] | null>(null);
   const [pros, setPros] = useState<Pro[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const novo = useInlinePanel();
 
   const fetchAll = useCallback(async () => {
     const path = { establishmentId: ctx.estId };
@@ -34,6 +48,7 @@ export function Servicos({ ctx }: { ctx: StaffContext }) {
       setLoadError(problemMessage(r.s.problem, r.s.offline));
       return;
     }
+    setLoadError(null);
     setServices(r.s.data.data);
     if (r.p?.ok) {
       setPros(
@@ -57,17 +72,57 @@ export function Servicos({ ctx }: { ctx: StaffContext }) {
     };
   }, [fetchAll, apply]);
 
-  if (loadError) return <Notice kind="erro">{loadError}</Notice>;
-  if (!services) return <p role="status">Carregando serviços…</p>;
+  const header = (
+    <PageHeader
+      title="Serviços"
+      description={
+        ctx.isOwner ? "Preço, duração, pontos e quem atende cada serviço." : "Catálogo da loja (só leitura)."
+      }
+      actions={
+        ctx.isOwner && !novo.open ? (
+          <Button id={novo.triggerId} icon={Plus} onClick={() => novo.show("aberto")}>
+            Novo serviço
+          </Button>
+        ) : undefined
+      }
+    />
+  );
+  if (loadError && !services)
+    return (
+      <>
+        {header}
+        <LoadError message={loadError} onRetry={() => void load()} />
+      </>
+    );
+  if (!services)
+    return (
+      <>
+        {header}
+        <Loading>Carregando serviços…</Loading>
+      </>
+    );
   return (
-    <div>
-      {ctx.isOwner && <ServicoForm ctx={ctx} pros={pros} onDone={load} />}
+    <div className="grid gap-4">
+      {header}
+      {ctx.isOwner && (novo.open || services.length === 0) && (
+        <ServicoForm
+          ctx={ctx}
+          pros={pros}
+          panelId={novo.panelId}
+          onKeyDown={novo.onKeyDown}
+          onDone={async () => {
+            novo.hide();
+            await load();
+          }}
+          {...(services.length > 0 ? { onCancel: novo.hide } : {})}
+        />
+      )}
       {services.length === 0 ? (
-        <p>Nenhum serviço cadastrado.</p>
+        !ctx.isOwner && <EmptyState icon={Scissors} title="Nenhum serviço cadastrado" />
       ) : (
-        <ul className="cards">
+        <ul className="m-0 grid list-none divide-y divide-line rounded-xl border border-line bg-surface p-0">
           {services.map((s) => (
-            <ServicoCard key={s.id} ctx={ctx} s={s} pros={pros} onDone={load} />
+            <ServicoLinha key={s.id} ctx={ctx} s={s} pros={pros} onDone={load} />
           ))}
         </ul>
       )}
@@ -75,7 +130,7 @@ export function Servicos({ ctx }: { ctx: StaffContext }) {
   );
 }
 
-function ServicoCard({
+function ServicoLinha({
   ctx,
   s,
   pros,
@@ -86,7 +141,7 @@ function ServicoCard({
   pros: Pro[];
   onDone: () => Promise<void>;
 }) {
-  const [editing, setEditing] = useState(false);
+  const edit = useInlinePanel();
   const cmd = useCommand();
   const names = s.professional_ids
     .map((id) => pros.find((p) => p.id === id)?.name ?? "profissional")
@@ -106,40 +161,49 @@ function ServicoCard({
     if (out.ok || out.problem?.status === 409) await onDone();
   }
   return (
-    <li className="card">
-      <h3>{s.name}</h3>
-      <p>
-        {formatCents(s.price.amount_cents)} · {s.duration_minutes} min · {s.points} pontos ·{" "}
-        {s.status === "active" ? "✓ Ativo" : "■ Inativo"}
-      </p>
-      {ctx.isOwner && <p className="muted">Profissionais: {names || "nenhum (ninguém pode atender)"}</p>}
+    <li className="grid gap-3 px-4 py-3">
+      <div className="flex flex-wrap items-start gap-3">
+        <Scissors aria-hidden="true" className="mt-1 size-5 shrink-0 text-fg-muted" />
+        <div className="grid min-w-0 flex-1 gap-0.5">
+          <h2 className="m-0 text-base font-semibold">{s.name}</h2>
+          <p className="m-0 text-sm text-fg-muted tabular-nums">
+            {s.duration_minutes} min · {s.points} pontos
+          </p>
+          {ctx.isOwner && (
+            <p className="m-0 text-sm text-fg-muted">Atendem: {names || "ninguém (ninguém pode atender)"}</p>
+          )}
+        </div>
+        <div className="grid justify-items-end gap-1">
+          <span className="font-semibold tabular-nums">{formatCents(s.price.amount_cents)}</span>
+          <Badge tone={s.status === "active" ? "success" : "neutral"}>
+            {s.status === "active" ? "Ativo" : "Inativo"}
+          </Badge>
+        </div>
+      </div>
       <CommandError problem={cmd.problem} offline={cmd.offline} />
-      {ctx.isOwner && !editing && (
-        <div className="actions">
-          <button type="button" className="button button--secondary" onClick={() => setEditing(true)}>
+      {ctx.isOwner && !edit.open && (
+        <div className="flex flex-wrap gap-2">
+          <Button id={edit.triggerId} variant="secondary" icon={Pencil} onClick={() => edit.show("aberto")}>
             Editar
-          </button>
-          <button
-            type="button"
-            className="button button--secondary"
-            disabled={cmd.busy !== null}
-            onClick={() => void toggle()}
-          >
+          </Button>
+          <Button variant="ghost" disabled={cmd.busy !== null} onClick={() => void toggle()}>
             {s.status === "active" ? "Desativar" : "Reativar"}
-          </button>
+          </Button>
         </div>
       )}
-      {editing && (
+      {edit.open && (
         <ServicoForm
           ctx={ctx}
           pros={pros}
           service={s}
+          panelId={edit.panelId}
+          onKeyDown={edit.onKeyDown}
           onDone={async () => {
-            setEditing(false);
+            edit.hide();
             await onDone();
           }}
           onConflict={onDone}
-          onCancel={() => setEditing(false)}
+          onCancel={edit.hide}
         />
       )}
     </li>
@@ -154,6 +218,8 @@ function ServicoForm({
   onDone,
   onConflict,
   onCancel,
+  panelId,
+  onKeyDown,
 }: {
   ctx: StaffContext;
   pros: Pro[];
@@ -162,6 +228,8 @@ function ServicoForm({
   /** Conflito de versão: relê a lista (o formulário continua aberto com o aviso). */
   onConflict?: () => Promise<void>;
   onCancel?: () => void;
+  panelId?: string;
+  onKeyDown?: (e: React.KeyboardEvent) => void;
 }) {
   const cmd = useCommand();
   const [name, setName] = useState(service?.name ?? "");
@@ -230,12 +298,14 @@ function ServicoForm({
   const errors = { ...fieldErrors(cmd.problem), ...localErrors };
   return (
     <form
+      id={panelId}
+      onKeyDown={onKeyDown}
       onSubmit={onSubmit}
       noValidate
-      className="card"
+      className="grid gap-4 rounded-xl border border-line bg-surface p-4 sm:p-5"
       aria-label={service ? `Editar ${service.name}` : "Novo serviço"}
     >
-      {!service && <h3>Novo serviço</h3>}
+      {!service && <h2 className="m-0 text-base font-semibold">Novo serviço</h2>}
       {!cmd.problem?.errors?.length && <CommandError problem={cmd.problem} offline={cmd.offline} />}
       <Field
         label="Nome"
@@ -245,56 +315,60 @@ function ServicoForm({
         error={errors.name}
         onChange={(e) => setName(e.target.value)}
       />
-      <Field
-        label="Preço (R$)"
-        inputMode="decimal"
-        required
-        value={price}
-        error={errors.price_cents}
-        hint="Ex.: 45,00. Vale só para novos atendimentos; os já aceitos mantêm o preço antigo."
-        onChange={(e) => setPrice(e.target.value)}
-      />
-      <Field
-        label="Duração (minutos)"
-        inputMode="numeric"
-        required
-        value={duration}
-        error={errors.duration_minutes}
-        onChange={(e) => setDuration(e.target.value)}
-      />
-      <Field
-        label="Pontos de fidelidade"
-        inputMode="numeric"
-        required
-        value={points}
-        error={errors.points}
-        hint="Use 0 se o programa de pontos não estiver em uso."
-        onChange={(e) => setPoints(e.target.value)}
-      />
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Field
+          label="Preço (R$)"
+          inputMode="decimal"
+          required
+          value={price}
+          error={errors.price_cents}
+          onChange={(e) => setPrice(e.target.value)}
+        />
+        <Field
+          label="Duração (minutos)"
+          inputMode="numeric"
+          required
+          value={duration}
+          error={errors.duration_minutes}
+          onChange={(e) => setDuration(e.target.value)}
+        />
+        <Field
+          label="Pontos de fidelidade"
+          inputMode="numeric"
+          required
+          value={points}
+          error={errors.points}
+          onChange={(e) => setPoints(e.target.value)}
+        />
+      </div>
+      <p className="m-0 -mt-2 text-sm text-fg-muted">
+        Preço ex.: 45,00 — vale só para novos atendimentos; os já aceitos mantêm o preço registrado. Use 0
+        pontos se o programa não estiver em uso.
+      </p>
       {pros.length > 0 && (
-        <fieldset className="choices">
-          <legend>Profissionais que fazem este serviço</legend>
-          {pros.map((p) => (
-            <label key={p.id} className="choice">
-              <input
+        <ChoiceGroup legend="Profissionais que fazem este serviço">
+          <div className="grid gap-2 sm:grid-cols-2">
+            {pros.map((p) => (
+              <Choice
+                key={p.id}
                 type="checkbox"
                 checked={selected.includes(p.id)}
                 onChange={(e) =>
                   setSelected((cur) => (e.target.checked ? [...cur, p.id] : cur.filter((x) => x !== p.id)))
                 }
+                label={p.name}
+                description={p.active ? undefined : "desativado"}
               />
-              {p.name}
-              {!p.active && " (desativado)"}
-            </label>
-          ))}
-        </fieldset>
+            ))}
+          </div>
+        </ChoiceGroup>
       )}
-      <div className="actions">
+      <div className="flex flex-wrap gap-2">
         <Submit busy={cmd.busy !== null}>{service ? "Salvar" : "Criar serviço"}</Submit>
         {onCancel && (
-          <button type="button" className="button button--secondary" onClick={onCancel}>
+          <Button variant="secondary" onClick={onCancel}>
             Cancelar
-          </button>
+          </Button>
         )}
       </div>
     </form>

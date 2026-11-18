@@ -5,6 +5,7 @@ import { api, setCsrfToken } from "../api/client";
 import { SessionProvider } from "../session/session";
 import { anonymousSession, fakeApi, problem } from "../test/fake-api";
 import { resetFragmentCache } from "../ui/fragment";
+import { safeReturn } from "../ui/retorno";
 import { Entrar } from "./Entrar";
 import { VerificarEmail } from "./Links";
 import { Loja } from "./Loja";
@@ -93,6 +94,42 @@ describe("Entrar", () => {
   });
 });
 
+describe("Entrar: volta para a loja de origem", () => {
+  it("com ?voltar=/loja/…, volta para a loja depois de entrar", async () => {
+    fakeApi({
+      "GET /v1/session": () => Response.json(anonymousSession),
+      "POST /v1/auth/login": () => Response.json(anonymousSession),
+    });
+    render(
+      <MemoryRouter initialEntries={["/entrar?voltar=%2Floja%2Fbarbearia-teste"]}>
+        <SessionProvider>
+          <Routes>
+            <Route path="/entrar" element={<Entrar />} />
+            <Route path="/loja/:slug" element={<p>página da loja</p>} />
+          </Routes>
+        </SessionProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.change(screen.getByLabelText("E-mail"), { target: { value: "ana@exemplo.com" } });
+    fireEvent.change(screen.getByLabelText("Senha"), { target: { value: "senha-forte-123" } });
+    fireEvent.click(screen.getByRole("button", { name: "Entrar" }));
+    expect(await screen.findByText("página da loja")).toBeInTheDocument();
+  });
+
+  it("nunca usa destino externo", () => {
+    expect(safeReturn("//outro-site.com")).toBeNull();
+    expect(safeReturn("https://outro-site.com")).toBeNull();
+    expect(safeReturn("/\\outro-site.com")).toBeNull();
+    expect(safeReturn("/loja/x")).toBe("/loja/x");
+  });
+
+  it("“Acesso da equipe” já chega com Equipe da barbearia escolhida", () => {
+    fakeApi({ "GET /v1/session": () => Response.json(anonymousSession) });
+    renderAt("/entrar?como=equipe", <Entrar />, "/entrar");
+    expect(screen.getByLabelText("Equipe da barbearia")).toBeChecked();
+  });
+});
+
 describe("link de verificação de e-mail", () => {
   it("lê o token do fragmento, apaga da barra de endereço e envia no corpo", async () => {
     const token = "A".repeat(43);
@@ -154,13 +191,15 @@ describe("Loja (visitante)", () => {
       "GET /v1/session": () => Response.json(session),
       "GET /v1/public/slugs/barbearia-teste": () => Response.json({ data: shop }),
       ...publicCatalog,
+      [`GET /v1/establishments/${shop.id}/my-visit`]: () => Response.json({ data: null }),
       [`POST /v1/establishments/${shop.id}/visitor-sessions`]: () => {
         session = { data: { ...anonymousSession.data, visitors: [created.data.visitor] as never[] } };
         return Response.json(created, { status: 201 });
       },
     });
-    renderAt("/loja/barbearia-teste", <Loja />, "/loja/:slug");
-    fireEvent.change(await screen.findByLabelText("Como quer ser chamado"), {
+    renderAt("/loja/barbearia-teste", <Loja />, "/loja/:slug/*");
+    expect(await screen.findByRole("heading", { name: "Como quer ser chamado?" })).toBeInTheDocument();
+    fireEvent.change(await screen.findByLabelText("Apelido"), {
       target: { value: "<b>Lia</b>" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
@@ -169,6 +208,7 @@ describe("Loja (visitante)", () => {
     expect(document.querySelector("b")).toBeNull();
     const post = requests.find((r) => r.method === "POST");
     expect(post?.body).toEqual({ nick: "<b>Lia</b>" });
+    expect(screen.getByRole("button", { name: "Copiar código" })).toBeInTheDocument();
   });
 
   it("recupera com o código no corpo (nunca na URL)", async () => {
@@ -179,7 +219,8 @@ describe("Loja (visitante)", () => {
       [`POST /v1/establishments/${shop.id}/visitor-sessions/recover`]: () =>
         problem(401, "recovery_code_invalid", "Código incorreto, já usado ou vencido."),
     });
-    renderAt("/loja/barbearia-teste", <Loja />, "/loja/:slug");
+    renderAt("/loja/barbearia-teste", <Loja />, "/loja/:slug/*");
+    fireEvent.click(await screen.findByRole("button", { name: "Já tenho um código" }));
     fireEvent.change(await screen.findByLabelText("Código de recuperação"), {
       target: { value: "AAAA-BBBB-CCCC-DDDD" },
     });
@@ -192,7 +233,7 @@ describe("Loja (visitante)", () => {
 
   it("loja inexistente mostra mensagem clara", async () => {
     fakeApi({ "GET /v1/session": () => Response.json(anonymousSession) });
-    renderAt("/loja/nao-existe", <Loja />, "/loja/:slug");
+    renderAt("/loja/nao-existe", <Loja />, "/loja/:slug/*");
     expect(await screen.findByRole("alert")).toHaveTextContent("Loja não encontrada");
   });
 });

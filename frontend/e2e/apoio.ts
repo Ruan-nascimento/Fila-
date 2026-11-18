@@ -213,7 +213,7 @@ export async function montarLoja(tag: string): Promise<Loja> {
 export async function entrarNaTela(page: Page, email: string, comoEquipe: boolean): Promise<void> {
   await page.goto("/entrar");
   await page.getByLabel("E-mail").fill(email);
-  await page.getByLabel("Senha").fill(senha);
+  await page.getByLabel("Senha", { exact: true }).fill(senha);
   await page.getByRole("radio", { name: comoEquipe ? /Equipe/ : /Cliente/ }).check();
   await page.getByRole("button", { name: "Entrar" }).click();
   await expect(page.getByRole("link", { name: "Minha conta" })).toBeVisible();
