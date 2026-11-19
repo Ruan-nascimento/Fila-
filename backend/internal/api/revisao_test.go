@@ -144,7 +144,10 @@ func TestAuthorizationSweepAllRoutes(t *testing.T) {
 	corpoValido := func(rt hs.Route) map[string]any {
 		body := map[string]any{}
 		ps := params(rt)
-		alvo := ps[len(ps)-1]
+		alvo := ""
+		if len(ps) > 0 {
+			alvo = ps[len(ps)-1]
+		}
 		if tb, ok := versao[alvo]; ok {
 			var v int64
 			if err := e.pool.QueryRow(t.Context(), "SELECT version FROM "+tb+" WHERE id = $1", ids[alvo]).Scan(&v); err == nil {

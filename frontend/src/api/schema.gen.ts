@@ -126,6 +126,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/auth/owner-session/takeover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Continua neste aparelho e encerra a outra sessão de dono (operação atômica).
+         * @description Valida o desafio (não vencido, não usado, desta tentativa pelo cookie `__Host-fila_owner_attempt`
+         *     e da MESMA geração da vaga que a pessoa viu), revoga a sessão anterior (`owner_session_replaced`),
+         *     cria a nova e só então define o cookie de sessão. Se a vaga mudou enquanto a confirmação estava
+         *     aberta, responde `owner_session_challenge_invalid` sem derrubar ninguém. Repetir a mesma
+         *     confirmação depois de uma queda de rede reentrega o acesso só se esta tentativa venceu e continua
+         *     ocupando a vaga (nunca revoga de novo).
+         */
+        post: operations["takeoverOwnerSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/owner-session/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancela e mantém a outra sessão (descarta o desafio). Sempre 204. */
+        post: operations["cancelOwnerTakeover"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/auth/logout": {
         parameters: {
             query?: never;
@@ -1609,7 +1651,7 @@ export interface components {
             message?: string;
         };
         /** @enum {string} */
-        ErrorCode: "validation_failed" | "unauthenticated" | "forbidden" | "not_found" | "csrf_failed" | "origin_not_allowed" | "reauthentication_required" | "rate_limited" | "payload_too_large" | "unsupported_media_type" | "idempotency_key_missing" | "idempotency_key_reused" | "idempotency_in_progress" | "version_conflict" | "invalid_transition" | "internal_error" | "service_unavailable" | "invalid_credentials" | "email_not_verified" | "token_invalid" | "recovery_code_invalid" | "invite_invalid" | "visitor_visit_in_progress" | "sole_owner" | "deletion_in_progress" | "queue_not_open" | "queue_has_pending_participants" | "active_participation_exists" | "pending_order_exists" | "service_not_eligible" | "service_inactive" | "no_waiting_participant" | "professional_busy" | "professional_inactive" | "professional_has_active_participations" | "tolerance_not_elapsed" | "transfer_consent_required" | "transfer_target_incompatible" | "slug_taken" | "order_requires_item" | "duplicate_service" | "change_request_pending" | "item_already_performed" | "performed_item_required" | "order_not_editable" | "order_not_payable" | "pix_charge_active" | "pix_charge_outcome_unknown" | "payment_amount_mismatch" | "payment_method_not_allowed" | "refund_exceeds_available" | "refund_not_allowed" | "provider_unavailable" | "webhook_unauthenticated" | "loyalty_program_disabled" | "account_required" | "insufficient_points" | "reward_out_of_stock" | "reward_inactive" | "reservation_already_active" | "reservation_expired";
+        ErrorCode: "validation_failed" | "unauthenticated" | "forbidden" | "not_found" | "csrf_failed" | "origin_not_allowed" | "reauthentication_required" | "rate_limited" | "payload_too_large" | "unsupported_media_type" | "idempotency_key_missing" | "idempotency_key_reused" | "idempotency_in_progress" | "version_conflict" | "invalid_transition" | "internal_error" | "service_unavailable" | "invalid_credentials" | "email_not_verified" | "token_invalid" | "recovery_code_invalid" | "invite_invalid" | "visitor_visit_in_progress" | "sole_owner" | "deletion_in_progress" | "queue_not_open" | "queue_has_pending_participants" | "active_participation_exists" | "pending_order_exists" | "service_not_eligible" | "service_inactive" | "no_waiting_participant" | "professional_busy" | "professional_inactive" | "professional_has_active_participations" | "tolerance_not_elapsed" | "transfer_consent_required" | "transfer_target_incompatible" | "slug_taken" | "order_requires_item" | "duplicate_service" | "change_request_pending" | "item_already_performed" | "performed_item_required" | "order_not_editable" | "order_not_payable" | "pix_charge_active" | "pix_charge_outcome_unknown" | "payment_amount_mismatch" | "payment_method_not_allowed" | "refund_exceeds_available" | "refund_not_allowed" | "provider_unavailable" | "webhook_unauthenticated" | "loyalty_program_disabled" | "account_required" | "insufficient_points" | "reward_out_of_stock" | "reward_inactive" | "reservation_already_active" | "reservation_expired" | "owner_session_active" | "owner_session_challenge_invalid" | "owner_session_replaced" | "owner_session_required";
         /** @enum {string} */
         QueueStatus: "open" | "paused" | "closed";
         /** @enum {string} */
@@ -1922,12 +1964,19 @@ export interface components {
                 kind: components["schemas"]["SessionKind"];
                 expires_at: components["schemas"]["Timestamp"];
                 reauth_valid_until: components["schemas"]["Timestamp"] | null;
+                /** @description Esta sessão ocupa a vaga de dono da conta (ADR-0027). Só ela exerce privilégios de dono. */
+                owner_authority?: boolean;
             } | null;
             /** @description Credenciais de visitante ativas neste navegador (uma por loja). */
             visitors: components["schemas"]["VisitorView"][];
             /** @description Vínculos de equipe. Só concedem permissão com sessão de contexto staff. */
             memberships: components["schemas"]["MembershipView"][];
             csrf_token: string | null;
+            /**
+             * @description O cookie apresentado deixou de valer porque o dono entrou em outro aparelho (ou pela migração da sessão única).
+             * @enum {string}
+             */
+            ended_reason?: "owner_session_replaced" | "owner_session_migration";
         };
         AccountView: {
             id: components["schemas"]["Id"];
@@ -2372,6 +2421,24 @@ export interface components {
             pendencies?: components["schemas"]["Pendencies"] | null;
             loyalty?: components["schemas"]["LoyaltySummary"] | null;
         };
+        OwnerChallengeRequest: {
+            challenge: string;
+        };
+        /** @description Problem.current de `owner_session_active`. Só contexto confiável da outra sessão. */
+        OwnerSessionConflict: {
+            /** @description Uso único, 2 min, preso à conta, à tentativa (cookie) e à geração da vaga. Nunca em URL ou log. */
+            challenge: string;
+            expires_at: components["schemas"]["Timestamp"];
+            other_session: {
+                /**
+                 * @description unknown = outro aparelho ou navegador.
+                 * @enum {string}
+                 */
+                channel: "desktop_authorized" | "unknown";
+                installation_name: string | null;
+                last_used_at: components["schemas"]["Timestamp"];
+            };
+        };
     };
     responses: {
         /** @description Situação do processo. */
@@ -2788,7 +2855,78 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            /**
+             * @description `owner_session_active` (ADR-0027): credenciais válidas, mas a conta tem vínculo de dono e
+             *     outra sessão válida ocupa a vaga de dono. A outra sessão continua; esta tentativa NÃO recebe
+             *     cookie de sessão. `current` segue OwnerSessionConflict (desafio de 2 min, só no corpo). Junto
+             *     vai o cookie HttpOnly `__Host-fila_owner_attempt` (5 min), que prende o desafio a esta tentativa.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    takeoverOwnerSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OwnerChallengeRequest"];
+            };
+        };
+        responses: {
+            /** @description Acesso de dono transferido para este aparelho. Set-Cookie com __Host-fila_session. */
+            200: {
+                headers: {
+                    "Set-Cookie": components["headers"]["SetSessionCookie"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["SessionView"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    cancelOwnerTakeover: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OwnerChallengeRequest"];
+            };
+        };
+        responses: {
+            /** @description Desafio descartado (ou já inexistente). A outra sessão continua. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
             default: components["responses"]["Unexpected"];
         };
     };

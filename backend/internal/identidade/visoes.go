@@ -25,6 +25,8 @@ type sessionInfo struct {
 	Kind             string     `json:"kind"`
 	ExpiresAt        time.Time  `json:"expires_at"`
 	ReauthValidUntil *time.Time `json:"reauth_valid_until"`
+	// OwnerAuthority: esta sessão ocupa a vaga de dono da conta (ADR-0027).
+	OwnerAuthority bool `json:"owner_authority"`
 }
 
 type membershipView struct {
@@ -47,6 +49,9 @@ type sessionView struct {
 	Visitors    []visitorView    `json:"visitors"`
 	Memberships []membershipView `json:"memberships"`
 	CSRFToken   *string          `json:"csrf_token"`
+	// EndedReason: o cookie apresentado deixou de valer porque o dono entrou em outro aparelho
+	// (owner_session_replaced) ou pela migração da sessão única (owner_session_migration).
+	EndedReason *string `json:"ended_reason,omitempty"`
 }
 
 type inviteView struct {
@@ -73,7 +78,7 @@ func (s *Service) buildSessionView(ctx context.Context, q database.Querier, p *P
 	if p.Session != nil {
 		v.Account = &accountView{ID: p.Session.AccountID, Name: p.Session.AccountName,
 			Email: p.Session.AccountEmail, Status: p.Session.AccountStatus}
-		v.Session = &sessionInfo{Kind: p.Session.Kind, ExpiresAt: p.Session.ExpiresAt}
+		v.Session = &sessionInfo{Kind: p.Session.Kind, ExpiresAt: p.Session.ExpiresAt, OwnerAuthority: p.Session.OwnerHolder}
 		if r := p.Session.ReauthValidUntil; r != nil && r.After(s.clock.Now()) {
 			v.Session.ReauthValidUntil = r
 		}
@@ -85,6 +90,10 @@ func (s *Service) buildSessionView(ctx context.Context, q database.Querier, p *P
 			v.Memberships = append(v.Memberships, membershipView{EstablishmentID: m.EstablishmentID,
 				EstablishmentName: m.EstablishmentName, Role: m.Role, ProfessionalID: m.ProfessionalID})
 		}
+	}
+	if p.Session == nil && p.EndedReason != "" {
+		why := p.EndedReason
+		v.EndedReason = &why
 	}
 	for _, vc := range p.Visitors {
 		v.Visitors = append(v.Visitors, visitorView{ID: vc.VisitorID, EstablishmentID: vc.EstablishmentID,

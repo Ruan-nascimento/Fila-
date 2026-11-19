@@ -75,7 +75,8 @@ func TestNoPackageImportsExecutables(t *testing.T) {
 // Dono de cada tabela (ADR-0001: cada módulo acessa só as próprias tabelas; os outros usam
 // funções exportadas). A chave é o caminho do pacote sob internal/.
 var tableOwners = map[string][]string{
-	"identidade":           {"account", "account_token", "account_session", "invite", "visitor", "visitor_browser", "visitor_credential"},
+	"identidade": {"account", "account_token", "account_session", "invite", "visitor", "visitor_browser", "visitor_credential",
+		"owner_session_slot", "owner_session_challenge"},
 	"estabelecimento":      {"establishment", "professional", "staff_membership", "queue"},
 	"catalogo":             {"service", "service_professional", "service_revision"},
 	"fila":                 {"participation", "participation_transfer", "queue_counter"},

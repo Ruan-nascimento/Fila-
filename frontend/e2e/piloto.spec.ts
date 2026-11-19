@@ -234,7 +234,7 @@ test("roteiro do piloto: do primeiro cliente às pendências da dona", async ({ 
 
   // 11. A dona revisa as pendências pela tela: vê a interrupção para revisar e o Pix tardio.
   const [dctx, dona] = await abrir(browser, { ...balcao, viewport: { width: 1440, height: 900 } });
-  await entrarNaTela(dona, loja.donaEmail, true);
+  await entrarNaTela(dona, loja.donaEmail, true, loja.dona);
   await dona.goto(`/gestao/${loja.estId}/pendencias`);
   await expect(dona.getByText(/Pix pago depois de trocar o meio/).first()).toBeVisible({ timeout: 60_000 });
   const resumo = dona.getByRole("list", { name: "Resumo" });

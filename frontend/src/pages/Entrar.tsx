@@ -6,6 +6,8 @@ import { call, fieldErrors, problemMessage, type Problem } from "../api/problem"
 import { useSession } from "../session/context";
 import { safeReturn } from "../ui/retorno";
 import { Field, Notice, PageHeader, PasswordField, Segmented, Submit } from "../ui/ui";
+import { ConflitoDono } from "./ConflitoDono";
+import { conflitoDe, type OwnerSessionConflict } from "./conflito";
 
 /**
  * Entrar na conta. Com `equipe`, o contexto fica fixo em “Equipe da barbearia” e a pessoa volta
@@ -29,17 +31,32 @@ export function Entrar({
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<Problem | null>(null);
   const [offline, setOffline] = useState(false);
+  const [conflito, setConflito] = useState<OwnerSessionConflict | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
+
+  function seguir() {
+    // Volta para a loja de onde veio (contexto mantido); equipe vai para a gestão.
+    navigate(voltar ?? (context === "staff" ? "/gestao" : "/conta"));
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
+    setAviso(null);
     const out = await call(() => api.POST("/v1/auth/login", { body: { email, password, context } }));
     setBusy(false);
     if (out.ok) {
       setPassword("");
       await refresh();
-      // Volta para a loja de onde veio (contexto mantido); equipe vai para a gestão.
-      navigate(voltar ?? (context === "staff" ? "/gestao" : "/conta"));
+      seguir();
+      return;
+    }
+    const c = conflitoDe(out.problem);
+    if (c) {
+      // Credenciais certas, mas o acesso de dono está aberto em outro lugar: pergunta antes.
+      setPassword("");
+      setProblem(null);
+      setConflito(c);
       return;
     }
     setProblem(out.problem);
@@ -47,9 +64,27 @@ export function Entrar({
   }
 
   const errors = fieldErrors(problem);
+  if (conflito)
+    return (
+      <section aria-labelledby="titulo-entrar" className="grid gap-5">
+        <PageHeader id="titulo-entrar" title={titulo} description={descricao} />
+        <ConflitoDono
+          conflito={conflito}
+          onDone={() => {
+            setConflito(null);
+            seguir();
+          }}
+          onCancel={(msg) => {
+            setConflito(null);
+            setAviso(msg ?? "A outra sessão continua ativa. Nada foi alterado.");
+          }}
+        />
+      </section>
+    );
   return (
     <section aria-labelledby="titulo-entrar" className="grid gap-5">
       <PageHeader id="titulo-entrar" title={titulo} description={descricao} />
+      {aviso && <Notice kind="info">{aviso}</Notice>}
       {(problem || offline) && !problem?.errors?.length && (
         <Notice kind="erro">
           <p>{problemMessage(problem, offline)}</p>

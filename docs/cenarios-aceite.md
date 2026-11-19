@@ -1038,6 +1038,23 @@ E a homologação nunca aceita chave de produção.
 
 ---
 
+## Sessão única do dono (ADR-0027)
+
+### C-DON-01 — Outra sessão de dono ativa: cancelar mantém, confirmar transfere
+- Regras: ADR-0027 · Transições: T-SS-07 · Tipo: automatizado (TestOwnerSessionConflictThenCancel, TestOwnerSessionTakeover, frontend/src/pages/dono/sessao-unica.test.tsx)
+
+Dado o dono com a gestão aberta no navegador, quando entra em outro aparelho, então recebe owner_session_active sem cookie nem dados; cancelar mantém a sessão original; confirmar revoga a anterior e a nova recebe acesso só depois do commit; a sessão antiga perde leituras, mutações e SSE com a mensagem “Sua sessão foi encerrada porque você entrou em outro aparelho”; o logout atrasado dela não encerra a nova.
+
+### C-DON-02 — Disputas concorrentes pela vaga
+- Regras: ADR-0027 · Transições: T-SS-07 · Tipo: automatizado (TestOwnerConcurrentLogins, TestOwnerTakeoverRaceAndStaleChallenge, TestOwnerTakeoverWaitsForInFlightMutation)
+
+Dado uma conta dona, então dois logins simultâneos sem sessão prévia terminam com no máximo uma sessão de dono; duas confirmações contra a mesma sessão têm um único vencedor e a atrasada não derruba o vencedor; desafio emitido antes de outra troca é recusado; a troca espera a mutação já em andamento e, depois dela, a sessão antiga não efetiva nada.
+
+### C-DON-03 — Escopo por conta, abas e migração
+- Regras: ADR-0027 · Tipo: automatizado (TestOwnerSlotIsPerAccount, TestOwnerSameCookieAndChallengeBinding, TestOwnerSlotLifecycle, TestUpgradeKeepsOneOwnerSessionPerAccount)
+
+Dado o dono com a vaga ocupada, então abas com o mesmo cookie não disputam; duas contas donas da mesma loja trabalham juntas; trocar de loja não cria sessão; conta dona de A e profissional de B não abre segunda sessão pela rota de profissional; sessão de cliente não ocupa a vaga; expiração libera a vaga; vínculo removido tira o acesso de dono; na migração fica só a sessão de equipe usada por último de cada conta dona.
+
 ## Critérios de pronto do anexo (§15) → cenários
 
 | Critério do anexo | Cenários |

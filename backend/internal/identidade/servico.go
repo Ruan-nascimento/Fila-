@@ -142,6 +142,10 @@ type AccountSession struct {
 	AccountEmail     string
 	AccountStatus    string
 	EmailNormalized  string
+	LastUsedAt       time.Time
+	// OwnerHolder: esta sessão ocupa a vaga de dono da conta (ADR-0027). Só ela exerce
+	// privilégios de dono; outra sessão de equipe da mesma conta age, no máximo, como profissional.
+	OwnerHolder bool
 }
 
 // VisitorCredential é uma credencial de visitante válida (uma por loja no navegador).
@@ -155,9 +159,12 @@ type VisitorCredential struct {
 
 // Principal reúne as identidades válidas deste navegador.
 type Principal struct {
-	Session   *AccountSession
-	BrowserID *uuid.UUID // navegador de visitante (cookie de visitante válido)
-	Visitors  []VisitorCredential
+	Session *AccountSession
+	// EndedReason explica por que o cookie de sessão apresentado deixou de valer, quando o motivo
+	// é a vaga de dono (owner_session_replaced, owner_session_migration). Vazio nos demais casos.
+	EndedReason string
+	BrowserID   *uuid.UUID // navegador de visitante (cookie de visitante válido)
+	Visitors    []VisitorCredential
 }
 
 // VisitorIn devolve a credencial de visitante da loja, se houver.
@@ -201,7 +208,12 @@ func (s *Service) Middleware(next http.Handler) http.Handler {
 				return
 			}
 		}
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalKey{}, p)))
+		ctx := context.WithValue(r.Context(), principalKey{}, p)
+		if p.Session != nil && p.Session.OwnerHolder {
+			// Toda transação deste pedido revalida a vaga de dono no ponto de efetivação (FOR SHARE).
+			ctx = database.WithTxGuard(ctx, s.ownerGuard(p.Session.AccountID, p.Session.ID))
+		}
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
@@ -257,6 +269,11 @@ func (s *Service) resolve(ctx context.Context, r *http.Request) (*Principal, err
 			return nil, err
 		}
 		p.Session = sess
+		if sess == nil {
+			if p.EndedReason, err = endedReason(ctx, s.pool, hashToken(c.Value), now); err != nil {
+				return nil, err
+			}
+		}
 	}
 	if c, err := r.Cookie(s.visitorCookieName()); err == nil && c.Value != "" && len(c.Value) <= 64 {
 		if err := s.loadVisitors(ctx, s.pool, p, hashToken(c.Value), now); err != nil {
@@ -273,11 +290,13 @@ func (s *Service) loadSession(ctx context.Context, q database.Querier, tokenHash
 	var idle *int32
 	err := q.QueryRow(ctx, `
 		SELECT s.id, s.account_id, s.kind, s.created_at, s.last_used_at, s.absolute_expires_at,
-		       s.idle_timeout_seconds, s.reauth_valid_until, a.name, a.email, a.status, a.email_normalized
+		       s.idle_timeout_seconds, s.reauth_valid_until, a.name, a.email, a.status, a.email_normalized,
+		       EXISTS (SELECT 1 FROM owner_session_slot o WHERE o.account_id = s.account_id AND o.session_id = s.id)
 		FROM account_session s JOIN account a ON a.id = s.account_id
 		WHERE s.token_hash = $1 AND s.revoked_at IS NULL AND a.status = 'active'`, tokenHash).
 		Scan(&sess.ID, &sess.AccountID, &sess.Kind, &sess.CreatedAt, &lastUsed, &absolute, &idle,
-			&sess.ReauthValidUntil, &sess.AccountName, &sess.AccountEmail, &sess.AccountStatus, &sess.EmailNormalized)
+			&sess.ReauthValidUntil, &sess.AccountName, &sess.AccountEmail, &sess.AccountStatus, &sess.EmailNormalized,
+			&sess.OwnerHolder)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -298,6 +317,7 @@ func (s *Service) loadSession(ctx context.Context, q database.Querier, tokenHash
 		lastUsed = now
 	}
 	sess.ExpiresAt = absolute
+	sess.LastUsedAt = lastUsed
 	if idle != nil {
 		sess.ExpiresAt = minTime(absolute, lastUsed.Add(time.Duration(*idle)*time.Second))
 	}

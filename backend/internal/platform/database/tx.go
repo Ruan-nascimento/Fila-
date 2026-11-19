@@ -40,6 +40,11 @@ func InTx(ctx context.Context, pool *pgxpool.Pool, fn func(tx pgx.Tx) error) (er
 			_ = tx.Rollback(context.WithoutCancel(ctx))
 		}
 	}()
+	if guard, ok := ctx.Value(txGuardKey{}).(TxGuard); ok && guard != nil {
+		if err = guard(ctx, tx); err != nil {
+			return err
+		}
+	}
 	if err = fn(tx); err != nil {
 		return err
 	}
@@ -47,6 +52,25 @@ func InTx(ctx context.Context, pool *pgxpool.Pool, fn func(tx pgx.Tx) error) (er
 		return fmt.Errorf("confirmar transação: %s", Describe(err))
 	}
 	return nil
+}
+
+// TxGuard roda como primeiro comando de cada transação aberta por InTx com o contexto marcado
+// (WithTxGuard). Serve para revalidar a autoridade do ator no ponto de efetivação: o módulo
+// identidade, por exemplo, trava em modo compartilhado a vaga de dono da sessão (ADR-0027) e
+// recusa a transação se a sessão perdeu a vaga. Devolver erro desfaz a transação antes de fn.
+type TxGuard func(ctx context.Context, tx pgx.Tx) error
+
+type txGuardKey struct{}
+
+// WithTxGuard marca o contexto: toda transação InTx aberta com ele roda guard primeiro.
+func WithTxGuard(ctx context.Context, guard TxGuard) context.Context {
+	return context.WithValue(ctx, txGuardKey{}, guard)
+}
+
+// WithoutTxGuard tira a guarda (usado por quem troca a própria autoridade, como login e logout,
+// que travam a mesma linha em modo exclusivo).
+func WithoutTxGuard(ctx context.Context) context.Context {
+	return context.WithValue(ctx, txGuardKey{}, TxGuard(nil))
 }
 
 // IsUniqueViolation informa se err é violação de unicidade (23505), opcionalmente de uma

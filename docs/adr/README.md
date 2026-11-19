@@ -31,3 +31,4 @@ Para mudar uma decisão, crie um novo ADR que substitua o anterior (não reescre
 | [ADR-0024](0024-webhook-estorno-pendencias.md) | Webhook autenticado, estorno em três momentos e pendências financeiras | Aceita (etapa 09) |
 | [ADR-0025](0025-fidelidade-extrato-reservas.md) | Fidelidade: extrato materializado pelo banco, crédito na liquidação e reservas de 24 h | Aceita (etapa 10) |
 | [ADR-0026](0026-operacao-trava-restauracao-metricas.md) | Operação: trava do worker, conciliação pós-restauração, diário de exclusões e métricas internas | Aceita (etapa 12) |
+| [ADR-0027](0027-sessao-unica-do-dono-e-dashboard-desktop.md) | Sessão única do dono (vaga por conta), instalação desktop com prova DPoP e módulo analítico somente leitura | Aceita |
