@@ -107,7 +107,8 @@ func TestAuthorizationSweepAllRoutes(t *testing.T) {
 					return "proprio"
 				}
 			}
-			if ok, sc := grantFor(rt, "owner"); ok && slices.Contains(sc, "self") {
+			// owner_session: operação sobre a própria sessão de dono (ticket do Dashboard), sem loja.
+			if ok, sc := grantFor(rt, "owner"); ok && (slices.Contains(sc, "self") || slices.Contains(sc, "owner_session")) {
 				return "proprio"
 			}
 		}
@@ -165,6 +166,10 @@ func TestAuthorizationSweepAllRoutes(t *testing.T) {
 			body = map[string]any{"resolution_note": "teste de autorização"}
 		case "signalAvailability":
 			body = map[string]any{"unavailable": true}
+		case "activateDesktopInstallation":
+			body = map[string]any{"code": "ABCD-EFGH-JKMN-PQRS"}
+		case "createDesktopBinding":
+			body = map[string]any{"ticket": strings.Repeat("t", 43)}
 		}
 		return body
 	}

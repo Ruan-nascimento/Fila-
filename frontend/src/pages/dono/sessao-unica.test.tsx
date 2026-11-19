@@ -7,6 +7,7 @@ import { anonymousSession, fakeApi, problem } from "../../test/fake-api";
 import { AvisosGerais } from "../../ui/estados";
 import { GestaoLoja } from "../gestao/Gestao";
 import { AcessoDono } from "./Dono";
+import { DashboardSoNoPrograma } from "./Dashboard";
 
 const LOJA = "0190a000-0000-7000-8000-0000000000a1";
 const conta = {
@@ -59,6 +60,7 @@ function abrir(path: string) {
         <AvisosGerais />
         <Routes>
           <Route path="/dono" element={<AcessoDono />} />
+          <Route path="/dono/painel-analitico" element={<DashboardSoNoPrograma />} />
           <Route path="/gestao/:estId/*" element={<GestaoLoja />} />
         </Routes>
         <Where />
@@ -141,5 +143,16 @@ describe("sessão única do dono", () => {
       await screen.findByText("Sua sessão foi encerrada porque você entrou em outro aparelho."),
     ).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId("endereco")).toHaveTextContent("/dono"));
+  });
+
+  it("navegador comum: sem atalho de Dashboard e a URL do Dashboard não consulta nada analítico", async () => {
+    const { requests } = fakeApi({ "GET /v1/session": () => Response.json(donoSessao()), ...gestaoVazia });
+    sessionStorage.setItem("fila.modo", "dono"); // mesmo em modo dono, sem o programa
+    abrir(`/gestao/${LOJA}/filas`);
+    await screen.findAllByText("Loja A");
+    expect(screen.queryByRole("button", { name: "Dashboard" })).not.toBeInTheDocument();
+    abrir("/dono/painel-analitico");
+    expect(await screen.findByText(/O Dashboard abre só no programa Fila Gestão/)).toBeInTheDocument();
+    expect(requests.some((r) => r.path.startsWith("/v1/desktop/"))).toBe(false);
   });
 });

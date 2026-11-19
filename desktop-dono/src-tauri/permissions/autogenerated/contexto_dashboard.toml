@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-contexto-dashboard"
+description = "Enables the contexto_dashboard command without any pre-configured scope."
+commands.allow = ["contexto_dashboard"]
+
+[[permission]]
+identifier = "deny-contexto-dashboard"
+description = "Denies the contexto_dashboard command without any pre-configured scope."
+commands.deny = ["contexto_dashboard"]

@@ -5,6 +5,9 @@
 //   node testes/janela.mjs completo   login do dono, só a loja dele, URL direta recusada, fila em
 //                                     tempo real, trava de origem, conta só profissional recusada
 //   node testes/janela.mjs falha      painel fora do ar: tela local com "Tentar novamente"
+//   node testes/janela.mjs dashboard  ativação do PC, Dashboard local com a MESMA sessão, números
+//                                     reconciliados, navegador sem acesso ao analítico, troca de
+//                                     sessão web ↔ desktop e limpeza dos dados ao perder a vaga
 //
 // Variáveis: FG_APP (binário instalado), FG_BASE (origem do painel de teste, a mesma do build),
 // FG_ADMIN (fila-admin), FG_ADMIN_CWD (pasta com o .env do teste), FG_MAIL_DIR (e-mails em arquivo),
@@ -258,10 +261,116 @@ async function falha() {
   ok("Tentar novamente abriu o painel quando ele voltou");
 }
 
+// Atendimento pago em dinheiro (R$ 45 com R$ 50 entregues): dados reais para o Dashboard.
+async function atendimentoPago(loja, beto, betoApi, servico) {
+  const v = new Api();
+  await v.ok("POST", `/v1/establishments/${loja.estId}/visitor-sessions`, { nick: "Zé" });
+  await v.ok("POST", `/v1/establishments/${loja.estId}/participations`, { queue_id: beto.queue_id, service_ids: [servico.id] });
+  const chamada = await betoApi.ok("POST", `/v1/establishments/${loja.estId}/queues/${beto.queue_id}/call-next`);
+  const p = chamada.participation;
+  const ini = await betoApi.ok("POST", `/v1/establishments/${loja.estId}/participations/${p.id}/start`, { expected_version: p.version });
+  const fim = await betoApi.ok("POST", `/v1/establishments/${loja.estId}/participations/${p.id}/complete`, {
+    expected_version: ini.participation.version, order_expected_version: ini.order.version,
+    items: ini.order.items.map((i) => ({ item_id: i.id, outcome: "performed" })),
+  });
+  const pago = await betoApi.ok("POST", `/v1/establishments/${loja.estId}/orders/${fim.order.id}/receipts`, {
+    expected_version: fim.order.version, method: "cash", amount_cents: 4500, cash_tendered_cents: 5000,
+  });
+  await betoApi.ok("POST", `/v1/establishments/${loja.estId}/orders/${pago.id}/receipts/${pago.payment.receipts[0].id}/confer`, {});
+}
+
+async function dashboard() {
+  const run = `dash${Date.now().toString(36)}`;
+  console.log(`preparando dados (${run})…`);
+  const a = await lojaComDono(run);
+  const betoEmail = `beto-${run}@exemplo.com`;
+  const beto = await convidarProfissional(a, "Beto", "A", betoEmail, false);
+  const corte = await a.dono.ok("POST", `/v1/establishments/${a.estId}/services`, {
+    name: "Corte", price_cents: 4500, duration_minutes: 30, points: 0, professional_ids: [beto.id],
+  });
+  await a.dono.ok("POST", `/v1/establishments/${a.estId}/queues/${beto.queue_id}/open`, { expected_version: 1 });
+  const betoApi = new Api();
+  await betoApi.login(betoEmail, "staff");
+  await atendimentoPago(a, beto, betoApi, corte);
+  await a.dono.ok("POST", "/v1/auth/logout"); // a preparação sai; o dono vai entrar pelo programa
+  const codigo = /código de ativação: (\S+)/.exec(
+    execFileSync(env("FG_ADMIN"), ["desktop", "emitir-codigo", "-email", a.email, "-nome", "PC do teste"], { cwd: env("FG_ADMIN_CWD"), encoding: "utf-8" }),
+  )?.[1];
+  if (!codigo) throw new Error("fila-admin não emitiu o código");
+  ok("operador emitiu o código de ativação (fila-admin desktop emitir-codigo)");
+
+  await abrirPrograma();
+  await esperar("tela local abrir /dono", async () => (await url()) === `${BASE}/dono`);
+  await entrar(a.email);
+  await esperar("gestão da loja", async () => (await url()).includes(`/gestao/${a.estId}/filas`));
+  await esperar("atalho Dashboard na navegação do dono", async () => (await texto()).includes("Dashboard"));
+  ok("dono entrou pelo programa; a navegação mostra Dashboard e Filas");
+  await botao("Dashboard");
+  await esperar("página LOCAL do Dashboard (ativação)", async () =>
+    /^(tauri:\/\/localhost|https?:\/\/tauri\.localhost)\/dashboard\.html$/.test(await url()) && (await texto()).includes("Autorizar este computador"));
+  if ((await url()).includes("#")) throw new Error("ticket ficou na URL local");
+  ok("o atalho abriu a página local (ticket entregue ao nativo, fora da URL)");
+  await campo("input[placeholder='XXXX-XXXX-XXXX-XXXX']", codigo);
+  await botao("Ativar");
+  await esperar("indicadores do Dashboard", async () => (await texto()).includes("Recebimentos líquidos"), 45000);
+  await esperar("valor do caixa reconciliado (R$ 45,00)", async () => /R\$\s?45,00/.test(await texto()));
+  await foto("dash-1-painel");
+  ok("computador ativado; Dashboard com a MESMA sessão mostra R$ 45,00 (pago com R$ 50: o troco não entra no caixa)");
+  const t = await texto();
+  for (const aba of ["Visão geral", "Filas e atendimento", "Financeiro", "Profissionais e serviços", "Fidelidade"])
+    if (!t.includes(aba)) throw new Error(`aba ausente: ${aba}`);
+  for (const [w, h, nome] of [[1366, 768, "notebook-1366x768"], [1920, 1080, "largo-1920x1080"], [820, 620, "reduzida-820x620"]]) {
+    await wd("POST", "/window/rect", { width: w, height: h });
+    await sleep(800);
+    const vis = await js("const t=document.querySelector('header'); const k=[...document.querySelectorAll('section[aria-label=\"Indicadores principais\"] strong')]; return { loja: !!t && t.innerText.includes('Barbearia'), periodo: !!document.querySelector('header select, header h1'), destaque: k.length > 0 && k[0].getBoundingClientRect().top < innerHeight, rolagemH: document.documentElement.scrollWidth > innerWidth + 1 }");
+    if (!vis.loja || !vis.destaque || vis.rolagemH) throw new Error(`leitura em ${nome}: ${JSON.stringify(vis)}`);
+    await foto(`dash-tamanho-${nome}`);
+  }
+  await wd("POST", "/window/rect", { width: 1280, height: 820 });
+  ok("loja, período e destaque principal visíveis em 1366×768, 1920×1080 e 820×620 (sem rolagem horizontal)");
+  await botao("Financeiro");
+  await esperar("meios de pagamento", async () => (await texto()).includes("Meios de pagamento") && (await texto()).includes("Dinheiro"));
+  await foto("dash-2-financeiro");
+  ok("abas carregam sob demanda (Financeiro: meios de pagamento)");
+
+  // Navegador comum com cookie de dono: gestão sim, analítico não.
+  const web = new Api();
+  const tentativa = await web.req("POST", "/v1/auth/login", { email: a.email, password: SENHA, context: "staff" });
+  if (tentativa.status !== 409 || tentativa.json.code !== "owner_session_active") throw new Error(`login concorrente: ${tentativa.status}`);
+  if (tentativa.json.current.other_session.channel !== "desktop_authorized") throw new Error("canal da outra sessão");
+  ok("login no navegador com o Dashboard aberto: 409, a outra sessão é o programa autorizado");
+  await web.ok("POST", "/v1/auth/owner-session/takeover", { challenge: tentativa.json.current.challenge });
+  const direto = await web.req("GET", `/v1/desktop/analytics/establishments/${a.estId}/summary?from=2026-01-01&to=2026-01-02`);
+  if (direto.status !== 401) throw new Error(`analítico direto do navegador: ${direto.status}`);
+  await web.ok("GET", `/v1/establishments/${a.estId}/pendencies`);
+  ok("navegador assumiu: gestão funciona, chamada direta ao analítico recusada (401)");
+  await esperar("Dashboard limpo com a mensagem de troca", async () => (await texto()).includes("Sua sessão foi encerrada porque você entrou em outro aparelho"), 45000);
+  if (/R\$\s?45,00/.test(await texto())) throw new Error("números continuaram na tela");
+  await foto("dash-3-encerrado");
+  ok("o programa limpou os gráficos e explicou: entrou em outro aparelho");
+
+  await botao("Ir para o acesso");
+  await entrar(a.email);
+  await esperar("confirmação de troca no programa", async () => (await texto()).includes("Continuar neste aparelho e encerrar a outra sessão"));
+  await botao("Continuar neste aparelho e encerrar a outra sessão");
+  await esperar("gestão de volta no programa", async () => (await url()).includes(`/gestao/${a.estId}/`));
+  const depois = await web.req("GET", `/v1/establishments/${a.estId}/pendencies`);
+  if (depois.status !== 401 || depois.json.code !== "owner_session_replaced") throw new Error(`web depois da troca: ${depois.status}`);
+  ok("programa retomou a sessão: o navegador perdeu a gestão (owner_session_replaced)");
+  await esperar("atalho Dashboard depois da troca", async () => (await texto()).includes("Dashboard") && (await texto()).includes("Filas"));
+  await botao("Dashboard");
+  await esperar("Dashboard de novo, sem nova ativação", async () => (await texto()).includes("Recebimentos líquidos"), 45000);
+  ok("Dashboard reabre com a mesma sessão, sem pedir código (chave no cofre do sistema)");
+  await botao("Filas");
+  await esperar("Filas na gestão com um clique", async () => (await url()).includes(`/gestao/${a.estId}/filas`));
+  const s = await js("return fetch('/v1/session').then(r => r.json()).then(j => j.data.session && j.data.session.owner_authority)");
+  if (s !== true) throw new Error("gestão perdeu a sessão ao alternar");
+  ok("alternar Dashboard ↔ Filas não gera aviso de sessão concorrente");
+}
 
 const cenario = process.argv[2] ?? "completo";
 try {
-  await (cenario === "falha" ? falha : completo)();
+  await ({ falha, completo, dashboard }[cenario] ?? completo)();
   console.log(`# ${cenario}: ${passos} verificações, todas ok`);
 } catch (e) {
   console.error(`FALHOU: ${e.message}`);

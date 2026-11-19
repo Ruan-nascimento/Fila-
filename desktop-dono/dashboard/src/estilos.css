@@ -1,0 +1,22 @@
+/* Mesma identidade visual da gestão (zinc + purple, claro/escuro) e as classes dos componentes
+   compartilhados do frontend. */
+@import "../../../frontend/src/styles.css";
+@source "../../../frontend/src/ui";
+@source ".";
+
+/* Cores de série validadas (dataviz: validate_palette.js, claro e escuro). Identidade da série,
+   nunca estado. A 1ª é o violeta da marca. */
+:root {
+  --serie-1: #6250d6;
+  --serie-2: #eb6834;
+  --serie-3: #1baf7a;
+  --calor: #6250d6;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --serie-1: #9085e9;
+    --serie-2: #d95926;
+    --serie-3: #199e70;
+    --calor: #9085e9;
+  }
+}

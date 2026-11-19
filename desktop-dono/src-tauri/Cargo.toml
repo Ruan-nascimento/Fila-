@@ -1,6 +1,6 @@
 [package]
 name = "fila-gestao"
-version = "0.1.0"
+version = "0.2.0"
 description = "Fila Gestão: programa do dono da barbearia (abre a gestão do site)"
 edition = "2021"
 rust-version = "1.85"
@@ -20,6 +20,26 @@ tauri-plugin-opener = "=2.7.2"
 serde = { version = "1", features = ["derive"] }
 # Só para conferir se o painel responde antes de abri-lo (TLS com raízes embutidas, sem OpenSSL).
 ureq = "=3.5.1"
+serde_json = "1"
+# Chave da instalação e prova DPoP (RFC 9449): ES256 da RustCrypto (bibliotecas mantidas).
+p256 = { version = "0.13", features = ["ecdsa", "std"] }
+rand_core = { version = "0.6", features = ["getrandom"] }
+sha2 = "0.10"
+base64 = "0.22"
+httpdate = "1"
+uuid = { version = "1", features = ["serde"] }
+url = "2"
+
+# Chave privada no cofre do sistema: Gerenciador de Credenciais (Windows) e Secret Service
+# (GNOME Keyring/KWallet, Linux). Nunca em arquivo comum nem no JavaScript.
+[target.'cfg(windows)'.dependencies]
+keyring = { version = "3", features = ["windows-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
 
 [profile.release]
 codegen-units = 1

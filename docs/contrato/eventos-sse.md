@@ -154,6 +154,8 @@ Mensagens do próprio fluxo:
 - `stream.snapshot`: `id` = cursor do instante do snapshot; `audience` = a mais específica concedida (owner > professional > account > visit > public); `resource` = `{type: "stream", id: <id da conexão>, version: <posição>}`; `data` segue `StreamSnapshot` (`pendencies` vem preenchido para o dono desde a etapa 09; `loyalty` vem preenchido para o canal `account` desde a etapa 10).
 - `stream.session_ended`: sem `id` (não muda o cursor); `data` = `{"reason": "session_revoked"}` ou `{"reason": "owner_session_replaced"}` (o dono entrou em outro aparelho, ADR-0027). O servidor fecha a conexão logo depois; o navegador relê a sessão (que traz `ended_reason`), limpa as telas de gestão e explica o motivo.
 
+**Fluxo do Dashboard desktop** (`GET /v1/desktop/analytics/establishments/{id}/stream`, ADR-0027): separado deste, autorizado por prova DPoP. Não leva dados: `ready`, `invalidate` (`{"areas": [...]}`, mudanças agrupadas por ~3 s, sem `queue.*`) e `session_ended`. Reconferido a cada 30 s e a cada aviso de revogação.
+
 Versão de recurso nos eventos de fila: `queue.version` + contador de atividade da fila (as duas só crescem). Depois de um snapshot, o cliente recomeça as versões conhecidas.
 
 Limites deste processo: as 6 conexões por credencial são contadas por processo da API (com N processos, até 6 × N).

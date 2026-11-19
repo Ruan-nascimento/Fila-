@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "types": ["vite/client"],
+    "skipLibCheck": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "baseUrl": ".",
+    "paths": {
+      "@web/*": ["../../frontend/src/*"],
+      "react": ["../node_modules/@types/react"],
+      "react/*": ["../node_modules/@types/react/*"],
+      "react-router": ["../node_modules/react-router"],
+      "lucide-react": ["../node_modules/lucide-react"]
+    }
+  },
+  "include": ["src"]
+}

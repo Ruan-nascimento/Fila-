@@ -59,6 +59,16 @@ Não edite à mão: rode `python docs/tools/verificar_contrato.py --write`. Cél
 | `reauthenticate` | `POST /v1/auth/reauthenticate` | — | — | self | self | self | — | — | T-SS-06 |
 | `registerAccount` | `POST /v1/auth/register` | sim | — | — | — | — | — | — | T-AC-01 |
 | `getDeletionRequestStatus` | `POST /v1/deletion-requests/status` | protocol_holder | — | — | — | — | — | — | — |
+| `getAnalyticsBreakdown` | `GET /v1/desktop/analytics/establishments/{establishmentId}/breakdowns/{dimension}` | — | — | — | — | — | — | — | — |
+| `listAnalyticsRecords` | `GET /v1/desktop/analytics/establishments/{establishmentId}/records/{kind}` | — | — | — | — | — | — | — | — |
+| `getAnalyticsSeries` | `GET /v1/desktop/analytics/establishments/{establishmentId}/series/{metric}` | — | — | — | — | — | — | — | — |
+| `openAnalyticsStream` | `GET /v1/desktop/analytics/establishments/{establishmentId}/stream` | — | — | — | — | — | — | — | — |
+| `getAnalyticsSummary` | `GET /v1/desktop/analytics/establishments/{establishmentId}/summary` | — | — | — | — | — | — | — | — |
+| `createDesktopBinding` | `POST /v1/desktop/bindings` | — | — | — | — | — | — | — | T-DK-03 |
+| `endDesktopBinding` | `POST /v1/desktop/bindings/current/end` | — | — | — | — | — | — | — | — |
+| `getDesktopContext` | `GET /v1/desktop/context` | — | — | — | — | — | — | — | — |
+| `activateDesktopInstallation` | `POST /v1/desktop/installations/activate` | — | — | — | — | — | — | — | T-DK-02 |
+| `createDesktopLinkTicket` | `POST /v1/desktop/link-tickets` | — | — | — | — | owner_session | — | — | — |
 | `getEstablishment` | `GET /v1/establishments/{establishmentId}` | — | — | — | establishment_member | establishment | — | — | — |
 | `updateEstablishment` | `PATCH /v1/establishments/{establishmentId}` | — | — | — | — | establishment | — | — | T-ES-01 |
 | `listAuditEvents` | `GET /v1/establishments/{establishmentId}/audit-events` | — | — | — | — | establishment | — | — | — |

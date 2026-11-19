@@ -35,6 +35,168 @@ func (e AccountStatus) Valid() bool {
 	}
 }
 
+// Defines values for AnalyticsBreakdownStatus.
+const (
+	AnalyticsBreakdownStatusNotApplicable AnalyticsBreakdownStatus = "not_applicable"
+	AnalyticsBreakdownStatusNotCollected  AnalyticsBreakdownStatus = "not_collected"
+	AnalyticsBreakdownStatusOk            AnalyticsBreakdownStatus = "ok"
+)
+
+// Valid indicates whether the value is a known member of the AnalyticsBreakdownStatus enum.
+func (e AnalyticsBreakdownStatus) Valid() bool {
+	switch e {
+	case AnalyticsBreakdownStatusNotApplicable:
+		return true
+	case AnalyticsBreakdownStatusNotCollected:
+		return true
+	case AnalyticsBreakdownStatusOk:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AnalyticsMetaFiltersMethod.
+const (
+	AnalyticsMetaFiltersMethodCard        AnalyticsMetaFiltersMethod = "card"
+	AnalyticsMetaFiltersMethodCash        AnalyticsMetaFiltersMethod = "cash"
+	AnalyticsMetaFiltersMethodLessThannil AnalyticsMetaFiltersMethod = "<nil>"
+	AnalyticsMetaFiltersMethodPix         AnalyticsMetaFiltersMethod = "pix"
+)
+
+// Valid indicates whether the value is a known member of the AnalyticsMetaFiltersMethod enum.
+func (e AnalyticsMetaFiltersMethod) Valid() bool {
+	switch e {
+	case AnalyticsMetaFiltersMethodCard:
+		return true
+	case AnalyticsMetaFiltersMethodCash:
+		return true
+	case AnalyticsMetaFiltersMethodLessThannil:
+		return true
+	case AnalyticsMetaFiltersMethodPix:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AnalyticsMetaGranularity.
+const (
+	AnalyticsMetaGranularityDay   AnalyticsMetaGranularity = "day"
+	AnalyticsMetaGranularityHour  AnalyticsMetaGranularity = "hour"
+	AnalyticsMetaGranularityMonth AnalyticsMetaGranularity = "month"
+	AnalyticsMetaGranularityWeek  AnalyticsMetaGranularity = "week"
+)
+
+// Valid indicates whether the value is a known member of the AnalyticsMetaGranularity enum.
+func (e AnalyticsMetaGranularity) Valid() bool {
+	switch e {
+	case AnalyticsMetaGranularityDay:
+		return true
+	case AnalyticsMetaGranularityHour:
+		return true
+	case AnalyticsMetaGranularityMonth:
+		return true
+	case AnalyticsMetaGranularityWeek:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AnalyticsMetaUnitsCurrency.
+const (
+	AnalyticsMetaUnitsCurrencyBRL AnalyticsMetaUnitsCurrency = "BRL"
+)
+
+// Valid indicates whether the value is a known member of the AnalyticsMetaUnitsCurrency enum.
+func (e AnalyticsMetaUnitsCurrency) Valid() bool {
+	switch e {
+	case AnalyticsMetaUnitsCurrencyBRL:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AnalyticsMetaUnitsDuration.
+const (
+	AnalyticsMetaUnitsDurationSeconds AnalyticsMetaUnitsDuration = "seconds"
+)
+
+// Valid indicates whether the value is a known member of the AnalyticsMetaUnitsDuration enum.
+func (e AnalyticsMetaUnitsDuration) Valid() bool {
+	switch e {
+	case AnalyticsMetaUnitsDurationSeconds:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AnalyticsMetaUnitsMoney.
+const (
+	AnalyticsMetaUnitsMoneyCents AnalyticsMetaUnitsMoney = "cents"
+)
+
+// Valid indicates whether the value is a known member of the AnalyticsMetaUnitsMoney enum.
+func (e AnalyticsMetaUnitsMoney) Valid() bool {
+	switch e {
+	case AnalyticsMetaUnitsMoneyCents:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AnalyticsSeriesSeriesUnit.
+const (
+	AnalyticsSeriesSeriesUnitCents   AnalyticsSeriesSeriesUnit = "cents"
+	AnalyticsSeriesSeriesUnitCount   AnalyticsSeriesSeriesUnit = "count"
+	AnalyticsSeriesSeriesUnitPoints  AnalyticsSeriesSeriesUnit = "points"
+	AnalyticsSeriesSeriesUnitSeconds AnalyticsSeriesSeriesUnit = "seconds"
+)
+
+// Valid indicates whether the value is a known member of the AnalyticsSeriesSeriesUnit enum.
+func (e AnalyticsSeriesSeriesUnit) Valid() bool {
+	switch e {
+	case AnalyticsSeriesSeriesUnitCents:
+		return true
+	case AnalyticsSeriesSeriesUnitCount:
+		return true
+	case AnalyticsSeriesSeriesUnitPoints:
+		return true
+	case AnalyticsSeriesSeriesUnitSeconds:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AnalyticsValueStatus.
+const (
+	AnalyticsValueStatusEmpty         AnalyticsValueStatus = "empty"
+	AnalyticsValueStatusNotApplicable AnalyticsValueStatus = "not_applicable"
+	AnalyticsValueStatusNotCollected  AnalyticsValueStatus = "not_collected"
+	AnalyticsValueStatusOk            AnalyticsValueStatus = "ok"
+)
+
+// Valid indicates whether the value is a known member of the AnalyticsValueStatus enum.
+func (e AnalyticsValueStatus) Valid() bool {
+	switch e {
+	case AnalyticsValueStatusEmpty:
+		return true
+	case AnalyticsValueStatusNotApplicable:
+		return true
+	case AnalyticsValueStatusNotCollected:
+		return true
+	case AnalyticsValueStatusOk:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AudienceKind.
 const (
 	AudienceKindAccount      AudienceKind = "account"
@@ -245,13 +407,34 @@ func (e DeletionStatus) Valid() bool {
 	}
 }
 
+// Defines values for DesktopBindingTokenType.
+const (
+	DPoP DesktopBindingTokenType = "DPoP"
+)
+
+// Valid indicates whether the value is a known member of the DesktopBindingTokenType enum.
+func (e DesktopBindingTokenType) Valid() bool {
+	switch e {
+	case DPoP:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ErrorCode.
 const (
 	ErrorCodeAccountRequired                     ErrorCode = "account_required"
 	ErrorCodeActiveParticipationExists           ErrorCode = "active_participation_exists"
+	ErrorCodeAnalyticsFilterNotApplicable        ErrorCode = "analytics_filter_not_applicable"
 	ErrorCodeChangeRequestPending                ErrorCode = "change_request_pending"
 	ErrorCodeCsrfFailed                          ErrorCode = "csrf_failed"
 	ErrorCodeDeletionInProgress                  ErrorCode = "deletion_in_progress"
+	ErrorCodeDesktopAccessInvalid                ErrorCode = "desktop_access_invalid"
+	ErrorCodeDesktopActivationInvalid            ErrorCode = "desktop_activation_invalid"
+	ErrorCodeDesktopInstallationInvalid          ErrorCode = "desktop_installation_invalid"
+	ErrorCodeDesktopLinkInvalid                  ErrorCode = "desktop_link_invalid"
+	ErrorCodeDesktopProofInvalid                 ErrorCode = "desktop_proof_invalid"
 	ErrorCodeDuplicateService                    ErrorCode = "duplicate_service"
 	ErrorCodeEmailNotVerified                    ErrorCode = "email_not_verified"
 	ErrorCodeForbidden                           ErrorCode = "forbidden"
@@ -321,11 +504,23 @@ func (e ErrorCode) Valid() bool {
 		return true
 	case ErrorCodeActiveParticipationExists:
 		return true
+	case ErrorCodeAnalyticsFilterNotApplicable:
+		return true
 	case ErrorCodeChangeRequestPending:
 		return true
 	case ErrorCodeCsrfFailed:
 		return true
 	case ErrorCodeDeletionInProgress:
+		return true
+	case ErrorCodeDesktopAccessInvalid:
+		return true
+	case ErrorCodeDesktopActivationInvalid:
+		return true
+	case ErrorCodeDesktopInstallationInvalid:
+		return true
+	case ErrorCodeDesktopLinkInvalid:
+		return true
+	case ErrorCodeDesktopProofInvalid:
 		return true
 	case ErrorCodeDuplicateService:
 		return true
@@ -769,13 +964,13 @@ func (e LedgerEntryKind) Valid() bool {
 
 // Defines values for MoneyCurrency.
 const (
-	BRL MoneyCurrency = "BRL"
+	MoneyCurrencyBRL MoneyCurrency = "BRL"
 )
 
 // Valid indicates whether the value is a known member of the MoneyCurrency enum.
 func (e MoneyCurrency) Valid() bool {
 	switch e {
-	case BRL:
+	case MoneyCurrencyBRL:
 		return true
 	default:
 		return false
@@ -1400,6 +1595,42 @@ func (e TransferRequestCustomerConsentMethod) Valid() bool {
 	}
 }
 
+// Defines values for AnalyticsCompare.
+const (
+	AnalyticsComparePrevious AnalyticsCompare = "previous"
+)
+
+// Valid indicates whether the value is a known member of the AnalyticsCompare enum.
+func (e AnalyticsCompare) Valid() bool {
+	switch e {
+	case AnalyticsComparePrevious:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AnalyticsMethod.
+const (
+	AnalyticsMethodCard AnalyticsMethod = "card"
+	AnalyticsMethodCash AnalyticsMethod = "cash"
+	AnalyticsMethodPix  AnalyticsMethod = "pix"
+)
+
+// Valid indicates whether the value is a known member of the AnalyticsMethod enum.
+func (e AnalyticsMethod) Valid() bool {
+	switch e {
+	case AnalyticsMethodCard:
+		return true
+	case AnalyticsMethodCash:
+		return true
+	case AnalyticsMethodPix:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for HealthStatus.
 const (
 	HealthStatusNotReady HealthStatus = "not_ready"
@@ -1454,6 +1685,324 @@ func (e GetReadiness200JSONResponseBodyStatus) Valid() bool {
 	}
 }
 
+// Defines values for GetAnalyticsBreakdownParamsCompare.
+const (
+	GetAnalyticsBreakdownParamsComparePrevious GetAnalyticsBreakdownParamsCompare = "previous"
+)
+
+// Valid indicates whether the value is a known member of the GetAnalyticsBreakdownParamsCompare enum.
+func (e GetAnalyticsBreakdownParamsCompare) Valid() bool {
+	switch e {
+	case GetAnalyticsBreakdownParamsComparePrevious:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetAnalyticsBreakdownParamsMethod.
+const (
+	GetAnalyticsBreakdownParamsMethodCard GetAnalyticsBreakdownParamsMethod = "card"
+	GetAnalyticsBreakdownParamsMethodCash GetAnalyticsBreakdownParamsMethod = "cash"
+	GetAnalyticsBreakdownParamsMethodPix  GetAnalyticsBreakdownParamsMethod = "pix"
+)
+
+// Valid indicates whether the value is a known member of the GetAnalyticsBreakdownParamsMethod enum.
+func (e GetAnalyticsBreakdownParamsMethod) Valid() bool {
+	switch e {
+	case GetAnalyticsBreakdownParamsMethodCard:
+		return true
+	case GetAnalyticsBreakdownParamsMethodCash:
+		return true
+	case GetAnalyticsBreakdownParamsMethodPix:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetAnalyticsBreakdownParamsDimension.
+const (
+	GetAnalyticsBreakdownParamsDimensionOutcomes       GetAnalyticsBreakdownParamsDimension = "outcomes"
+	GetAnalyticsBreakdownParamsDimensionPaymentMethods GetAnalyticsBreakdownParamsDimension = "payment_methods"
+	GetAnalyticsBreakdownParamsDimensionPeakHours      GetAnalyticsBreakdownParamsDimension = "peak_hours"
+	GetAnalyticsBreakdownParamsDimensionPending        GetAnalyticsBreakdownParamsDimension = "pending"
+	GetAnalyticsBreakdownParamsDimensionProfessionals  GetAnalyticsBreakdownParamsDimension = "professionals"
+	GetAnalyticsBreakdownParamsDimensionRecurrence     GetAnalyticsBreakdownParamsDimension = "recurrence"
+	GetAnalyticsBreakdownParamsDimensionRewards        GetAnalyticsBreakdownParamsDimension = "rewards"
+	GetAnalyticsBreakdownParamsDimensionServices       GetAnalyticsBreakdownParamsDimension = "services"
+	GetAnalyticsBreakdownParamsDimensionWaitBands      GetAnalyticsBreakdownParamsDimension = "wait_bands"
+)
+
+// Valid indicates whether the value is a known member of the GetAnalyticsBreakdownParamsDimension enum.
+func (e GetAnalyticsBreakdownParamsDimension) Valid() bool {
+	switch e {
+	case GetAnalyticsBreakdownParamsDimensionOutcomes:
+		return true
+	case GetAnalyticsBreakdownParamsDimensionPaymentMethods:
+		return true
+	case GetAnalyticsBreakdownParamsDimensionPeakHours:
+		return true
+	case GetAnalyticsBreakdownParamsDimensionPending:
+		return true
+	case GetAnalyticsBreakdownParamsDimensionProfessionals:
+		return true
+	case GetAnalyticsBreakdownParamsDimensionRecurrence:
+		return true
+	case GetAnalyticsBreakdownParamsDimensionRewards:
+		return true
+	case GetAnalyticsBreakdownParamsDimensionServices:
+		return true
+	case GetAnalyticsBreakdownParamsDimensionWaitBands:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListAnalyticsRecordsParamsState.
+const (
+	ListAnalyticsRecordsParamsStateOpen     ListAnalyticsRecordsParamsState = "open"
+	ListAnalyticsRecordsParamsStateOpened   ListAnalyticsRecordsParamsState = "opened"
+	ListAnalyticsRecordsParamsStateResolved ListAnalyticsRecordsParamsState = "resolved"
+)
+
+// Valid indicates whether the value is a known member of the ListAnalyticsRecordsParamsState enum.
+func (e ListAnalyticsRecordsParamsState) Valid() bool {
+	switch e {
+	case ListAnalyticsRecordsParamsStateOpen:
+		return true
+	case ListAnalyticsRecordsParamsStateOpened:
+		return true
+	case ListAnalyticsRecordsParamsStateResolved:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListAnalyticsRecordsParamsBand.
+const (
+	N05   ListAnalyticsRecordsParamsBand = "0-5"
+	N1530 ListAnalyticsRecordsParamsBand = "15-30"
+	N3060 ListAnalyticsRecordsParamsBand = "30-60"
+	N515  ListAnalyticsRecordsParamsBand = "5-15"
+	N60   ListAnalyticsRecordsParamsBand = "60+"
+)
+
+// Valid indicates whether the value is a known member of the ListAnalyticsRecordsParamsBand enum.
+func (e ListAnalyticsRecordsParamsBand) Valid() bool {
+	switch e {
+	case N05:
+		return true
+	case N1530:
+		return true
+	case N3060:
+		return true
+	case N515:
+		return true
+	case N60:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListAnalyticsRecordsParamsCompare.
+const (
+	ListAnalyticsRecordsParamsComparePrevious ListAnalyticsRecordsParamsCompare = "previous"
+)
+
+// Valid indicates whether the value is a known member of the ListAnalyticsRecordsParamsCompare enum.
+func (e ListAnalyticsRecordsParamsCompare) Valid() bool {
+	switch e {
+	case ListAnalyticsRecordsParamsComparePrevious:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListAnalyticsRecordsParamsMethod.
+const (
+	ListAnalyticsRecordsParamsMethodCard ListAnalyticsRecordsParamsMethod = "card"
+	ListAnalyticsRecordsParamsMethodCash ListAnalyticsRecordsParamsMethod = "cash"
+	ListAnalyticsRecordsParamsMethodPix  ListAnalyticsRecordsParamsMethod = "pix"
+)
+
+// Valid indicates whether the value is a known member of the ListAnalyticsRecordsParamsMethod enum.
+func (e ListAnalyticsRecordsParamsMethod) Valid() bool {
+	switch e {
+	case ListAnalyticsRecordsParamsMethodCard:
+		return true
+	case ListAnalyticsRecordsParamsMethodCash:
+		return true
+	case ListAnalyticsRecordsParamsMethodPix:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListAnalyticsRecordsParamsKind.
+const (
+	FinancialIssues ListAnalyticsRecordsParamsKind = "financial_issues"
+	LoyaltyEntries  ListAnalyticsRecordsParamsKind = "loyalty_entries"
+	Orders          ListAnalyticsRecordsParamsKind = "orders"
+	Participations  ListAnalyticsRecordsParamsKind = "participations"
+	Receipts        ListAnalyticsRecordsParamsKind = "receipts"
+	Refunds         ListAnalyticsRecordsParamsKind = "refunds"
+	ServiceItems    ListAnalyticsRecordsParamsKind = "service_items"
+)
+
+// Valid indicates whether the value is a known member of the ListAnalyticsRecordsParamsKind enum.
+func (e ListAnalyticsRecordsParamsKind) Valid() bool {
+	switch e {
+	case FinancialIssues:
+		return true
+	case LoyaltyEntries:
+		return true
+	case Orders:
+		return true
+	case Participations:
+		return true
+	case Receipts:
+		return true
+	case Refunds:
+		return true
+	case ServiceItems:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetAnalyticsSeriesParamsGranularity.
+const (
+	GetAnalyticsSeriesParamsGranularityDay   GetAnalyticsSeriesParamsGranularity = "day"
+	GetAnalyticsSeriesParamsGranularityHour  GetAnalyticsSeriesParamsGranularity = "hour"
+	GetAnalyticsSeriesParamsGranularityMonth GetAnalyticsSeriesParamsGranularity = "month"
+	GetAnalyticsSeriesParamsGranularityWeek  GetAnalyticsSeriesParamsGranularity = "week"
+)
+
+// Valid indicates whether the value is a known member of the GetAnalyticsSeriesParamsGranularity enum.
+func (e GetAnalyticsSeriesParamsGranularity) Valid() bool {
+	switch e {
+	case GetAnalyticsSeriesParamsGranularityDay:
+		return true
+	case GetAnalyticsSeriesParamsGranularityHour:
+		return true
+	case GetAnalyticsSeriesParamsGranularityMonth:
+		return true
+	case GetAnalyticsSeriesParamsGranularityWeek:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetAnalyticsSeriesParamsCompare.
+const (
+	GetAnalyticsSeriesParamsComparePrevious GetAnalyticsSeriesParamsCompare = "previous"
+)
+
+// Valid indicates whether the value is a known member of the GetAnalyticsSeriesParamsCompare enum.
+func (e GetAnalyticsSeriesParamsCompare) Valid() bool {
+	switch e {
+	case GetAnalyticsSeriesParamsComparePrevious:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetAnalyticsSeriesParamsMethod.
+const (
+	GetAnalyticsSeriesParamsMethodCard GetAnalyticsSeriesParamsMethod = "card"
+	GetAnalyticsSeriesParamsMethodCash GetAnalyticsSeriesParamsMethod = "cash"
+	GetAnalyticsSeriesParamsMethodPix  GetAnalyticsSeriesParamsMethod = "pix"
+)
+
+// Valid indicates whether the value is a known member of the GetAnalyticsSeriesParamsMethod enum.
+func (e GetAnalyticsSeriesParamsMethod) Valid() bool {
+	switch e {
+	case GetAnalyticsSeriesParamsMethodCard:
+		return true
+	case GetAnalyticsSeriesParamsMethodCash:
+		return true
+	case GetAnalyticsSeriesParamsMethodPix:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetAnalyticsSeriesParamsMetric.
+const (
+	GetAnalyticsSeriesParamsMetricCash     GetAnalyticsSeriesParamsMetric = "cash"
+	GetAnalyticsSeriesParamsMetricDuration GetAnalyticsSeriesParamsMetric = "duration"
+	GetAnalyticsSeriesParamsMetricLoyalty  GetAnalyticsSeriesParamsMetric = "loyalty"
+	GetAnalyticsSeriesParamsMetricMovement GetAnalyticsSeriesParamsMetric = "movement"
+	GetAnalyticsSeriesParamsMetricTicket   GetAnalyticsSeriesParamsMetric = "ticket"
+	GetAnalyticsSeriesParamsMetricWait     GetAnalyticsSeriesParamsMetric = "wait"
+)
+
+// Valid indicates whether the value is a known member of the GetAnalyticsSeriesParamsMetric enum.
+func (e GetAnalyticsSeriesParamsMetric) Valid() bool {
+	switch e {
+	case GetAnalyticsSeriesParamsMetricCash:
+		return true
+	case GetAnalyticsSeriesParamsMetricDuration:
+		return true
+	case GetAnalyticsSeriesParamsMetricLoyalty:
+		return true
+	case GetAnalyticsSeriesParamsMetricMovement:
+		return true
+	case GetAnalyticsSeriesParamsMetricTicket:
+		return true
+	case GetAnalyticsSeriesParamsMetricWait:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetAnalyticsSummaryParamsCompare.
+const (
+	GetAnalyticsSummaryParamsComparePrevious GetAnalyticsSummaryParamsCompare = "previous"
+)
+
+// Valid indicates whether the value is a known member of the GetAnalyticsSummaryParamsCompare enum.
+func (e GetAnalyticsSummaryParamsCompare) Valid() bool {
+	switch e {
+	case GetAnalyticsSummaryParamsComparePrevious:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetAnalyticsSummaryParamsMethod.
+const (
+	GetAnalyticsSummaryParamsMethodCard GetAnalyticsSummaryParamsMethod = "card"
+	GetAnalyticsSummaryParamsMethodCash GetAnalyticsSummaryParamsMethod = "cash"
+	GetAnalyticsSummaryParamsMethodPix  GetAnalyticsSummaryParamsMethod = "pix"
+)
+
+// Valid indicates whether the value is a known member of the GetAnalyticsSummaryParamsMethod enum.
+func (e GetAnalyticsSummaryParamsMethod) Valid() bool {
+	switch e {
+	case GetAnalyticsSummaryParamsMethodCard:
+		return true
+	case GetAnalyticsSummaryParamsMethodCash:
+		return true
+	case GetAnalyticsSummaryParamsMethodPix:
+		return true
+	default:
+		return false
+	}
+}
+
 // AcceptInviteRequest defines model for AcceptInviteRequest.
 type AcceptInviteRequest struct {
 	// Name Obrigatório quando cria conta nova.
@@ -1487,6 +2036,197 @@ type AdjustOrderRequest struct {
 	Reason          Reason  `json:"reason"`
 	UnchargeItemIds *[]Id   `json:"uncharge_item_ids,omitempty"`
 }
+
+// AnalyticsBreakdown defines model for AnalyticsBreakdown.
+type AnalyticsBreakdown struct {
+	Dimension string `json:"dimension"`
+
+	// Rows Formato por dimensão (docs/desktop/metricas.md §Detalhamentos).
+	Rows   interface{}              `json:"rows"`
+	Status AnalyticsBreakdownStatus `json:"status"`
+}
+
+// AnalyticsBreakdownStatus defines model for AnalyticsBreakdown.Status.
+type AnalyticsBreakdownStatus string
+
+// AnalyticsCash defines model for AnalyticsCash.
+type AnalyticsCash struct {
+	IgnoredFilters []string `json:"ignored_filters"`
+
+	// NetCents value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+	NetCents AnalyticsValue `json:"net_cents"`
+
+	// Receipts value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+	Receipts AnalyticsValue `json:"receipts"`
+
+	// ReceivedCents value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+	ReceivedCents AnalyticsValue `json:"received_cents"`
+
+	// RefundedCents value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+	RefundedCents AnalyticsValue `json:"refunded_cents"`
+
+	// Refunds value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+	Refunds AnalyticsValue `json:"refunds"`
+}
+
+// AnalyticsMeta defines model for AnalyticsMeta.
+type AnalyticsMeta struct {
+	// CollectionStartedAt RFC 3339 em UTC com sufixo Z.
+	CollectionStartedAt Timestamp        `json:"collection_started_at"`
+	ComparePeriod       *AnalyticsPeriod `json:"compare_period"`
+
+	// EstablishmentId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	EstablishmentId   Id     `json:"establishment_id"`
+	EstablishmentName string `json:"establishment_name"`
+	Filters           struct {
+		Method         *AnalyticsMetaFiltersMethod `json:"method"`
+		ProfessionalId *openapi_types.UUID         `json:"professional_id"`
+		ServiceId      *openapi_types.UUID         `json:"service_id"`
+	} `json:"filters"`
+
+	// GeneratedAt RFC 3339 em UTC com sufixo Z.
+	GeneratedAt Timestamp                 `json:"generated_at"`
+	Granularity *AnalyticsMetaGranularity `json:"granularity,omitempty"`
+
+	// IgnoredFilters Filtros ativos sem atribuição confiável nesta consulta (os valores afetados saem not_applicable).
+	IgnoredFilters []string        `json:"ignored_filters"`
+	Missing        string          `json:"missing"`
+	Period         AnalyticsPeriod `json:"period"`
+
+	// SnapshotAt RFC 3339 em UTC com sufixo Z.
+	SnapshotAt *Timestamp `json:"snapshot_at,omitempty"`
+	Timezone   string     `json:"timezone"`
+	Units      struct {
+		Currency AnalyticsMetaUnitsCurrency `json:"currency"`
+		Duration AnalyticsMetaUnitsDuration `json:"duration"`
+		Money    AnalyticsMetaUnitsMoney    `json:"money"`
+	} `json:"units"`
+}
+
+// AnalyticsMetaFiltersMethod defines model for AnalyticsMeta.Filters.Method.
+type AnalyticsMetaFiltersMethod string
+
+// AnalyticsMetaGranularity defines model for AnalyticsMeta.Granularity.
+type AnalyticsMetaGranularity string
+
+// AnalyticsMetaUnitsCurrency defines model for AnalyticsMeta.Units.Currency.
+type AnalyticsMetaUnitsCurrency string
+
+// AnalyticsMetaUnitsDuration defines model for AnalyticsMeta.Units.Duration.
+type AnalyticsMetaUnitsDuration string
+
+// AnalyticsMetaUnitsMoney defines model for AnalyticsMeta.Units.Money.
+type AnalyticsMetaUnitsMoney string
+
+// AnalyticsPeriod defines model for AnalyticsPeriod.
+type AnalyticsPeriod struct {
+	// EffectiveEnd RFC 3339 em UTC com sufixo Z.
+	EffectiveEnd Timestamp `json:"effective_end"`
+
+	// End RFC 3339 em UTC com sufixo Z.
+	End  Timestamp          `json:"end"`
+	From openapi_types.Date `json:"from"`
+
+	// Start RFC 3339 em UTC com sufixo Z.
+	Start Timestamp          `json:"start"`
+	To    openapi_types.Date `json:"to"`
+}
+
+// AnalyticsRecords defines model for AnalyticsRecords.
+type AnalyticsRecords struct {
+	Items      []map[string]interface{} `json:"items"`
+	Kind       string                   `json:"kind"`
+	NextCursor *string                  `json:"next_cursor"`
+
+	// Total Quantidade do recorte inteiro (todas as páginas).
+	Total      int  `json:"total"`
+	TotalCents *int `json:"total_cents"`
+	Window     struct {
+		// End RFC 3339 em UTC com sufixo Z.
+		End Timestamp `json:"end"`
+
+		// Start RFC 3339 em UTC com sufixo Z.
+		Start Timestamp `json:"start"`
+	} `json:"window"`
+}
+
+// AnalyticsSeries defines model for AnalyticsSeries.
+type AnalyticsSeries struct {
+	Buckets []struct {
+		Collected bool `json:"collected"`
+
+		// End RFC 3339 em UTC com sufixo Z.
+		End     Timestamp `json:"end"`
+		Label   string    `json:"label"`
+		Partial bool      `json:"partial"`
+
+		// Start RFC 3339 em UTC com sufixo Z.
+		Start  Timestamp                 `json:"start"`
+		Values map[string]AnalyticsValue `json:"values"`
+	} `json:"buckets"`
+	CompareTotals *map[string]AnalyticsValue `json:"compare_totals"`
+	Metric        string                     `json:"metric"`
+	Series        []struct {
+		Key   string                    `json:"key"`
+		Label string                    `json:"label"`
+		Unit  AnalyticsSeriesSeriesUnit `json:"unit"`
+	} `json:"series"`
+	Totals map[string]AnalyticsValue `json:"totals"`
+}
+
+// AnalyticsSeriesSeriesUnit defines model for AnalyticsSeries.Series.Unit.
+type AnalyticsSeriesSeriesUnit string
+
+// AnalyticsSummary defines model for AnalyticsSummary.
+type AnalyticsSummary struct {
+	Compare *AnalyticsSummaryPart `json:"compare"`
+	Current AnalyticsSummaryPart  `json:"current"`
+
+	// PendingNow Fotografia do instante snapshot_at (não depende do período).
+	PendingNow struct {
+		ChargesUnknown             int      `json:"charges_unknown"`
+		IgnoredFilters             []string `json:"ignored_filters"`
+		OpenFinancialIssues        int      `json:"open_financial_issues"`
+		OpenFinancialIssuesCents   int      `json:"open_financial_issues_cents"`
+		OrdersAwaitingConfirmation int      `json:"orders_awaiting_confirmation"`
+		OrdersAwaitingPayment      int      `json:"orders_awaiting_payment"`
+		OrdersAwaitingPaymentCents int      `json:"orders_awaiting_payment_cents"`
+		RefundsUnderReview         int      `json:"refunds_under_review"`
+
+		// SnapshotAt RFC 3339 em UTC com sufixo Z.
+		SnapshotAt Timestamp `json:"snapshot_at"`
+		Total      int       `json:"total"`
+	} `json:"pending_now"`
+}
+
+// AnalyticsSummaryPart defines model for AnalyticsSummaryPart.
+type AnalyticsSummaryPart struct {
+	Cash      AnalyticsCash `json:"cash"`
+	Completed struct {
+		// Count value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+		Count          AnalyticsValue `json:"count"`
+		IgnoredFilters []string       `json:"ignored_filters"`
+	} `json:"completed"`
+	Wait struct {
+		IgnoredFilters []string `json:"ignored_filters"`
+
+		// MedianSeconds value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+		MedianSeconds AnalyticsValue `json:"median_seconds"`
+
+		// P90Seconds value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+		P90Seconds AnalyticsValue `json:"p90_seconds"`
+	} `json:"wait"`
+}
+
+// AnalyticsValue value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+type AnalyticsValue struct {
+	Sample *int                 `json:"sample,omitempty"`
+	Status AnalyticsValueStatus `json:"status"`
+	Value  *float32             `json:"value"`
+}
+
+// AnalyticsValueStatus defines model for AnalyticsValue.Status.
+type AnalyticsValueStatus string
 
 // AudienceKind Canal/audiência de eventos SSE.
 type AudienceKind string
@@ -1703,6 +2443,58 @@ type DeletionStatus string
 // DeletionStatusRequest defines model for DeletionStatusRequest.
 type DeletionStatusRequest struct {
 	Protocol string `json:"protocol"`
+}
+
+// DesktopBinding defines model for DesktopBinding.
+type DesktopBinding struct {
+	AccessToken string `json:"access_token"`
+
+	// ExpiresAt RFC 3339 em UTC com sufixo Z.
+	ExpiresAt    Timestamp               `json:"expires_at"`
+	Installation DesktopInstallation     `json:"installation"`
+	TokenType    DesktopBindingTokenType `json:"token_type"`
+}
+
+// DesktopBindingTokenType defines model for DesktopBinding.TokenType.
+type DesktopBindingTokenType string
+
+// DesktopContext defines model for DesktopContext.
+type DesktopContext struct {
+	// AccessExpiresAt RFC 3339 em UTC com sufixo Z.
+	AccessExpiresAt Timestamp `json:"access_expires_at"`
+	Account         struct {
+		// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+		Id   Id     `json:"id"`
+		Name string `json:"name"`
+	} `json:"account"`
+	Establishments []struct {
+		// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+		Id       Id     `json:"id"`
+		Name     string `json:"name"`
+		Timezone string `json:"timezone"`
+	} `json:"establishments"`
+	Installation struct {
+		// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+		Id    Id     `json:"id"`
+		Label string `json:"label"`
+	} `json:"installation"`
+}
+
+// DesktopInstallation defines model for DesktopInstallation.
+type DesktopInstallation struct {
+	// CreatedAt RFC 3339 em UTC com sufixo Z.
+	CreatedAt Timestamp `json:"created_at"`
+
+	// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	Id    Id     `json:"id"`
+	Label string `json:"label"`
+}
+
+// DesktopLinkTicket defines model for DesktopLinkTicket.
+type DesktopLinkTicket struct {
+	// ExpiresAt RFC 3339 em UTC com sufixo Z.
+	ExpiresAt Timestamp `json:"expires_at"`
+	Ticket    string    `json:"ticket"`
 }
 
 // EmailRequest defines model for EmailRequest.
@@ -2773,6 +3565,24 @@ type VisitorView struct {
 	Nick Nick `json:"nick"`
 }
 
+// AnalyticsCompare defines model for AnalyticsCompare.
+type AnalyticsCompare string
+
+// AnalyticsFrom defines model for AnalyticsFrom.
+type AnalyticsFrom = openapi_types.Date
+
+// AnalyticsMethod defines model for AnalyticsMethod.
+type AnalyticsMethod string
+
+// AnalyticsProfessional Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+type AnalyticsProfessional = Id
+
+// AnalyticsService Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+type AnalyticsService = Id
+
+// AnalyticsTo defines model for AnalyticsTo.
+type AnalyticsTo = openapi_types.Date
+
 // ChangeRequestId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
 type ChangeRequestId = Id
 
@@ -2781,6 +3591,9 @@ type ChargeId = Id
 
 // Cursor defines model for Cursor.
 type Cursor = string
+
+// DPoPProof defines model for DPoPProof.
+type DPoPProof = string
 
 // EstablishmentId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
 type EstablishmentId = Id
@@ -2930,6 +3743,180 @@ type GetLiveness200JSONResponseBodyStatus string
 
 // GetReadiness200JSONResponseBodyStatus defines parameters for GetReadiness.
 type GetReadiness200JSONResponseBodyStatus string
+
+// GetAnalyticsBreakdownParams defines parameters for GetAnalyticsBreakdown.
+type GetAnalyticsBreakdownParams struct {
+	// From Primeiro dia (data LOCAL da loja), inclusivo.
+	From AnalyticsFrom `form:"from" json:"from"`
+
+	// To Último dia (data LOCAL da loja), inclusivo. Intervalo consultado [from 00:00, to+1 00:00) no fuso da loja; no máximo 366 dias.
+	To AnalyticsTo `form:"to" json:"to"`
+
+	// Compare previous = período anterior equivalente, com o mesmo tempo transcorrido.
+	Compare        *GetAnalyticsBreakdownParamsCompare `form:"compare,omitempty" json:"compare,omitempty"`
+	ProfessionalId *AnalyticsProfessional              `form:"professional_id,omitempty" json:"professional_id,omitempty"`
+	ServiceId      *AnalyticsService                   `form:"service_id,omitempty" json:"service_id,omitempty"`
+	Method         *GetAnalyticsBreakdownParamsMethod  `form:"method,omitempty" json:"method,omitempty"`
+
+	// DPoP Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min.
+	DPoP DPoPProof `json:"DPoP"`
+}
+
+// GetAnalyticsBreakdownParamsCompare defines parameters for GetAnalyticsBreakdown.
+type GetAnalyticsBreakdownParamsCompare string
+
+// GetAnalyticsBreakdownParamsMethod defines parameters for GetAnalyticsBreakdown.
+type GetAnalyticsBreakdownParamsMethod string
+
+// GetAnalyticsBreakdownParamsDimension defines parameters for GetAnalyticsBreakdown.
+type GetAnalyticsBreakdownParamsDimension string
+
+// ListAnalyticsRecordsParams defines parameters for ListAnalyticsRecords.
+type ListAnalyticsRecordsParams struct {
+	BucketStart *Timestamp `form:"bucket_start,omitempty" json:"bucket_start,omitempty"`
+	BucketEnd   *Timestamp `form:"bucket_end,omitempty" json:"bucket_end,omitempty"`
+	Cursor      *string    `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// Ref participations: entered|called|finished; service_items: performed|added
+	Ref *string `form:"ref,omitempty" json:"ref,omitempty"`
+
+	// State financial_issues: open (agora) | opened | resolved (no período)
+	State *ListAnalyticsRecordsParamsState `form:"state,omitempty" json:"state,omitempty"`
+
+	// Kind financial_issues: tipo; loyalty_entries: credited|used|returned|adjusted
+	Kind   *string                         `form:"kind,omitempty" json:"kind,omitempty"`
+	Status *string                         `form:"status,omitempty" json:"status,omitempty"`
+	Dow    *int                            `form:"dow,omitempty" json:"dow,omitempty"`
+	Hour   *int                            `form:"hour,omitempty" json:"hour,omitempty"`
+	Band   *ListAnalyticsRecordsParamsBand `form:"band,omitempty" json:"band,omitempty"`
+
+	// From Primeiro dia (data LOCAL da loja), inclusivo.
+	From AnalyticsFrom `form:"from" json:"from"`
+
+	// To Último dia (data LOCAL da loja), inclusivo. Intervalo consultado [from 00:00, to+1 00:00) no fuso da loja; no máximo 366 dias.
+	To AnalyticsTo `form:"to" json:"to"`
+
+	// Compare previous = período anterior equivalente, com o mesmo tempo transcorrido.
+	Compare        *ListAnalyticsRecordsParamsCompare `form:"compare,omitempty" json:"compare,omitempty"`
+	ProfessionalId *AnalyticsProfessional             `form:"professional_id,omitempty" json:"professional_id,omitempty"`
+	ServiceId      *AnalyticsService                  `form:"service_id,omitempty" json:"service_id,omitempty"`
+	Method         *ListAnalyticsRecordsParamsMethod  `form:"method,omitempty" json:"method,omitempty"`
+
+	// DPoP Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min.
+	DPoP DPoPProof `json:"DPoP"`
+}
+
+// ListAnalyticsRecordsParamsState defines parameters for ListAnalyticsRecords.
+type ListAnalyticsRecordsParamsState string
+
+// ListAnalyticsRecordsParamsBand defines parameters for ListAnalyticsRecords.
+type ListAnalyticsRecordsParamsBand string
+
+// ListAnalyticsRecordsParamsCompare defines parameters for ListAnalyticsRecords.
+type ListAnalyticsRecordsParamsCompare string
+
+// ListAnalyticsRecordsParamsMethod defines parameters for ListAnalyticsRecords.
+type ListAnalyticsRecordsParamsMethod string
+
+// ListAnalyticsRecordsParamsKind defines parameters for ListAnalyticsRecords.
+type ListAnalyticsRecordsParamsKind string
+
+// GetAnalyticsSeriesParams defines parameters for GetAnalyticsSeries.
+type GetAnalyticsSeriesParams struct {
+	Granularity *GetAnalyticsSeriesParamsGranularity `form:"granularity,omitempty" json:"granularity,omitempty"`
+
+	// From Primeiro dia (data LOCAL da loja), inclusivo.
+	From AnalyticsFrom `form:"from" json:"from"`
+
+	// To Último dia (data LOCAL da loja), inclusivo. Intervalo consultado [from 00:00, to+1 00:00) no fuso da loja; no máximo 366 dias.
+	To AnalyticsTo `form:"to" json:"to"`
+
+	// Compare previous = período anterior equivalente, com o mesmo tempo transcorrido.
+	Compare        *GetAnalyticsSeriesParamsCompare `form:"compare,omitempty" json:"compare,omitempty"`
+	ProfessionalId *AnalyticsProfessional           `form:"professional_id,omitempty" json:"professional_id,omitempty"`
+	ServiceId      *AnalyticsService                `form:"service_id,omitempty" json:"service_id,omitempty"`
+	Method         *GetAnalyticsSeriesParamsMethod  `form:"method,omitempty" json:"method,omitempty"`
+
+	// DPoP Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min.
+	DPoP DPoPProof `json:"DPoP"`
+}
+
+// GetAnalyticsSeriesParamsGranularity defines parameters for GetAnalyticsSeries.
+type GetAnalyticsSeriesParamsGranularity string
+
+// GetAnalyticsSeriesParamsCompare defines parameters for GetAnalyticsSeries.
+type GetAnalyticsSeriesParamsCompare string
+
+// GetAnalyticsSeriesParamsMethod defines parameters for GetAnalyticsSeries.
+type GetAnalyticsSeriesParamsMethod string
+
+// GetAnalyticsSeriesParamsMetric defines parameters for GetAnalyticsSeries.
+type GetAnalyticsSeriesParamsMetric string
+
+// OpenAnalyticsStreamParams defines parameters for OpenAnalyticsStream.
+type OpenAnalyticsStreamParams struct {
+	// DPoP Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min.
+	DPoP DPoPProof `json:"DPoP"`
+}
+
+// GetAnalyticsSummaryParams defines parameters for GetAnalyticsSummary.
+type GetAnalyticsSummaryParams struct {
+	// From Primeiro dia (data LOCAL da loja), inclusivo.
+	From AnalyticsFrom `form:"from" json:"from"`
+
+	// To Último dia (data LOCAL da loja), inclusivo. Intervalo consultado [from 00:00, to+1 00:00) no fuso da loja; no máximo 366 dias.
+	To AnalyticsTo `form:"to" json:"to"`
+
+	// Compare previous = período anterior equivalente, com o mesmo tempo transcorrido.
+	Compare        *GetAnalyticsSummaryParamsCompare `form:"compare,omitempty" json:"compare,omitempty"`
+	ProfessionalId *AnalyticsProfessional            `form:"professional_id,omitempty" json:"professional_id,omitempty"`
+	ServiceId      *AnalyticsService                 `form:"service_id,omitempty" json:"service_id,omitempty"`
+	Method         *GetAnalyticsSummaryParamsMethod  `form:"method,omitempty" json:"method,omitempty"`
+
+	// DPoP Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min.
+	DPoP DPoPProof `json:"DPoP"`
+}
+
+// GetAnalyticsSummaryParamsCompare defines parameters for GetAnalyticsSummary.
+type GetAnalyticsSummaryParamsCompare string
+
+// GetAnalyticsSummaryParamsMethod defines parameters for GetAnalyticsSummary.
+type GetAnalyticsSummaryParamsMethod string
+
+// CreateDesktopBindingJSONBody defines parameters for CreateDesktopBinding.
+type CreateDesktopBindingJSONBody struct {
+	Ticket string `json:"ticket"`
+}
+
+// CreateDesktopBindingParams defines parameters for CreateDesktopBinding.
+type CreateDesktopBindingParams struct {
+	// DPoP Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min.
+	DPoP DPoPProof `json:"DPoP"`
+}
+
+// EndDesktopBindingParams defines parameters for EndDesktopBinding.
+type EndDesktopBindingParams struct {
+	// DPoP Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min.
+	DPoP DPoPProof `json:"DPoP"`
+}
+
+// GetDesktopContextParams defines parameters for GetDesktopContext.
+type GetDesktopContextParams struct {
+	// DPoP Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min.
+	DPoP DPoPProof `json:"DPoP"`
+}
+
+// ActivateDesktopInstallationJSONBody defines parameters for ActivateDesktopInstallation.
+type ActivateDesktopInstallationJSONBody struct {
+	// Code Formato XXXX-XXXX-XXXX-XXXX (Crockford).
+	Code string `json:"code"`
+}
+
+// ActivateDesktopInstallationParams defines parameters for ActivateDesktopInstallation.
+type ActivateDesktopInstallationParams struct {
+	// DPoP Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min.
+	DPoP DPoPProof `json:"DPoP"`
+}
 
 // UpdateEstablishmentParams defines parameters for UpdateEstablishment.
 type UpdateEstablishmentParams struct {
@@ -3339,6 +4326,12 @@ type RegisterAccountJSONRequestBody = RegisterAccountRequest
 
 // GetDeletionRequestStatusJSONRequestBody defines body for GetDeletionRequestStatus for application/json ContentType.
 type GetDeletionRequestStatusJSONRequestBody = DeletionStatusRequest
+
+// CreateDesktopBindingJSONRequestBody defines body for CreateDesktopBinding for application/json ContentType.
+type CreateDesktopBindingJSONRequestBody CreateDesktopBindingJSONBody
+
+// ActivateDesktopInstallationJSONRequestBody defines body for ActivateDesktopInstallation for application/json ContentType.
+type ActivateDesktopInstallationJSONRequestBody ActivateDesktopInstallationJSONBody
 
 // UpdateEstablishmentJSONRequestBody defines body for UpdateEstablishment for application/json ContentType.
 type UpdateEstablishmentJSONRequestBody = UpdateEstablishmentRequest

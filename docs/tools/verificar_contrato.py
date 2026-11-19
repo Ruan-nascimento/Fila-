@@ -37,13 +37,17 @@ CENARIOS = DOCS / "cenarios-aceite.md"
 EVENTOS = DOCS / "contrato" / "eventos-sse.md"
 ADR_DIR = DOCS / "adr"
 
-ACTORS = ["public", "visitor", "customer", "professional", "owner", "provider"]
+# desktop_installation: o componente nativo provando a posse da chave (ativação e vínculo);
+# owner_desktop: sessão de dono ocupante + instalação autorizada (ADR-0027).
+ACTORS = ["public", "visitor", "customer", "professional", "owner", "provider", "desktop_installation", "owner_desktop"]
 SCOPES = {
     "none", "self", "visit_owner", "own_queue", "own_attendance",
     "establishment_member", "establishment", "provider_signature", "protocol_holder",
+    "activation_code", "link_ticket", "owner_session",
 }
 MUTATING = {"post", "put", "patch", "delete"}
-IDEMPOTENCY_EXEMPT = ("/v1/auth/", "/visitor-sessions", "/v1/webhooks/", "/v1/deletion-requests/status")
+# /v1/desktop/: cada comando é de uso único por construção (código, ticket e jti da prova DPoP).
+IDEMPOTENCY_EXEMPT = ("/v1/auth/", "/visitor-sessions", "/v1/webhooks/", "/v1/deletion-requests/status", "/v1/desktop/")
 PUBLIC_MUTATION_ALLOWED = ("/v1/auth/", "/visitor-sessions", "/v1/deletion-requests/status", "/healthz/")
 MARK_START = "<!-- gerado:permissoes:inicio -->"
 MARK_END = "<!-- gerado:permissoes:fim -->"

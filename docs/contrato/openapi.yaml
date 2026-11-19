@@ -50,6 +50,10 @@ tags:
     description: Fluxo SSE de atualizações.
   - name: provedor
     description: Notificações do provedor de pagamento.
+  - name: desktop
+    description: Instalações do programa do dono (ativação, vínculo à sessão de dono, prova DPoP).
+  - name: analitico
+    description: Dashboard analítico exclusivo do programa desktop do dono.
 
 paths:
   /healthz/live:
@@ -2616,6 +2620,334 @@ paths:
         '429': { $ref: '#/components/responses/TooManyRequests' }
         default: { $ref: '#/components/responses/Unexpected' }
 
+  /v1/desktop/installations/activate:
+    post:
+      operationId: activateDesktopInstallation
+      tags: [desktop]
+      summary: Ativa um computador com o código de uso único emitido pelo operador (fila-admin).
+      description: |
+        O componente nativo envia o código e um cabeçalho `DPoP` (RFC 9449, ES256) assinado pela chave
+        privada recém-criada da instalação, com a chave pública no cabeçalho `jwk`. O servidor guarda só
+        a chave pública e a impressão digital (RFC 7638). Sem sessão nem cookie.
+      security: [{ desktopProof: [] }]
+      x-authz: [{ actor: desktop_installation, scope: activation_code }]
+      x-transitions: [T-DK-02]
+      parameters:
+        - { $ref: '#/components/parameters/DPoPProof' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [code]
+              properties:
+                code: { type: string, minLength: 16, maxLength: 24, description: 'Formato XXXX-XXXX-XXXX-XXXX (Crockford).' }
+      responses:
+        '201':
+          description: Instalação autorizada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/DesktopInstallation' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/desktop/link-tickets:
+    post:
+      operationId: createDesktopLinkTicket
+      tags: [desktop]
+      summary: Ticket de 60 s para o Dashboard local usar a MESMA sessão de dono (troca mediada pelo servidor).
+      description: |
+        Pedido da gestão aberta na janela do programa, com o cookie da sessão de dono ocupante da vaga. O
+        ticket não é credencial sozinho: só vira acesso quando trocado com prova de posse da chave de uma
+        instalação autorizada da MESMA conta. Nenhum cookie é copiado para JavaScript ou arquivo.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: owner_session }]
+      responses:
+        '201':
+          description: Ticket emitido (no-store).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/DesktopLinkTicket' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/desktop/bindings:
+    post:
+      operationId: createDesktopBinding
+      tags: [desktop]
+      summary: Troca o ticket (com prova DPoP) por um token de acesso preso à chave da instalação.
+      description: |
+        O token (tipo DPoP) vale enquanto a sessão do ticket for a ocupante da vaga de dono, no máximo 2 h.
+        Revogar a sessão, trocar de aparelho, sair, remover o vínculo de dono ou revogar a instalação
+        invalida as consultas seguintes.
+      security: [{ desktopProof: [] }]
+      x-authz: [{ actor: desktop_installation, scope: link_ticket }]
+      x-transitions: [T-DK-03]
+      parameters:
+        - { $ref: '#/components/parameters/DPoPProof' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [ticket]
+              properties:
+                ticket: { type: string, minLength: 20, maxLength: 64 }
+      responses:
+        '201':
+          description: Vínculo criado (no-store).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/DesktopBinding' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/desktop/bindings/current/end:
+    post:
+      operationId: endDesktopBinding
+      tags: [desktop]
+      summary: Encerra o acesso do Dashboard local (a sessão de dono na gestão continua).
+      security: [{ desktopToken: [], desktopProof: [] }]
+      x-authz: [{ actor: owner_desktop, scope: self }]
+      parameters:
+        - { $ref: '#/components/parameters/DPoPProof' }
+      responses:
+        '204': { description: Vínculo encerrado. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/desktop/context:
+    get:
+      operationId: getDesktopContext
+      tags: [desktop]
+      summary: Conta, instalação e lojas em que a conta é DONA (lojas só de profissional não aparecem).
+      security: [{ desktopToken: [], desktopProof: [] }]
+      x-authz: [{ actor: owner_desktop, scope: self }]
+      parameters:
+        - { $ref: '#/components/parameters/DPoPProof' }
+      responses:
+        '200':
+          description: Contexto do Dashboard (no-store).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/DesktopContext' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/desktop/analytics/establishments/{establishmentId}/summary:
+    get:
+      operationId: getAnalyticsSummary
+      tags: [analitico]
+      summary: Quatro indicadores da primeira dobra (+ comparação e pendências abertas agora).
+      description: |
+        Exclusivo do programa desktop (ADR-0027): exige ao mesmo tempo sessão de dono ocupante da vaga,
+        prova DPoP de instalação autorizada e vínculo de dono com a loja. Loja sem vínculo de dono → 404.
+        Resposta `Cache-Control: no-store`; agregação no servidor. Dicionário: docs/desktop/metricas.md.
+      security: [{ desktopToken: [], desktopProof: [] }]
+      x-authz: [{ actor: owner_desktop, scope: establishment }]
+      parameters:
+        - { $ref: '#/components/parameters/DPoPProof' }
+        - { $ref: '#/components/parameters/EstablishmentId' }
+        - { $ref: '#/components/parameters/AnalyticsFrom' }
+        - { $ref: '#/components/parameters/AnalyticsTo' }
+        - { $ref: '#/components/parameters/AnalyticsCompare' }
+        - { $ref: '#/components/parameters/AnalyticsProfessional' }
+        - { $ref: '#/components/parameters/AnalyticsService' }
+        - { $ref: '#/components/parameters/AnalyticsMethod' }
+      responses:
+        '200':
+          description: Dados agregados com meta (período efetivo, fuso, instante, unidades, ausências).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data: { $ref: '#/components/schemas/AnalyticsSummary' }
+                  meta: { $ref: '#/components/schemas/AnalyticsMeta' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/desktop/analytics/establishments/{establishmentId}/series/{metric}:
+    get:
+      operationId: getAnalyticsSeries
+      tags: [analitico]
+      summary: Série temporal de uma métrica (cash, ticket, movement, wait, duration, loyalty).
+      description: |
+        Exclusivo do programa desktop (ADR-0027): exige ao mesmo tempo sessão de dono ocupante da vaga,
+        prova DPoP de instalação autorizada e vínculo de dono com a loja. Loja sem vínculo de dono → 404.
+        Resposta `Cache-Control: no-store`; agregação no servidor. Dicionário: docs/desktop/metricas.md.
+      security: [{ desktopToken: [], desktopProof: [] }]
+      x-authz: [{ actor: owner_desktop, scope: establishment }]
+      parameters:
+        - { $ref: '#/components/parameters/DPoPProof' }
+        - { $ref: '#/components/parameters/EstablishmentId' }
+        - name: metric
+          in: path
+          required: true
+          schema: { type: string, enum: [cash, ticket, movement, wait, duration, loyalty] }
+        - name: granularity
+          in: query
+          required: false
+          schema: { type: string, enum: [hour, day, week, month] }
+        - { $ref: '#/components/parameters/AnalyticsFrom' }
+        - { $ref: '#/components/parameters/AnalyticsTo' }
+        - { $ref: '#/components/parameters/AnalyticsCompare' }
+        - { $ref: '#/components/parameters/AnalyticsProfessional' }
+        - { $ref: '#/components/parameters/AnalyticsService' }
+        - { $ref: '#/components/parameters/AnalyticsMethod' }
+      responses:
+        '200':
+          description: Dados agregados com meta (período efetivo, fuso, instante, unidades, ausências).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data: { $ref: '#/components/schemas/AnalyticsSeries' }
+                  meta: { $ref: '#/components/schemas/AnalyticsMeta' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/desktop/analytics/establishments/{establishmentId}/breakdowns/{dimension}:
+    get:
+      operationId: getAnalyticsBreakdown
+      tags: [analitico]
+      summary: Agregado por categoria.
+      description: |
+        Exclusivo do programa desktop (ADR-0027): exige ao mesmo tempo sessão de dono ocupante da vaga,
+        prova DPoP de instalação autorizada e vínculo de dono com a loja. Loja sem vínculo de dono → 404.
+        Resposta `Cache-Control: no-store`; agregação no servidor. Dicionário: docs/desktop/metricas.md.
+      security: [{ desktopToken: [], desktopProof: [] }]
+      x-authz: [{ actor: owner_desktop, scope: establishment }]
+      parameters:
+        - { $ref: '#/components/parameters/DPoPProof' }
+        - { $ref: '#/components/parameters/EstablishmentId' }
+        - name: dimension
+          in: path
+          required: true
+          schema: { type: string, enum: [payment_methods, outcomes, professionals, services, peak_hours, wait_bands, pending, rewards, recurrence] }
+        - { $ref: '#/components/parameters/AnalyticsFrom' }
+        - { $ref: '#/components/parameters/AnalyticsTo' }
+        - { $ref: '#/components/parameters/AnalyticsCompare' }
+        - { $ref: '#/components/parameters/AnalyticsProfessional' }
+        - { $ref: '#/components/parameters/AnalyticsService' }
+        - { $ref: '#/components/parameters/AnalyticsMethod' }
+      responses:
+        '200':
+          description: Dados agregados com meta (período efetivo, fuso, instante, unidades, ausências).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data: { $ref: '#/components/schemas/AnalyticsBreakdown' }
+                  meta: { $ref: '#/components/schemas/AnalyticsMeta' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/desktop/analytics/establishments/{establishmentId}/records/{kind}:
+    get:
+      operationId: listAnalyticsRecords
+      tags: [analitico]
+      summary: Registros que formam um total, paginados no servidor (50 por página).
+      description: |
+        Exclusivo do programa desktop (ADR-0027): exige ao mesmo tempo sessão de dono ocupante da vaga,
+        prova DPoP de instalação autorizada e vínculo de dono com a loja. Loja sem vínculo de dono → 404.
+        Resposta `Cache-Control: no-store`; agregação no servidor. Dicionário: docs/desktop/metricas.md.
+        Filtro sem atribuição confiável neste tipo de registro → 422 `analytics_filter_not_applicable`.
+      security: [{ desktopToken: [], desktopProof: [] }]
+      x-authz: [{ actor: owner_desktop, scope: establishment }]
+      parameters:
+        - { $ref: '#/components/parameters/DPoPProof' }
+        - { $ref: '#/components/parameters/EstablishmentId' }
+        - name: kind
+          in: path
+          required: true
+          schema: { type: string, enum: [receipts, refunds, orders, participations, service_items, financial_issues, loyalty_entries] }
+        - { name: bucket_start, in: query, required: false, schema: { $ref: '#/components/schemas/Timestamp' } }
+        - { name: bucket_end, in: query, required: false, schema: { $ref: '#/components/schemas/Timestamp' } }
+        - { name: cursor, in: query, required: false, schema: { type: string, maxLength: 300 } }
+        - { name: ref, in: query, required: false, description: 'participations: entered|called|finished; service_items: performed|added', schema: { type: string } }
+        - { name: state, in: query, required: false, description: 'financial_issues: open (agora) | opened | resolved (no período)', schema: { type: string, enum: [open, opened, resolved] } }
+        - { name: kind, in: query, required: false, description: 'financial_issues: tipo; loyalty_entries: credited|used|returned|adjusted', schema: { type: string } }
+        - { name: status, in: query, required: false, schema: { type: string } }
+        - { name: dow, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 7 } }
+        - { name: hour, in: query, required: false, schema: { type: integer, minimum: 0, maximum: 23 } }
+        - { name: band, in: query, required: false, schema: { type: string, enum: ['0-5', '5-15', '15-30', '30-60', '60+'] } }
+        - { $ref: '#/components/parameters/AnalyticsFrom' }
+        - { $ref: '#/components/parameters/AnalyticsTo' }
+        - { $ref: '#/components/parameters/AnalyticsCompare' }
+        - { $ref: '#/components/parameters/AnalyticsProfessional' }
+        - { $ref: '#/components/parameters/AnalyticsService' }
+        - { $ref: '#/components/parameters/AnalyticsMethod' }
+      responses:
+        '200':
+          description: Dados agregados com meta (período efetivo, fuso, instante, unidades, ausências).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data: { $ref: '#/components/schemas/AnalyticsRecords' }
+                  meta: { $ref: '#/components/schemas/AnalyticsMeta' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/desktop/analytics/establishments/{establishmentId}/stream:
+    get:
+      operationId: openAnalyticsStream
+      tags: [analitico]
+      summary: SSE de invalidação do Dashboard (só nomes de áreas, agrupados; sem dados).
+      description: |
+        `event: ready` (todas as áreas), `event: invalidate` ({"areas": [...]}, agrupado por ~3 s),
+        `event: session_ended` ({"reason": "owner_session_replaced" | "session_revoked"}). Reconferido a cada
+        30 s e a cada revogação. Mudança de posição na fila não invalida nada.
+      security: [{ desktopToken: [], desktopProof: [] }]
+      x-authz: [{ actor: owner_desktop, scope: establishment }]
+      parameters:
+        - { $ref: '#/components/parameters/DPoPProof' }
+        - { $ref: '#/components/parameters/EstablishmentId' }
+      responses:
+        '200':
+          description: Fluxo text/event-stream.
+          content:
+            text/event-stream:
+              schema: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+
 components:
   securitySchemes:
     accountSession:
@@ -2633,6 +2965,15 @@ components:
       in: header
       name: X-CSRF-Token
       description: Token obtido em getSession, vinculado às sessões do navegador. Obrigatório em métodos não seguros quando há sessão; Origin é validado sempre.
+    desktopProof:
+      type: apiKey
+      in: header
+      name: DPoP
+      description: Prova de posse (RFC 9449, ES256, typ dpop+jwt) da chave da instalação desktop; htm/htu/iat/jti (e ath com token). Uso único.
+    desktopToken:
+      type: http
+      scheme: DPoP
+      description: 'Authorization: DPoP <token> (createDesktopBinding). Preso à chave (jkt) e subordinado à sessão de dono.'
 
   headers:
     SetSessionCookie:
@@ -2652,6 +2993,45 @@ components:
       schema: { type: string, enum: ['true'] }
 
   parameters:
+    DPoPProof:
+      name: DPoP
+      in: header
+      required: true
+      description: Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min.
+      schema: { type: string, maxLength: 4096 }
+    AnalyticsFrom:
+      name: from
+      in: query
+      required: true
+      description: Primeiro dia (data LOCAL da loja), inclusivo.
+      schema: { type: string, format: date }
+    AnalyticsTo:
+      name: to
+      in: query
+      required: true
+      description: Último dia (data LOCAL da loja), inclusivo. Intervalo consultado [from 00:00, to+1 00:00) no fuso da loja; no máximo 366 dias.
+      schema: { type: string, format: date }
+    AnalyticsCompare:
+      name: compare
+      in: query
+      required: false
+      description: previous = período anterior equivalente, com o mesmo tempo transcorrido.
+      schema: { type: string, enum: [previous] }
+    AnalyticsProfessional:
+      name: professional_id
+      in: query
+      required: false
+      schema: { $ref: '#/components/schemas/Id' }
+    AnalyticsService:
+      name: service_id
+      in: query
+      required: false
+      schema: { $ref: '#/components/schemas/Id' }
+    AnalyticsMethod:
+      name: method
+      in: query
+      required: false
+      schema: { type: string, enum: [pix, cash, card] }
     EstablishmentId:
       name: establishmentId
       in: path
@@ -3082,11 +3462,17 @@ components:
         - reward_inactive
         - reservation_already_active
         - reservation_expired
-        # sessão única do dono (ADR-0027)
+        # sessão única do dono e programa desktop (ADR-0027)
         - owner_session_active
         - owner_session_challenge_invalid
         - owner_session_replaced
         - owner_session_required
+        - desktop_proof_invalid
+        - desktop_activation_invalid
+        - desktop_link_invalid
+        - desktop_access_invalid
+        - desktop_installation_invalid
+        - analytics_filter_not_applicable
 
     # ------------------------------------------------------------ enums de estado
     QueueStatus:
@@ -4235,3 +4621,214 @@ components:
             channel: { type: string, enum: [desktop_authorized, unknown], description: 'unknown = outro aparelho ou navegador.' }
             installation_name: { type: [string, 'null'] }
             last_used_at: { $ref: '#/components/schemas/Timestamp' }
+    DesktopInstallation:
+      type: object
+      required: [id, label, created_at]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        label: { type: string }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+    DesktopLinkTicket:
+      type: object
+      required: [ticket, expires_at]
+      properties:
+        ticket: { type: string }
+        expires_at: { $ref: '#/components/schemas/Timestamp' }
+    DesktopBinding:
+      type: object
+      required: [access_token, token_type, expires_at, installation]
+      properties:
+        access_token: { type: string }
+        token_type: { type: string, const: DPoP }
+        expires_at: { $ref: '#/components/schemas/Timestamp' }
+        installation: { $ref: '#/components/schemas/DesktopInstallation' }
+    DesktopContext:
+      type: object
+      required: [account, installation, access_expires_at, establishments]
+      properties:
+        account:
+          type: object
+          required: [id, name]
+          properties:
+            id: { $ref: '#/components/schemas/Id' }
+            name: { type: string }
+        installation:
+          type: object
+          required: [id, label]
+          properties:
+            id: { $ref: '#/components/schemas/Id' }
+            label: { type: string }
+        access_expires_at: { $ref: '#/components/schemas/Timestamp' }
+        establishments:
+          type: array
+          items:
+            type: object
+            required: [id, name, timezone]
+            properties:
+              id: { $ref: '#/components/schemas/Id' }
+              name: { type: string }
+              timezone: { type: string }
+    AnalyticsValue:
+      type: object
+      description: 'value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.'
+      required: [value, status]
+      properties:
+        value: { type: [number, 'null'] }
+        status: { type: string, enum: [ok, empty, not_collected, not_applicable] }
+        sample: { type: integer, minimum: 0 }
+    AnalyticsPeriod:
+      type: object
+      required: [from, to, start, end, effective_end]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        start: { $ref: '#/components/schemas/Timestamp' }
+        end: { $ref: '#/components/schemas/Timestamp' }
+        effective_end: { $ref: '#/components/schemas/Timestamp' }
+    AnalyticsMeta:
+      type: object
+      required: [establishment_id, establishment_name, timezone, period, compare_period, generated_at, collection_started_at, filters, ignored_filters, units, missing]
+      properties:
+        establishment_id: { $ref: '#/components/schemas/Id' }
+        establishment_name: { type: string }
+        timezone: { type: string }
+        period: { $ref: '#/components/schemas/AnalyticsPeriod' }
+        compare_period:
+          oneOf:
+            - $ref: '#/components/schemas/AnalyticsPeriod'
+            - type: 'null'
+        granularity: { type: string, enum: [hour, day, week, month] }
+        generated_at: { $ref: '#/components/schemas/Timestamp' }
+        snapshot_at: { $ref: '#/components/schemas/Timestamp' }
+        collection_started_at: { $ref: '#/components/schemas/Timestamp' }
+        filters:
+          type: object
+          required: [professional_id, service_id, method]
+          properties:
+            professional_id: { type: [string, 'null'], format: uuid }
+            service_id: { type: [string, 'null'], format: uuid }
+            method: { type: [string, 'null'], enum: [pix, cash, card, null] }
+        ignored_filters:
+          type: array
+          description: Filtros ativos sem atribuição confiável nesta consulta (os valores afetados saem not_applicable).
+          items: { type: string }
+        units:
+          type: object
+          required: [money, duration, currency]
+          properties:
+            money: { type: string, const: cents }
+            duration: { type: string, const: seconds }
+            currency: { type: string, const: BRL }
+        missing: { type: string }
+    AnalyticsCash:
+      type: object
+      required: [received_cents, refunded_cents, net_cents, receipts, refunds, ignored_filters]
+      properties:
+        received_cents: { $ref: '#/components/schemas/AnalyticsValue' }
+        refunded_cents: { $ref: '#/components/schemas/AnalyticsValue' }
+        net_cents: { $ref: '#/components/schemas/AnalyticsValue' }
+        receipts: { $ref: '#/components/schemas/AnalyticsValue' }
+        refunds: { $ref: '#/components/schemas/AnalyticsValue' }
+        ignored_filters: { type: array, items: { type: string } }
+    AnalyticsSummaryPart:
+      type: object
+      required: [cash, completed, wait]
+      properties:
+        cash: { $ref: '#/components/schemas/AnalyticsCash' }
+        completed:
+          type: object
+          required: [count, ignored_filters]
+          properties:
+            count: { $ref: '#/components/schemas/AnalyticsValue' }
+            ignored_filters: { type: array, items: { type: string } }
+        wait:
+          type: object
+          required: [median_seconds, p90_seconds, ignored_filters]
+          properties:
+            median_seconds: { $ref: '#/components/schemas/AnalyticsValue' }
+            p90_seconds: { $ref: '#/components/schemas/AnalyticsValue' }
+            ignored_filters: { type: array, items: { type: string } }
+    AnalyticsSummary:
+      type: object
+      required: [current, compare, pending_now]
+      properties:
+        current: { $ref: '#/components/schemas/AnalyticsSummaryPart' }
+        compare:
+          oneOf:
+            - $ref: '#/components/schemas/AnalyticsSummaryPart'
+            - type: 'null'
+        pending_now:
+          type: object
+          description: Fotografia do instante snapshot_at (não depende do período).
+          required: [snapshot_at, total, open_financial_issues, open_financial_issues_cents, orders_awaiting_payment,
+                     orders_awaiting_payment_cents, orders_awaiting_confirmation, charges_unknown, refunds_under_review, ignored_filters]
+          properties:
+            snapshot_at: { $ref: '#/components/schemas/Timestamp' }
+            total: { type: integer }
+            open_financial_issues: { type: integer }
+            open_financial_issues_cents: { type: integer }
+            orders_awaiting_payment: { type: integer }
+            orders_awaiting_payment_cents: { type: integer }
+            orders_awaiting_confirmation: { type: integer }
+            charges_unknown: { type: integer }
+            refunds_under_review: { type: integer }
+            ignored_filters: { type: array, items: { type: string } }
+    AnalyticsSeries:
+      type: object
+      required: [metric, series, buckets, totals, compare_totals]
+      properties:
+        metric: { type: string }
+        series:
+          type: array
+          items:
+            type: object
+            required: [key, label, unit]
+            properties:
+              key: { type: string }
+              label: { type: string }
+              unit: { type: string, enum: [cents, count, seconds, points] }
+        buckets:
+          type: array
+          items:
+            type: object
+            required: [start, end, label, collected, partial, values]
+            properties:
+              start: { $ref: '#/components/schemas/Timestamp' }
+              end: { $ref: '#/components/schemas/Timestamp' }
+              label: { type: string }
+              collected: { type: boolean }
+              partial: { type: boolean }
+              values:
+                type: object
+                additionalProperties: { $ref: '#/components/schemas/AnalyticsValue' }
+        totals:
+          type: object
+          additionalProperties: { $ref: '#/components/schemas/AnalyticsValue' }
+        compare_totals:
+          type: [object, 'null']
+          additionalProperties: { $ref: '#/components/schemas/AnalyticsValue' }
+    AnalyticsBreakdown:
+      type: object
+      required: [dimension, status, rows]
+      properties:
+        dimension: { type: string }
+        status: { type: string, enum: [ok, not_applicable, not_collected] }
+        rows:
+          description: Formato por dimensão (docs/desktop/metricas.md §Detalhamentos).
+    AnalyticsRecords:
+      type: object
+      required: [kind, total, total_cents, items, next_cursor, window]
+      properties:
+        kind: { type: string }
+        total: { type: integer, description: Quantidade do recorte inteiro (todas as páginas). }
+        total_cents: { type: [integer, 'null'] }
+        items:
+          type: array
+          items: { type: object, description: Formato por tipo (docs/desktop/metricas.md §Registros). }
+        next_cursor: { type: [string, 'null'] }
+        window:
+          type: object
+          required: [start, end]
+          properties:
+            start: { $ref: '#/components/schemas/Timestamp' }
+            end: { $ref: '#/components/schemas/Timestamp' }

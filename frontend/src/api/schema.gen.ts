@@ -1570,6 +1570,217 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/desktop/installations/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ativa um computador com o código de uso único emitido pelo operador (fila-admin).
+         * @description O componente nativo envia o código e um cabeçalho `DPoP` (RFC 9449, ES256) assinado pela chave
+         *     privada recém-criada da instalação, com a chave pública no cabeçalho `jwk`. O servidor guarda só
+         *     a chave pública e a impressão digital (RFC 7638). Sem sessão nem cookie.
+         */
+        post: operations["activateDesktopInstallation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/desktop/link-tickets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ticket de 60 s para o Dashboard local usar a MESMA sessão de dono (troca mediada pelo servidor).
+         * @description Pedido da gestão aberta na janela do programa, com o cookie da sessão de dono ocupante da vaga. O
+         *     ticket não é credencial sozinho: só vira acesso quando trocado com prova de posse da chave de uma
+         *     instalação autorizada da MESMA conta. Nenhum cookie é copiado para JavaScript ou arquivo.
+         */
+        post: operations["createDesktopLinkTicket"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/desktop/bindings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Troca o ticket (com prova DPoP) por um token de acesso preso à chave da instalação.
+         * @description O token (tipo DPoP) vale enquanto a sessão do ticket for a ocupante da vaga de dono, no máximo 2 h.
+         *     Revogar a sessão, trocar de aparelho, sair, remover o vínculo de dono ou revogar a instalação
+         *     invalida as consultas seguintes.
+         */
+        post: operations["createDesktopBinding"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/desktop/bindings/current/end": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Encerra o acesso do Dashboard local (a sessão de dono na gestão continua). */
+        post: operations["endDesktopBinding"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/desktop/context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Conta, instalação e lojas em que a conta é DONA (lojas só de profissional não aparecem). */
+        get: operations["getDesktopContext"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/desktop/analytics/establishments/{establishmentId}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Quatro indicadores da primeira dobra (+ comparação e pendências abertas agora).
+         * @description Exclusivo do programa desktop (ADR-0027): exige ao mesmo tempo sessão de dono ocupante da vaga,
+         *     prova DPoP de instalação autorizada e vínculo de dono com a loja. Loja sem vínculo de dono → 404.
+         *     Resposta `Cache-Control: no-store`; agregação no servidor. Dicionário: docs/desktop/metricas.md.
+         */
+        get: operations["getAnalyticsSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/desktop/analytics/establishments/{establishmentId}/series/{metric}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Série temporal de uma métrica (cash, ticket, movement, wait, duration, loyalty).
+         * @description Exclusivo do programa desktop (ADR-0027): exige ao mesmo tempo sessão de dono ocupante da vaga,
+         *     prova DPoP de instalação autorizada e vínculo de dono com a loja. Loja sem vínculo de dono → 404.
+         *     Resposta `Cache-Control: no-store`; agregação no servidor. Dicionário: docs/desktop/metricas.md.
+         */
+        get: operations["getAnalyticsSeries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/desktop/analytics/establishments/{establishmentId}/breakdowns/{dimension}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Agregado por categoria.
+         * @description Exclusivo do programa desktop (ADR-0027): exige ao mesmo tempo sessão de dono ocupante da vaga,
+         *     prova DPoP de instalação autorizada e vínculo de dono com a loja. Loja sem vínculo de dono → 404.
+         *     Resposta `Cache-Control: no-store`; agregação no servidor. Dicionário: docs/desktop/metricas.md.
+         */
+        get: operations["getAnalyticsBreakdown"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/desktop/analytics/establishments/{establishmentId}/records/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Registros que formam um total, paginados no servidor (50 por página).
+         * @description Exclusivo do programa desktop (ADR-0027): exige ao mesmo tempo sessão de dono ocupante da vaga,
+         *     prova DPoP de instalação autorizada e vínculo de dono com a loja. Loja sem vínculo de dono → 404.
+         *     Resposta `Cache-Control: no-store`; agregação no servidor. Dicionário: docs/desktop/metricas.md.
+         *     Filtro sem atribuição confiável neste tipo de registro → 422 `analytics_filter_not_applicable`.
+         */
+        get: operations["listAnalyticsRecords"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/desktop/analytics/establishments/{establishmentId}/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * SSE de invalidação do Dashboard (só nomes de áreas, agrupados; sem dados).
+         * @description `event: ready` (todas as áreas), `event: invalidate` ({"areas": [...]}, agrupado por ~3 s),
+         *     `event: session_ended` ({"reason": "owner_session_replaced" | "session_revoked"}). Reconferido a cada
+         *     30 s e a cada revogação. Mudança de posição na fila não invalida nada.
+         */
+        get: operations["openAnalyticsStream"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1651,7 +1862,7 @@ export interface components {
             message?: string;
         };
         /** @enum {string} */
-        ErrorCode: "validation_failed" | "unauthenticated" | "forbidden" | "not_found" | "csrf_failed" | "origin_not_allowed" | "reauthentication_required" | "rate_limited" | "payload_too_large" | "unsupported_media_type" | "idempotency_key_missing" | "idempotency_key_reused" | "idempotency_in_progress" | "version_conflict" | "invalid_transition" | "internal_error" | "service_unavailable" | "invalid_credentials" | "email_not_verified" | "token_invalid" | "recovery_code_invalid" | "invite_invalid" | "visitor_visit_in_progress" | "sole_owner" | "deletion_in_progress" | "queue_not_open" | "queue_has_pending_participants" | "active_participation_exists" | "pending_order_exists" | "service_not_eligible" | "service_inactive" | "no_waiting_participant" | "professional_busy" | "professional_inactive" | "professional_has_active_participations" | "tolerance_not_elapsed" | "transfer_consent_required" | "transfer_target_incompatible" | "slug_taken" | "order_requires_item" | "duplicate_service" | "change_request_pending" | "item_already_performed" | "performed_item_required" | "order_not_editable" | "order_not_payable" | "pix_charge_active" | "pix_charge_outcome_unknown" | "payment_amount_mismatch" | "payment_method_not_allowed" | "refund_exceeds_available" | "refund_not_allowed" | "provider_unavailable" | "webhook_unauthenticated" | "loyalty_program_disabled" | "account_required" | "insufficient_points" | "reward_out_of_stock" | "reward_inactive" | "reservation_already_active" | "reservation_expired" | "owner_session_active" | "owner_session_challenge_invalid" | "owner_session_replaced" | "owner_session_required";
+        ErrorCode: "validation_failed" | "unauthenticated" | "forbidden" | "not_found" | "csrf_failed" | "origin_not_allowed" | "reauthentication_required" | "rate_limited" | "payload_too_large" | "unsupported_media_type" | "idempotency_key_missing" | "idempotency_key_reused" | "idempotency_in_progress" | "version_conflict" | "invalid_transition" | "internal_error" | "service_unavailable" | "invalid_credentials" | "email_not_verified" | "token_invalid" | "recovery_code_invalid" | "invite_invalid" | "visitor_visit_in_progress" | "sole_owner" | "deletion_in_progress" | "queue_not_open" | "queue_has_pending_participants" | "active_participation_exists" | "pending_order_exists" | "service_not_eligible" | "service_inactive" | "no_waiting_participant" | "professional_busy" | "professional_inactive" | "professional_has_active_participations" | "tolerance_not_elapsed" | "transfer_consent_required" | "transfer_target_incompatible" | "slug_taken" | "order_requires_item" | "duplicate_service" | "change_request_pending" | "item_already_performed" | "performed_item_required" | "order_not_editable" | "order_not_payable" | "pix_charge_active" | "pix_charge_outcome_unknown" | "payment_amount_mismatch" | "payment_method_not_allowed" | "refund_exceeds_available" | "refund_not_allowed" | "provider_unavailable" | "webhook_unauthenticated" | "loyalty_program_disabled" | "account_required" | "insufficient_points" | "reward_out_of_stock" | "reward_inactive" | "reservation_already_active" | "reservation_expired" | "owner_session_active" | "owner_session_challenge_invalid" | "owner_session_replaced" | "owner_session_required" | "desktop_proof_invalid" | "desktop_activation_invalid" | "desktop_link_invalid" | "desktop_access_invalid" | "desktop_installation_invalid" | "analytics_filter_not_applicable";
         /** @enum {string} */
         QueueStatus: "open" | "paused" | "closed";
         /** @enum {string} */
@@ -2439,6 +2650,166 @@ export interface components {
                 last_used_at: components["schemas"]["Timestamp"];
             };
         };
+        DesktopInstallation: {
+            id: components["schemas"]["Id"];
+            label: string;
+            created_at: components["schemas"]["Timestamp"];
+        };
+        DesktopLinkTicket: {
+            ticket: string;
+            expires_at: components["schemas"]["Timestamp"];
+        };
+        DesktopBinding: {
+            access_token: string;
+            /** @constant */
+            token_type: "DPoP";
+            expires_at: components["schemas"]["Timestamp"];
+            installation: components["schemas"]["DesktopInstallation"];
+        };
+        DesktopContext: {
+            account: {
+                id: components["schemas"]["Id"];
+                name: string;
+            };
+            installation: {
+                id: components["schemas"]["Id"];
+                label: string;
+            };
+            access_expires_at: components["schemas"]["Timestamp"];
+            establishments: {
+                id: components["schemas"]["Id"];
+                name: string;
+                timezone: string;
+            }[];
+        };
+        /** @description value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição. */
+        AnalyticsValue: {
+            value: number | null;
+            /** @enum {string} */
+            status: "ok" | "empty" | "not_collected" | "not_applicable";
+            sample?: number;
+        };
+        AnalyticsPeriod: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            start: components["schemas"]["Timestamp"];
+            end: components["schemas"]["Timestamp"];
+            effective_end: components["schemas"]["Timestamp"];
+        };
+        AnalyticsMeta: {
+            establishment_id: components["schemas"]["Id"];
+            establishment_name: string;
+            timezone: string;
+            period: components["schemas"]["AnalyticsPeriod"];
+            compare_period: components["schemas"]["AnalyticsPeriod"] | null;
+            /** @enum {string} */
+            granularity?: "hour" | "day" | "week" | "month";
+            generated_at: components["schemas"]["Timestamp"];
+            snapshot_at?: components["schemas"]["Timestamp"];
+            collection_started_at: components["schemas"]["Timestamp"];
+            filters: {
+                /** Format: uuid */
+                professional_id: string | null;
+                /** Format: uuid */
+                service_id: string | null;
+                /** @enum {string|null} */
+                method: "pix" | "cash" | "card" | null;
+            };
+            /** @description Filtros ativos sem atribuição confiável nesta consulta (os valores afetados saem not_applicable). */
+            ignored_filters: string[];
+            units: {
+                /** @constant */
+                money: "cents";
+                /** @constant */
+                duration: "seconds";
+                /** @constant */
+                currency: "BRL";
+            };
+            missing: string;
+        };
+        AnalyticsCash: {
+            received_cents: components["schemas"]["AnalyticsValue"];
+            refunded_cents: components["schemas"]["AnalyticsValue"];
+            net_cents: components["schemas"]["AnalyticsValue"];
+            receipts: components["schemas"]["AnalyticsValue"];
+            refunds: components["schemas"]["AnalyticsValue"];
+            ignored_filters: string[];
+        };
+        AnalyticsSummaryPart: {
+            cash: components["schemas"]["AnalyticsCash"];
+            completed: {
+                count: components["schemas"]["AnalyticsValue"];
+                ignored_filters: string[];
+            };
+            wait: {
+                median_seconds: components["schemas"]["AnalyticsValue"];
+                p90_seconds: components["schemas"]["AnalyticsValue"];
+                ignored_filters: string[];
+            };
+        };
+        AnalyticsSummary: {
+            current: components["schemas"]["AnalyticsSummaryPart"];
+            compare: components["schemas"]["AnalyticsSummaryPart"] | null;
+            /** @description Fotografia do instante snapshot_at (não depende do período). */
+            pending_now: {
+                snapshot_at: components["schemas"]["Timestamp"];
+                total: number;
+                open_financial_issues: number;
+                open_financial_issues_cents: number;
+                orders_awaiting_payment: number;
+                orders_awaiting_payment_cents: number;
+                orders_awaiting_confirmation: number;
+                charges_unknown: number;
+                refunds_under_review: number;
+                ignored_filters: string[];
+            };
+        };
+        AnalyticsSeries: {
+            metric: string;
+            series: {
+                key: string;
+                label: string;
+                /** @enum {string} */
+                unit: "cents" | "count" | "seconds" | "points";
+            }[];
+            buckets: {
+                start: components["schemas"]["Timestamp"];
+                end: components["schemas"]["Timestamp"];
+                label: string;
+                collected: boolean;
+                partial: boolean;
+                values: {
+                    [key: string]: components["schemas"]["AnalyticsValue"];
+                };
+            }[];
+            totals: {
+                [key: string]: components["schemas"]["AnalyticsValue"];
+            };
+            compare_totals: {
+                [key: string]: components["schemas"]["AnalyticsValue"];
+            } | null;
+        };
+        AnalyticsBreakdown: {
+            dimension: string;
+            /** @enum {string} */
+            status: "ok" | "not_applicable" | "not_collected";
+            /** @description Formato por dimensão (docs/desktop/metricas.md §Detalhamentos). */
+            rows: unknown;
+        };
+        AnalyticsRecords: {
+            kind: string;
+            /** @description Quantidade do recorte inteiro (todas as páginas). */
+            total: number;
+            total_cents: number | null;
+            items: Record<string, never>[];
+            next_cursor: string | null;
+            window: {
+                start: components["schemas"]["Timestamp"];
+                end: components["schemas"]["Timestamp"];
+            };
+        };
     };
     responses: {
         /** @description Situação do processo. */
@@ -2672,6 +3043,17 @@ export interface components {
         };
     };
     parameters: {
+        /** @description Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min. */
+        DPoPProof: string;
+        /** @description Primeiro dia (data LOCAL da loja), inclusivo. */
+        AnalyticsFrom: string;
+        /** @description Último dia (data LOCAL da loja), inclusivo. Intervalo consultado [from 00:00, to+1 00:00) no fuso da loja; no máximo 366 dias. */
+        AnalyticsTo: string;
+        /** @description previous = período anterior equivalente, com o mesmo tempo transcorrido. */
+        AnalyticsCompare: "previous";
+        AnalyticsProfessional: components["schemas"]["Id"];
+        AnalyticsService: components["schemas"]["Id"];
+        AnalyticsMethod: "pix" | "cash" | "card";
         EstablishmentId: components["schemas"]["Id"];
         QueueId: components["schemas"]["Id"];
         ParticipationId: components["schemas"]["Id"];
@@ -5426,6 +5808,368 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    activateDesktopInstallation: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min. */
+                DPoP: components["parameters"]["DPoPProof"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Formato XXXX-XXXX-XXXX-XXXX (Crockford). */
+                    code: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Instalação autorizada. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DesktopInstallation"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    createDesktopLinkTicket: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Ticket emitido (no-store). */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DesktopLinkTicket"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    createDesktopBinding: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min. */
+                DPoP: components["parameters"]["DPoPProof"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    ticket: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Vínculo criado (no-store). */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DesktopBinding"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    endDesktopBinding: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min. */
+                DPoP: components["parameters"]["DPoPProof"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Vínculo encerrado. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    getDesktopContext: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min. */
+                DPoP: components["parameters"]["DPoPProof"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Contexto do Dashboard (no-store). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DesktopContext"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    getAnalyticsSummary: {
+        parameters: {
+            query: {
+                /** @description Primeiro dia (data LOCAL da loja), inclusivo. */
+                from: components["parameters"]["AnalyticsFrom"];
+                /** @description Último dia (data LOCAL da loja), inclusivo. Intervalo consultado [from 00:00, to+1 00:00) no fuso da loja; no máximo 366 dias. */
+                to: components["parameters"]["AnalyticsTo"];
+                /** @description previous = período anterior equivalente, com o mesmo tempo transcorrido. */
+                compare?: components["parameters"]["AnalyticsCompare"];
+                professional_id?: components["parameters"]["AnalyticsProfessional"];
+                service_id?: components["parameters"]["AnalyticsService"];
+                method?: components["parameters"]["AnalyticsMethod"];
+            };
+            header: {
+                /** @description Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min. */
+                DPoP: components["parameters"]["DPoPProof"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Dados agregados com meta (período efetivo, fuso, instante, unidades, ausências). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["AnalyticsSummary"];
+                        meta: components["schemas"]["AnalyticsMeta"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    getAnalyticsSeries: {
+        parameters: {
+            query: {
+                granularity?: "hour" | "day" | "week" | "month";
+                /** @description Primeiro dia (data LOCAL da loja), inclusivo. */
+                from: components["parameters"]["AnalyticsFrom"];
+                /** @description Último dia (data LOCAL da loja), inclusivo. Intervalo consultado [from 00:00, to+1 00:00) no fuso da loja; no máximo 366 dias. */
+                to: components["parameters"]["AnalyticsTo"];
+                /** @description previous = período anterior equivalente, com o mesmo tempo transcorrido. */
+                compare?: components["parameters"]["AnalyticsCompare"];
+                professional_id?: components["parameters"]["AnalyticsProfessional"];
+                service_id?: components["parameters"]["AnalyticsService"];
+                method?: components["parameters"]["AnalyticsMethod"];
+            };
+            header: {
+                /** @description Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min. */
+                DPoP: components["parameters"]["DPoPProof"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+                metric: "cash" | "ticket" | "movement" | "wait" | "duration" | "loyalty";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Dados agregados com meta (período efetivo, fuso, instante, unidades, ausências). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["AnalyticsSeries"];
+                        meta: components["schemas"]["AnalyticsMeta"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    getAnalyticsBreakdown: {
+        parameters: {
+            query: {
+                /** @description Primeiro dia (data LOCAL da loja), inclusivo. */
+                from: components["parameters"]["AnalyticsFrom"];
+                /** @description Último dia (data LOCAL da loja), inclusivo. Intervalo consultado [from 00:00, to+1 00:00) no fuso da loja; no máximo 366 dias. */
+                to: components["parameters"]["AnalyticsTo"];
+                /** @description previous = período anterior equivalente, com o mesmo tempo transcorrido. */
+                compare?: components["parameters"]["AnalyticsCompare"];
+                professional_id?: components["parameters"]["AnalyticsProfessional"];
+                service_id?: components["parameters"]["AnalyticsService"];
+                method?: components["parameters"]["AnalyticsMethod"];
+            };
+            header: {
+                /** @description Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min. */
+                DPoP: components["parameters"]["DPoPProof"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+                dimension: "payment_methods" | "outcomes" | "professionals" | "services" | "peak_hours" | "wait_bands" | "pending" | "rewards" | "recurrence";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Dados agregados com meta (período efetivo, fuso, instante, unidades, ausências). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["AnalyticsBreakdown"];
+                        meta: components["schemas"]["AnalyticsMeta"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    listAnalyticsRecords: {
+        parameters: {
+            query: {
+                bucket_start?: components["schemas"]["Timestamp"];
+                bucket_end?: components["schemas"]["Timestamp"];
+                cursor?: string;
+                /** @description participations: entered|called|finished; service_items: performed|added */
+                ref?: string;
+                /** @description financial_issues: open (agora) | opened | resolved (no período) */
+                state?: "open" | "opened" | "resolved";
+                /** @description financial_issues: tipo; loyalty_entries: credited|used|returned|adjusted */
+                kind?: string;
+                status?: string;
+                dow?: number;
+                hour?: number;
+                band?: "0-5" | "5-15" | "15-30" | "30-60" | "60+";
+                /** @description Primeiro dia (data LOCAL da loja), inclusivo. */
+                from: components["parameters"]["AnalyticsFrom"];
+                /** @description Último dia (data LOCAL da loja), inclusivo. Intervalo consultado [from 00:00, to+1 00:00) no fuso da loja; no máximo 366 dias. */
+                to: components["parameters"]["AnalyticsTo"];
+                /** @description previous = período anterior equivalente, com o mesmo tempo transcorrido. */
+                compare?: components["parameters"]["AnalyticsCompare"];
+                professional_id?: components["parameters"]["AnalyticsProfessional"];
+                service_id?: components["parameters"]["AnalyticsService"];
+                method?: components["parameters"]["AnalyticsMethod"];
+            };
+            header: {
+                /** @description Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min. */
+                DPoP: components["parameters"]["DPoPProof"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+                kind: "receipts" | "refunds" | "orders" | "participations" | "service_items" | "financial_issues" | "loyalty_entries";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Dados agregados com meta (período efetivo, fuso, instante, unidades, ausências). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["AnalyticsRecords"];
+                        meta: components["schemas"]["AnalyticsMeta"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    openAnalyticsStream: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min. */
+                DPoP: components["parameters"]["DPoPProof"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Fluxo text/event-stream. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
             default: components["responses"]["Unexpected"];
         };
     };

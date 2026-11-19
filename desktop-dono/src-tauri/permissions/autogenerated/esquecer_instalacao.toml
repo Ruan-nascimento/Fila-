@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-esquecer-instalacao"
+description = "Enables the esquecer_instalacao command without any pre-configured scope."
+commands.allow = ["esquecer_instalacao"]
+
+[[permission]]
+identifier = "deny-esquecer-instalacao"
+description = "Denies the esquecer_instalacao command without any pre-configured scope."
+commands.deny = ["esquecer_instalacao"]

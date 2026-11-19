@@ -4,6 +4,7 @@ import { Compass, QrCode, Store, UsersRound } from "lucide-react";
 import { ApiStatus } from "./features/status/ApiStatus";
 import { Cadastro, EsqueciSenha, ReenviarVerificacao } from "./pages/Contas";
 import { Conta, ExcluirContaPagina } from "./pages/Conta";
+import { DashboardSoNoPrograma } from "./pages/dono/Dashboard";
 import { AcessoDono } from "./pages/dono/Dono";
 import { modoDono } from "./pages/dono/modo";
 import { Entrar } from "./pages/Entrar";
@@ -39,6 +40,14 @@ export function App() {
         element={
           <PublicShell width="narrow">
             <AcessoDono />
+          </PublicShell>
+        }
+      />
+      <Route
+        path="/dono/painel-analitico"
+        element={
+          <PublicShell width="narrow">
+            <DashboardSoNoPrograma />
           </PublicShell>
         }
       />

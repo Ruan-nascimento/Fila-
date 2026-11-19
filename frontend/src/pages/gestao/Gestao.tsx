@@ -23,6 +23,7 @@ import { EmptyState, Loading, Notice, PageHeader, type IconType } from "../../ui
 import { cx } from "../../ui/cx";
 import { NaoElegivel } from "../dono/Dono";
 import { lojasDoDono, modoDono } from "../dono/modo";
+import { BotaoDashboard } from "../dono/Dashboard";
 import { Auditoria } from "./Auditoria";
 import { Comandas } from "./Comandas";
 import type { StaffContext } from "./comum";
@@ -222,6 +223,11 @@ function StaffShell({
           <Brand to={`${base}/filas`} sub={ctx.estName} />
         </div>
         <nav aria-label="Gestão da loja" className="flex-1 overflow-y-auto px-3 py-2">
+          {ctx.isOwner && (
+            <div className="mb-3">
+              <BotaoDashboard estId={ctx.estId} />
+            </div>
+          )}
           {gs.map((g) => (
             <div key={g.title} className="mb-4">
               <p className="m-0 mb-1 px-3 text-xs font-semibold tracking-wide text-fg-muted uppercase">
@@ -270,6 +276,7 @@ function StaffShell({
         <header className="sticky top-0 z-30 border-b border-line bg-surface/95 backdrop-blur lg:hidden">
           <div className="flex items-center justify-between gap-3 px-4 py-1.5">
             <Brand to={`${base}/filas`} sub={ctx.estName} />
+            {ctx.isOwner && <BotaoDashboard estId={ctx.estId} compact />}
             <Link
               to="/conta"
               aria-label={`Minha conta (${role})`}

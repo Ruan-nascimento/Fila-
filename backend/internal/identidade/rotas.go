@@ -31,6 +31,16 @@ func (s *Service) Routes() []hs.Route {
 		{Operation: "endVisitorSession", Method: http.MethodPost, Path: "/v1/visitor-sessions/current/end", Grants: []hs.Grant{{Actor: "visitor", Scope: "self"}}, Handler: s.endVisitorSession},
 		{Operation: "takeoverOwnerSession", Method: http.MethodPost, Path: "/v1/auth/owner-session/takeover", Grants: pub, Handler: s.takeoverOwnerSession},
 		{Operation: "cancelOwnerTakeover", Method: http.MethodPost, Path: "/v1/auth/owner-session/cancel", Grants: pub, Handler: s.cancelOwnerTakeover},
+		{Operation: "activateDesktopInstallation", Method: http.MethodPost, Path: "/v1/desktop/installations/activate",
+			Grants: []hs.Grant{{Actor: "desktop_installation", Scope: "activation_code"}}, Handler: s.activateDesktopInstallation},
+		{Operation: "createDesktopLinkTicket", Method: http.MethodPost, Path: "/v1/desktop/link-tickets",
+			Grants: []hs.Grant{{Actor: "owner", Scope: "owner_session"}}, Handler: s.createDesktopLinkTicket},
+		{Operation: "createDesktopBinding", Method: http.MethodPost, Path: "/v1/desktop/bindings",
+			Grants: []hs.Grant{{Actor: "desktop_installation", Scope: "link_ticket"}}, Handler: s.createDesktopBinding},
+		{Operation: "endDesktopBinding", Method: http.MethodPost, Path: "/v1/desktop/bindings/current/end",
+			Grants: []hs.Grant{{Actor: "owner_desktop", Scope: "self"}}, Handler: s.endDesktopBinding},
+		{Operation: "getDesktopContext", Method: http.MethodGet, Path: "/v1/desktop/context",
+			Grants: []hs.Grant{{Actor: "owner_desktop", Scope: "self"}}, Handler: s.getDesktopContext},
 		{Operation: "getPublicEstablishmentBySlug", Method: http.MethodGet, Path: "/v1/public/slugs/{slug}", Grants: pub, Handler: s.publicEstablishment},
 	}
 }

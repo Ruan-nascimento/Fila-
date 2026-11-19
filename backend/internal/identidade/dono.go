@@ -64,6 +64,7 @@ type slotState struct {
 type holderInfo struct {
 	SessionID  uuid.UUID
 	LastUsedAt time.Time
+	Desktop    *string // rótulo da instalação desktop autorizada vinculada (contexto confiável)
 }
 
 // lockSlot cria (se preciso) e trava a vaga de dono da conta até o fim da transação. A linha
@@ -84,10 +85,13 @@ func lockSlot(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, now time.Time
 	}
 	var h holderInfo
 	err := tx.QueryRow(ctx, `
-		SELECT s.id, s.last_used_at
+		SELECT s.id, s.last_used_at,
+		       (SELECT i.label FROM desktop_binding b JOIN desktop_installation i ON i.id = b.installation_id
+		         WHERE b.session_id = s.id AND b.revoked_at IS NULL AND b.expires_at > $2 AND i.revoked_at IS NULL
+		         ORDER BY b.created_at DESC LIMIT 1)
 		FROM account_session s
 		WHERE s.id = $1 AND s.revoked_at IS NULL AND s.absolute_expires_at > $2`, *sessID, now).
-		Scan(&h.SessionID, &h.LastUsedAt)
+		Scan(&h.SessionID, &h.LastUsedAt, &h.Desktop)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return st, nil // ocupante revogado ou vencido: vaga livre
 	}
@@ -102,6 +106,12 @@ func lockSlot(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, now time.Time
 func occupySlot(ctx context.Context, tx pgx.Tx, accountID, newSession uuid.UUID, now time.Time) error {
 	_, err := tx.Exec(ctx, `UPDATE owner_session_slot SET session_id = $2, generation = generation + 1, updated_at = $3
 		WHERE account_id = $1`, accountID, newSession, now)
+	return err
+}
+
+// revokeBindings encerra os vínculos desktop presos à sessão (eles são subordinados a ela).
+func revokeBindings(ctx context.Context, q database.Querier, sessionID uuid.UUID, now time.Time) error {
+	_, err := q.Exec(ctx, `UPDATE desktop_binding SET revoked_at = $2 WHERE session_id = $1 AND revoked_at IS NULL`, sessionID, now)
 	return err
 }
 
@@ -156,8 +166,8 @@ type ownerConflictView struct {
 	Challenge    string    `json:"challenge"`
 	ExpiresAt    time.Time `json:"expires_at"`
 	OtherSession struct {
-		// Por enquanto sempre unknown ("outro aparelho ou navegador"): o servidor não identifica
-		// o aparelho com segurança. desktop_authorized fica reservado ao programa autorizado.
+		// desktop_authorized só quando a sessão tem vínculo com instalação autorizada (prova de
+		// posse da chave); senão unknown ("outro aparelho ou navegador").
 		Channel          string    `json:"channel"`
 		InstallationName *string   `json:"installation_name"`
 		LastUsedAt       time.Time `json:"last_used_at"`
@@ -183,6 +193,10 @@ func newOwnerChallenge(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, st s
 		return v, fmt.Errorf("gravar desafio: %w", err)
 	}
 	v.OtherSession.Channel = "unknown"
+	if st.Holder.Desktop != nil {
+		v.OtherSession.Channel = "desktop_authorized"
+		v.OtherSession.InstallationName = st.Holder.Desktop
+	}
 	// Último uso aproximado (5 min): o servidor só atualiza o uso a cada minuto.
 	v.OtherSession.LastUsedAt = st.Holder.LastUsedAt.Truncate(5 * time.Minute)
 	return v, nil
@@ -319,6 +333,9 @@ func (s *Service) takeoverOwnerSession(w http.ResponseWriter, r *http.Request) e
 		old := st.Holder.SessionID
 		if _, err := tx.Exec(ctx, `UPDATE account_session SET revoked_at = $2, revoke_reason = 'owner_session_replaced'
 			WHERE id = $1 AND revoked_at IS NULL`, old, now); err != nil {
+			return err
+		}
+		if err := revokeBindings(ctx, tx, old, now); err != nil {
 			return err
 		}
 		// Um navegador tem uma sessão de conta por vez (igual ao login).
