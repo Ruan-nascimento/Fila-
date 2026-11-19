@@ -1,0 +1,20 @@
+{
+  "name": "fila-gestao-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Fila Gestão: programa instalável do dono (Tauri 2) que abre a gestão do site",
+  "engines": {
+    "node": "^24.15.0 || >=26.0.0"
+  },
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "icone": "tauri icon icone/icone.svg",
+    "build:windows": "tauri build --bundles nsis",
+    "build:linux": "tauri build --bundles deb",
+    "build:linux:appimage": "tauri build --bundles appimage"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.4"
+  }
+}

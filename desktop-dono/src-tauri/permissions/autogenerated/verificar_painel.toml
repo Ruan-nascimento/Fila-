@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-verificar-painel"
+description = "Enables the verificar_painel command without any pre-configured scope."
+commands.allow = ["verificar_painel"]
+
+[[permission]]
+identifier = "deny-verificar-painel"
+description = "Denies the verificar_painel command without any pre-configured scope."
+commands.deny = ["verificar_painel"]

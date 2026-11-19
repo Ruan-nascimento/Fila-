@@ -1,9 +1,11 @@
 import { lazy, Suspense, type ReactNode } from "react";
-import { Route, Routes } from "react-router";
+import { Navigate, Route, Routes } from "react-router";
 import { Compass, QrCode, Store, UsersRound } from "lucide-react";
 import { ApiStatus } from "./features/status/ApiStatus";
 import { Cadastro, EsqueciSenha, ReenviarVerificacao } from "./pages/Contas";
 import { Conta, ExcluirContaPagina } from "./pages/Conta";
+import { AcessoDono } from "./pages/dono/Dono";
+import { modoDono } from "./pages/dono/modo";
 import { Entrar } from "./pages/Entrar";
 import { ConsultarExclusao } from "./pages/exclusao/Exclusao";
 import { AceitarConvite, RedefinirSenha, VerificarEmail } from "./pages/Links";
@@ -31,6 +33,15 @@ export function App() {
         }
       />
       <Route path="/entrar" element={auth(<Entrar />)} />
+      {/* Entrada do dono, aberta pelo programa Fila Gestão (mesmo login e mesma gestão). */}
+      <Route
+        path="/dono"
+        element={
+          <PublicShell width="narrow">
+            <AcessoDono />
+          </PublicShell>
+        }
+      />
       <Route path="/cadastro" element={auth(<Cadastro />)} />
       <Route path="/reenviar-verificacao" element={auth(<ReenviarVerificacao />)} />
       <Route path="/verificar-email" element={auth(<VerificarEmail />)} />
@@ -87,6 +98,7 @@ export function App() {
 
 function Inicio() {
   const { state } = useSession();
+  if (modoDono()) return <Navigate to="/dono" replace />;
   const staff = state.status === "ready" && state.session.session?.kind === "staff";
   const account = state.status === "ready" ? state.session.account : null;
   return (
