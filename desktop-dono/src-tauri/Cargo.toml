@@ -1,0 +1,29 @@
+[package]
+name = "fila-gestao"
+version = "0.1.0"
+description = "Fila Gestão: programa do dono da barbearia (abre a gestão do site)"
+edition = "2021"
+rust-version = "1.85"
+publish = false
+
+[lib]
+name = "fila_gestao_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "=2.7.4", features = [] }
+url = "2"
+
+[dependencies]
+tauri = { version = "=2.12.5", features = [] }
+tauri-plugin-opener = "=2.7.2"
+serde = { version = "1", features = ["derive"] }
+# Só para conferir se o painel responde antes de abri-lo (TLS com raízes embutidas, sem OpenSSL).
+ureq = "=3.5.1"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

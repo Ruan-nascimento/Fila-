@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fila Gestão</title>
+    <link rel="stylesheet" href="carregador.css" />
+    <script src="carregador.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <img src="icone.png" alt="" width="72" height="72" />
+      <h1>Fila Gestão</h1>
+      <section id="abrindo" aria-live="polite">
+        <p>Abrindo o painel da barbearia…</p>
+      </section>
+      <section id="falha" hidden>
+        <h2 role="alert">Não foi possível abrir o painel</h2>
+        <p id="motivo"></p>
+        <button id="tentar" type="button">Tentar novamente</button>
+        <p class="detalhe">Endereço: <span id="origem"></span></p>
+      </section>
+    </main>
+  </body>
+</html>

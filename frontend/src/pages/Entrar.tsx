@@ -7,15 +7,24 @@ import { useSession } from "../session/context";
 import { safeReturn } from "../ui/retorno";
 import { Field, Notice, PageHeader, PasswordField, Segmented, Submit } from "../ui/ui";
 
-export function Entrar() {
+/**
+ * Entrar na conta. Com `equipe`, o contexto fica fixo em “Equipe da barbearia” e a pessoa volta
+ * para `destino` (entrada do dono no programa Fila Gestão); a regra de acesso continua no servidor.
+ */
+export function Entrar({
+  equipe,
+  destino,
+  titulo = "Entrar",
+  descricao = "Acesse sua conta para acompanhar a fila ou atender clientes.",
+}: { equipe?: boolean; destino?: string; titulo?: string; descricao?: string } = {}) {
   const { refresh } = useSession();
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const voltar = safeReturn(params.get("voltar"));
+  const voltar = destino ?? safeReturn(params.get("voltar"));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [context, setContext] = useState<"customer" | "staff">(
-    params.get("como") === "equipe" ? "staff" : "customer",
+    equipe || params.get("como") === "equipe" ? "staff" : "customer",
   );
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<Problem | null>(null);
@@ -40,11 +49,7 @@ export function Entrar() {
   const errors = fieldErrors(problem);
   return (
     <section aria-labelledby="titulo-entrar" className="grid gap-5">
-      <PageHeader
-        id="titulo-entrar"
-        title="Entrar"
-        description="Acesse sua conta para acompanhar a fila ou atender clientes."
-      />
+      <PageHeader id="titulo-entrar" title={titulo} description={descricao} />
       {(problem || offline) && !problem?.errors?.length && (
         <Notice kind="erro">
           <p>{problemMessage(problem, offline)}</p>
@@ -56,16 +61,18 @@ export function Entrar() {
         </Notice>
       )}
       <form onSubmit={onSubmit} noValidate className="grid gap-4">
-        <Segmented
-          legend="Entrar como"
-          name="contexto"
-          value={context}
-          onChange={setContext}
-          options={[
-            { value: "customer", label: "Cliente", icon: UserRound },
-            { value: "staff", label: "Equipe da barbearia", icon: Store },
-          ]}
-        />
+        {!equipe && (
+          <Segmented
+            legend="Entrar como"
+            name="contexto"
+            value={context}
+            onChange={setContext}
+            options={[
+              { value: "customer", label: "Cliente", icon: UserRound },
+              { value: "staff", label: "Equipe da barbearia", icon: Store },
+            ]}
+          />
+        )}
         <Field
           label="E-mail"
           type="email"
@@ -92,12 +99,14 @@ export function Entrar() {
         <Link to="/esqueci-senha" className="inline-flex min-h-11 items-center font-semibold">
           Esqueci minha senha
         </Link>
-        <Link
-          to={voltar ? `/cadastro?voltar=${encodeURIComponent(voltar)}` : "/cadastro"}
-          className="inline-flex min-h-11 items-center font-semibold"
-        >
-          Criar conta de cliente
-        </Link>
+        {!equipe && (
+          <Link
+            to={voltar ? `/cadastro?voltar=${encodeURIComponent(voltar)}` : "/cadastro"}
+            className="inline-flex min-h-11 items-center font-semibold"
+          >
+            Criar conta de cliente
+          </Link>
+        )}
       </p>
       {voltar?.startsWith("/loja/") && (
         <p className="m-0 text-center text-sm text-fg-muted">

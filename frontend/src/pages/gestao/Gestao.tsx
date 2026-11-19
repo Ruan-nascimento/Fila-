@@ -21,6 +21,8 @@ import { AvisosGerais } from "../../ui/estados";
 import { Brand, SkipLink } from "../../ui/layout";
 import { EmptyState, Loading, Notice, PageHeader, type IconType } from "../../ui/ui";
 import { cx } from "../../ui/cx";
+import { NaoElegivel } from "../dono/Dono";
+import { lojasDoDono, modoDono } from "../dono/modo";
 import { Auditoria } from "./Auditoria";
 import { Comandas } from "./Comandas";
 import type { StaffContext } from "./comum";
@@ -35,6 +37,8 @@ import { Servicos } from "./Servicos";
 /** Lista as lojas em que a conta tem vínculo de equipe. */
 export function GestaoInicio() {
   const { state } = useSession();
+  // No programa Fila Gestão (modo dono), a escolha de loja é a do dono: só lojas com vínculo de dono.
+  if (modoDono()) return <Navigate to="/dono" replace />;
   if (state.status !== "ready") return <Loading />;
   const { session, memberships } = state.session;
   if (!session) return <Navigate to="/entrar?como=equipe" replace />;
@@ -129,7 +133,8 @@ export function GestaoLoja() {
   const { state } = useSession();
   if (state.status !== "ready") return <Loading />;
   const { session, memberships, account } = state.session;
-  if (!session || session.kind !== "staff") return <Navigate to="/gestao" replace />;
+  const dono = modoDono();
+  if (!session || session.kind !== "staff") return <Navigate to={dono ? "/dono" : "/gestao"} replace />;
   const mine = memberships.filter((m) => m.establishment_id === estId);
   if (mine.length === 0)
     return (
@@ -147,7 +152,19 @@ export function GestaoLoja() {
     isOwner: mine.some((m) => m.role === "owner"),
     professionalId: mine.find((m) => m.professional_id)?.professional_id ?? null,
   };
-  const stores = new Set(memberships.map((m) => m.establishment_id)).size;
+  // Modo dono: endereço direto ou troca de loja para uma loja sem vínculo de dono é recusado aqui
+  // também (o servidor já recusa o que é só do dono; isto impede operar como profissional).
+  if (dono && !ctx.isOwner)
+    return (
+      <div className="mx-auto max-w-xl p-6">
+        <NaoElegivel titulo="Nesta janela só aparecem lojas em que você é dono." verLojas>
+          <p>Nesta loja a conta é profissional. Para atender, use o navegador, em Gestão.</p>
+        </NaoElegivel>
+      </div>
+    );
+  const stores = dono
+    ? lojasDoDono(state.session).length
+    : new Set(memberships.map((m) => m.establishment_id)).size;
   // Endereços completos: dentro de uma rota "/gestao/:estId/*", um caminho relativo é somado ao
   // endereço atual (react-router 7), e "filas" a partir de /filas/x viraria /filas/x/filas…
   const base = `/gestao/${estId}`;

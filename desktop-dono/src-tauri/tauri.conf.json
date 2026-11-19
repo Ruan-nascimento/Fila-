@@ -1,0 +1,48 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Fila Gestão",
+  "mainBinaryName": "fila-gestao",
+  "version": "0.1.0",
+  "identifier": "br.fila.gestao",
+  "build": {
+    "frontendDist": "../carregador"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src ipc: http://ipc.localhost",
+      "capabilities": [
+        "carregador"
+      ]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "publisher": "Fila",
+    "shortDescription": "Gestão da barbearia para o dono",
+    "longDescription": "Abre a área de gestão do Fila (filas, comandas, cadastros) direto no acesso do dono.",
+    "category": "Business",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "PortugueseBR"
+        ],
+        "displayLanguageSelector": false,
+        "installerIcon": "icons/icon.ico"
+      }
+    }
+  }
+}
