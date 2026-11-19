@@ -1,0 +1,4 @@
+# Endereço HTTPS do painel em produção (só a origem, sem caminho), usado por "npm run build:*".
+# A variável FILA_PAINEL_URL, se definida, tem prioridade sobre este arquivo.
+# Troque a linha abaixo pela URL real e tire o "#" do começo:
+# https://fila.suabarbearia.com.br

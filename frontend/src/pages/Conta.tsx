@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router";
 import { ChevronRight, KeyRound, LogOut, Store, Trash2 } from "lucide-react";
 import { api } from "../api/client";
 import { call, fieldErrors, problemMessage } from "../api/problem";
+import { modoDono } from "./dono/modo";
 import { useSession } from "../session/context";
 import {
   Avatar,
@@ -68,7 +69,7 @@ export function Conta() {
       return;
     }
     await refresh();
-    navigate("/");
+    navigate(modoDono() ? "/dono" : "/");
   }
 
   const lojas = new Map<string, { name: string; roles: string[] }>();

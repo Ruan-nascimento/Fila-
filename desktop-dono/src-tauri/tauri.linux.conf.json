@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Fila Gestao",
+  "bundle": {
+    "linux": {
+      "deb": {
+        "section": "misc",
+        "desktopTemplate": "linux/fila-gestao.desktop"
+      }
+    }
+  }
+}

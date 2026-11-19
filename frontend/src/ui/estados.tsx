@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
+import { modoDono } from "../pages/dono/modo";
 import { useSession } from "../session/context";
 import { Notice } from "./ui";
 
@@ -26,7 +27,7 @@ export function AvisoSessaoEncerrada() {
   return (
     <Notice kind="erro" title="Sua sessão terminou e a ação não foi feita.">
       <p>
-        <Link to="/entrar">Entre de novo</Link> para continuar.
+        <Link to={modoDono() ? "/dono" : "/entrar"}>Entre de novo</Link> para continuar.
       </p>
     </Notice>
   );
