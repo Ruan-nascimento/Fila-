@@ -130,7 +130,7 @@ test("telas do cliente", async ({ page }, info) => {
 });
 
 test("telas da dona", async ({ page }, info) => {
-  await entrarNaTela(page, loja.donaEmail, true);
+  await entrarNaTela(page, loja.donaEmail, true, loja.dona);
   for (const aba of [
     "filas",
     "comandas",

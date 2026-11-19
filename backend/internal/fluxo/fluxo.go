@@ -83,6 +83,9 @@ type Deps struct {
 	SnapshotHook func(stage string)
 	// Loyalty lê o resumo de pontos da conta para o snapshot (canal account). nil = sem fidelidade.
 	Loyalty func(ctx context.Context, q database.Querier, estID, accountID uuid.UUID) (any, error)
+	// Ended (opcional) diz por que a sessão do pedido relido acabou, quando há motivo a explicar
+	// (ex.: owner_session_replaced: o dono entrou em outro aparelho). Vazio = session_revoked.
+	Ended func(r *http.Request) string
 	// Pendencies lê os contadores do painel do dono para o snapshot (nil = sem painel).
 	Pendencies func(ctx context.Context, q database.Querier, estID uuid.UUID) (any, error)
 }
@@ -496,7 +499,13 @@ func (s *Service) stillAllowed(r *http.Request, c *conn, estID uuid.UUID, reques
 	if err != nil && r.Context().Err() == nil {
 		s.Log.Warn("reconferência da sessão SSE falhou; conexão encerrada", "error", database.Describe(err))
 	}
-	_ = c.control("stream.session_ended", grants, 0, map[string]string{"reason": "session_revoked"})
+	reason := "session_revoked"
+	if err == nil && s.Ended != nil {
+		if why := s.Ended(fresh); why != "" {
+			reason = why
+		}
+	}
+	_ = c.control("stream.session_ended", grants, 0, map[string]string{"reason": reason})
 	return false
 }
 

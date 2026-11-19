@@ -271,6 +271,10 @@ const (
 	ErrorCodeOrderNotPayable                     ErrorCode = "order_not_payable"
 	ErrorCodeOrderRequiresItem                   ErrorCode = "order_requires_item"
 	ErrorCodeOriginNotAllowed                    ErrorCode = "origin_not_allowed"
+	ErrorCodeOwnerSessionActive                  ErrorCode = "owner_session_active"
+	ErrorCodeOwnerSessionChallengeInvalid        ErrorCode = "owner_session_challenge_invalid"
+	ErrorCodeOwnerSessionReplaced                ErrorCode = "owner_session_replaced"
+	ErrorCodeOwnerSessionRequired                ErrorCode = "owner_session_required"
 	ErrorCodePayloadTooLarge                     ErrorCode = "payload_too_large"
 	ErrorCodePaymentAmountMismatch               ErrorCode = "payment_amount_mismatch"
 	ErrorCodePaymentMethodNotAllowed             ErrorCode = "payment_method_not_allowed"
@@ -360,6 +364,14 @@ func (e ErrorCode) Valid() bool {
 	case ErrorCodeOrderRequiresItem:
 		return true
 	case ErrorCodeOriginNotAllowed:
+		return true
+	case ErrorCodeOwnerSessionActive:
+		return true
+	case ErrorCodeOwnerSessionChallengeInvalid:
+		return true
+	case ErrorCodeOwnerSessionReplaced:
+		return true
+	case ErrorCodeOwnerSessionRequired:
 		return true
 	case ErrorCodePayloadTooLarge:
 		return true
@@ -848,6 +860,24 @@ func (e OrderStatus) Valid() bool {
 	}
 }
 
+// Defines values for OwnerSessionConflictOtherSessionChannel.
+const (
+	OwnerSessionConflictOtherSessionChannelDesktopAuthorized OwnerSessionConflictOtherSessionChannel = "desktop_authorized"
+	OwnerSessionConflictOtherSessionChannelUnknown           OwnerSessionConflictOtherSessionChannel = "unknown"
+)
+
+// Valid indicates whether the value is a known member of the OwnerSessionConflictOtherSessionChannel enum.
+func (e OwnerSessionConflictOtherSessionChannel) Valid() bool {
+	switch e {
+	case OwnerSessionConflictOtherSessionChannelDesktopAuthorized:
+		return true
+	case OwnerSessionConflictOtherSessionChannelUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ParticipationIdentityKind.
 const (
 	ParticipationIdentityKindAccount ParticipationIdentityKind = "account"
@@ -1274,6 +1304,24 @@ func (e SessionKind) Valid() bool {
 	case SessionKindCustomer:
 		return true
 	case SessionKindStaff:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionViewEndedReason.
+const (
+	SessionViewEndedReasonOwnerSessionMigration SessionViewEndedReason = "owner_session_migration"
+	SessionViewEndedReasonOwnerSessionReplaced  SessionViewEndedReason = "owner_session_replaced"
+)
+
+// Valid indicates whether the value is a known member of the SessionViewEndedReason enum.
+func (e SessionViewEndedReason) Valid() bool {
+	switch e {
+	case SessionViewEndedReasonOwnerSessionMigration:
+		return true
+	case SessionViewEndedReasonOwnerSessionReplaced:
 		return true
 	default:
 		return false
@@ -2023,6 +2071,31 @@ type OrderPayment struct {
 // OrderStatus Estado da comanda (financeiro), independente do estado da participação.
 type OrderStatus string
 
+// OwnerChallengeRequest defines model for OwnerChallengeRequest.
+type OwnerChallengeRequest struct {
+	Challenge string `json:"challenge"`
+}
+
+// OwnerSessionConflict Problem.current de `owner_session_active`. Só contexto confiável da outra sessão.
+type OwnerSessionConflict struct {
+	// Challenge Uso único, 2 min, preso à conta, à tentativa (cookie) e à geração da vaga. Nunca em URL ou log.
+	Challenge string `json:"challenge"`
+
+	// ExpiresAt RFC 3339 em UTC com sufixo Z.
+	ExpiresAt    Timestamp `json:"expires_at"`
+	OtherSession struct {
+		// Channel unknown = outro aparelho ou navegador.
+		Channel          OwnerSessionConflictOtherSessionChannel `json:"channel"`
+		InstallationName *string                                 `json:"installation_name"`
+
+		// LastUsedAt RFC 3339 em UTC com sufixo Z.
+		LastUsedAt Timestamp `json:"last_used_at"`
+	} `json:"other_session"`
+}
+
+// OwnerSessionConflictOtherSessionChannel unknown = outro aparelho ou navegador.
+type OwnerSessionConflictOtherSessionChannel string
+
 // PageInfo defines model for PageInfo.
 type PageInfo struct {
 	HasMore    bool    `json:"has_more"`
@@ -2461,18 +2534,27 @@ type SessionView struct {
 	Account   *AccountView `json:"account"`
 	CsrfToken *string      `json:"csrf_token"`
 
+	// EndedReason O cookie apresentado deixou de valer porque o dono entrou em outro aparelho (ou pela migração da sessão única).
+	EndedReason *SessionViewEndedReason `json:"ended_reason,omitempty"`
+
 	// Memberships Vínculos de equipe. Só concedem permissão com sessão de contexto staff.
 	Memberships []MembershipView `json:"memberships"`
 	Session     *struct {
 		// ExpiresAt RFC 3339 em UTC com sufixo Z.
-		ExpiresAt        Timestamp   `json:"expires_at"`
-		Kind             SessionKind `json:"kind"`
-		ReauthValidUntil *Timestamp  `json:"reauth_valid_until"`
+		ExpiresAt Timestamp   `json:"expires_at"`
+		Kind      SessionKind `json:"kind"`
+
+		// OwnerAuthority Esta sessão ocupa a vaga de dono da conta (ADR-0027). Só ela exerce privilégios de dono.
+		OwnerAuthority   *bool      `json:"owner_authority,omitempty"`
+		ReauthValidUntil *Timestamp `json:"reauth_valid_until"`
 	} `json:"session"`
 
 	// Visitors Credenciais de visitante ativas neste navegador (uma por loja).
 	Visitors []VisitorView `json:"visitors"`
 }
+
+// SessionViewEndedReason O cookie apresentado deixou de valer porque o dono entrou em outro aparelho (ou pela migração da sessão única).
+type SessionViewEndedReason string
 
 // SetServiceProfessionalsRequest defines model for SetServiceProfessionalsRequest.
 type SetServiceProfessionalsRequest struct {
@@ -3233,6 +3315,12 @@ type AcceptInviteJSONRequestBody = AcceptInviteRequest
 
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = LoginRequest
+
+// CancelOwnerTakeoverJSONRequestBody defines body for CancelOwnerTakeover for application/json ContentType.
+type CancelOwnerTakeoverJSONRequestBody = OwnerChallengeRequest
+
+// TakeoverOwnerSessionJSONRequestBody defines body for TakeoverOwnerSession for application/json ContentType.
+type TakeoverOwnerSessionJSONRequestBody = OwnerChallengeRequest
 
 // ConfirmPasswordResetJSONRequestBody defines body for ConfirmPasswordReset for application/json ContentType.
 type ConfirmPasswordResetJSONRequestBody = PasswordResetConfirmRequest

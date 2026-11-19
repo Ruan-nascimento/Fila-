@@ -29,6 +29,8 @@ func (s *Service) Routes() []hs.Route {
 		{Operation: "createVisitorSession", Method: http.MethodPost, Path: "/v1/establishments/{establishmentId}/visitor-sessions", Grants: pub, Handler: s.createVisitorSession},
 		{Operation: "recoverVisitorSession", Method: http.MethodPost, Path: "/v1/establishments/{establishmentId}/visitor-sessions/recover", Grants: pub, Handler: s.recoverVisitorSession},
 		{Operation: "endVisitorSession", Method: http.MethodPost, Path: "/v1/visitor-sessions/current/end", Grants: []hs.Grant{{Actor: "visitor", Scope: "self"}}, Handler: s.endVisitorSession},
+		{Operation: "takeoverOwnerSession", Method: http.MethodPost, Path: "/v1/auth/owner-session/takeover", Grants: pub, Handler: s.takeoverOwnerSession},
+		{Operation: "cancelOwnerTakeover", Method: http.MethodPost, Path: "/v1/auth/owner-session/cancel", Grants: pub, Handler: s.cancelOwnerTakeover},
 		{Operation: "getPublicEstablishmentBySlug", Method: http.MethodGet, Path: "/v1/public/slugs/{slug}", Grants: pub, Handler: s.publicEstablishment},
 	}
 }

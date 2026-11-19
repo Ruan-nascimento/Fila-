@@ -178,7 +178,71 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: |
+            `owner_session_active` (ADR-0027): credenciais válidas, mas a conta tem vínculo de dono e
+            outra sessão válida ocupa a vaga de dono. A outra sessão continua; esta tentativa NÃO recebe
+            cookie de sessão. `current` segue OwnerSessionConflict (desafio de 2 min, só no corpo). Junto
+            vai o cookie HttpOnly `__Host-fila_owner_attempt` (5 min), que prende o desafio a esta tentativa.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/auth/owner-session/takeover:
+    post:
+      operationId: takeoverOwnerSession
+      tags: [sessao]
+      summary: Continua neste aparelho e encerra a outra sessão de dono (operação atômica).
+      description: |
+        Valida o desafio (não vencido, não usado, desta tentativa pelo cookie `__Host-fila_owner_attempt`
+        e da MESMA geração da vaga que a pessoa viu), revoga a sessão anterior (`owner_session_replaced`),
+        cria a nova e só então define o cookie de sessão. Se a vaga mudou enquanto a confirmação estava
+        aberta, responde `owner_session_challenge_invalid` sem derrubar ninguém. Repetir a mesma
+        confirmação depois de uma queda de rede reentrega o acesso só se esta tentativa venceu e continua
+        ocupando a vaga (nunca revoga de novo).
+      security: []
+      x-authz: [{ actor: public, scope: none }]
+      x-transitions: [T-SS-07]
+      x-events: [stream.session_ended]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OwnerChallengeRequest' }
+      responses:
+        '200':
+          description: Acesso de dono transferido para este aparelho. Set-Cookie com __Host-fila_session.
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/SetSessionCookie' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/SessionView' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/auth/owner-session/cancel:
+    post:
+      operationId: cancelOwnerTakeover
+      tags: [sessao]
+      summary: Cancela e mantém a outra sessão (descarta o desafio). Sempre 204.
+      security: []
+      x-authz: [{ actor: public, scope: none }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OwnerChallengeRequest' }
+      responses:
+        '204': { description: Desafio descartado (ou já inexistente). A outra sessão continua. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         default: { $ref: '#/components/responses/Unexpected' }
   /v1/auth/logout:
     post:
@@ -3018,6 +3082,11 @@ components:
         - reward_inactive
         - reservation_already_active
         - reservation_expired
+        # sessão única do dono (ADR-0027)
+        - owner_session_active
+        - owner_session_challenge_invalid
+        - owner_session_replaced
+        - owner_session_required
 
     # ------------------------------------------------------------ enums de estado
     QueueStatus:
@@ -3549,6 +3618,9 @@ components:
                   oneOf:
                     - $ref: '#/components/schemas/Timestamp'
                     - type: 'null'
+                owner_authority:
+                  type: boolean
+                  description: Esta sessão ocupa a vaga de dono da conta (ADR-0027). Só ela exerce privilégios de dono.
             - type: 'null'
         visitors:
           type: array
@@ -3559,6 +3631,10 @@ components:
           description: Vínculos de equipe. Só concedem permissão com sessão de contexto staff.
           items: { $ref: '#/components/schemas/MembershipView' }
         csrf_token: { type: [string, 'null'] }
+        ended_reason:
+          type: string
+          enum: [owner_session_replaced, owner_session_migration]
+          description: O cookie apresentado deixou de valer porque o dono entrou em outro aparelho (ou pela migração da sessão única).
     AccountView:
       type: object
       required: [id, name, email, status]
@@ -4139,3 +4215,23 @@ components:
           oneOf:
             - $ref: '#/components/schemas/LoyaltySummary'
             - type: 'null'
+    OwnerChallengeRequest:
+      type: object
+      additionalProperties: false
+      required: [challenge]
+      properties:
+        challenge: { type: string, minLength: 20, maxLength: 64 }
+    OwnerSessionConflict:
+      type: object
+      description: Problem.current de `owner_session_active`. Só contexto confiável da outra sessão.
+      required: [challenge, expires_at, other_session]
+      properties:
+        challenge: { type: string, description: 'Uso único, 2 min, preso à conta, à tentativa (cookie) e à geração da vaga. Nunca em URL ou log.' }
+        expires_at: { $ref: '#/components/schemas/Timestamp' }
+        other_session:
+          type: object
+          required: [channel, installation_name, last_used_at]
+          properties:
+            channel: { type: string, enum: [desktop_authorized, unknown], description: 'unknown = outro aparelho ou navegador.' }
+            installation_name: { type: [string, 'null'] }
+            last_used_at: { $ref: '#/components/schemas/Timestamp' }

@@ -51,6 +51,8 @@ Não edite à mão: rode `python docs/tools/verificar_contrato.py --write`. Cél
 | `acceptInvite` | `POST /v1/auth/invites/accept` | sim | — | — | — | — | — | — | T-IN-02 |
 | `login` | `POST /v1/auth/login` | sim | — | — | — | — | — | — | T-SS-01 |
 | `logout` | `POST /v1/auth/logout` | — | — | self | self | self | — | — | T-SS-02 |
+| `cancelOwnerTakeover` | `POST /v1/auth/owner-session/cancel` | sim | — | — | — | — | — | — | — |
+| `takeoverOwnerSession` | `POST /v1/auth/owner-session/takeover` | sim | — | — | — | — | — | — | T-SS-07 |
 | `confirmPasswordReset` | `POST /v1/auth/password-reset/confirm` | sim | — | — | — | — | — | — | T-PW-02, T-SS-04 |
 | `requestPasswordReset` | `POST /v1/auth/password-reset/request` | sim | — | — | — | — | — | — | T-PW-01 |
 | `changePassword` | `POST /v1/auth/password/change` | — | — | self | self | self | — | — | T-SS-03 |

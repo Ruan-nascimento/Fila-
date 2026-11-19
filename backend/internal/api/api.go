@@ -119,7 +119,7 @@ func New(d Deps, register func(mux *http.ServeMux)) (*API, error) {
 
 	hub := outbox.NewHub(d.Pool, d.Log)
 	stream := fluxo.New(fluxo.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Hub: hub, Auth: ident, Customers: ident,
-		Refresh: ident.Refresh, Sources: fl, Limits: streamLimits(d), TrustForwardedFor: d.Config.Security.TrustForwardedFor,
+		Refresh: ident.Refresh, Ended: ident.EndedReasonOf, Sources: fl, Limits: streamLimits(d), TrustForwardedFor: d.Config.Security.TrustForwardedFor,
 		SnapshotHook: d.SnapshotHook, Pendencies: func(ctx context.Context, q database.Querier, estID uuid.UUID) (any, error) {
 			return painel.Count(ctx, q, estID)
 		}, Loyalty: loyalty.Snapshot})

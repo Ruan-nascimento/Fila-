@@ -23,7 +23,23 @@ export function SessaoExpirada() {
 /** Aviso no topo da página enquanto a sessão encerrada durante o uso não for retomada. */
 export function AvisoSessaoEncerrada() {
   const { state, expired } = useSession();
-  if (!expired || (state.status === "ready" && state.session.account)) return null;
+  if (state.status === "ready" && state.session.account) return null;
+  // Sessão única do dono: o servidor diz quando o cookie deixou de valer porque a conta entrou em
+  // outro aparelho (vale também ao voltar de suspensão ou recuperar a conexão: a releitura da
+  // sessão traz o motivo). As telas de gestão saem de cena e levam junto os dados que mostravam.
+  const motivo = state.status === "ready" ? state.session.ended_reason : undefined;
+  if (motivo === "owner_session_replaced" || motivo === "owner_session_migration")
+    return (
+      <Notice kind="erro" title="Sua sessão foi encerrada porque você entrou em outro aparelho.">
+        <p>
+          {motivo === "owner_session_migration"
+            ? "Com a atualização do sistema, só uma sessão de dono fica ativa por conta. "
+            : "Nada desta tela foi alterado depois disso. "}
+          <Link to={modoDono() ? "/dono" : "/entrar?como=equipe"}>Entrar de novo</Link> para continuar aqui.
+        </p>
+      </Notice>
+    );
+  if (!expired) return null;
   return (
     <Notice kind="erro" title="Sua sessão terminou e a ação não foi feita.">
       <p>

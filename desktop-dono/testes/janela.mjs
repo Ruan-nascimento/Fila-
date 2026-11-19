@@ -169,6 +169,8 @@ async function completo() {
     name: "Corte", price_cents: 4500, duration_minutes: 30, points: 0, professional_ids: [beto.id],
   });
   await a.dono.ok("POST", `/v1/establishments/${a.estId}/queues/${beto.queue_id}/open`, { expected_version: 1 });
+  // Sessão única do dono (ADR-0027): a preparação sai para o dono entrar pelo programa sem conflito.
+  await a.dono.ok("POST", "/v1/auth/logout");
 
   await abrirPrograma();
   ok("programa instalado abriu (sessão WebDriver criada)");
