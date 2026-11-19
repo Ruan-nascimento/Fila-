@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-sair-dashboard"
+description = "Enables the sair_dashboard command without any pre-configured scope."
+commands.allow = ["sair_dashboard"]
+
+[[permission]]
+identifier = "deny-sair-dashboard"
+description = "Denies the sair_dashboard command without any pre-configured scope."
+commands.deny = ["sair_dashboard"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-abrir-gestao"
+description = "Enables the abrir_gestao command without any pre-configured scope."
+commands.allow = ["abrir_gestao"]
+
+[[permission]]
+identifier = "deny-abrir-gestao"
+description = "Denies the abrir_gestao command without any pre-configured scope."
+commands.deny = ["abrir_gestao"]

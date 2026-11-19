@@ -1,0 +1,82 @@
+    desempenho_test.go:82: semeadura: 3m26.71s
+    desempenho_test.go:89: volume: 60000 participações, 60000 recebimentos, 6000 estornos, 80000 itens
+    desempenho_test.go:112: 30 dias   resumo (com comparação)      41.9ms
+    desempenho_test.go:112: 30 dias   série cash                    5.5ms
+    desempenho_test.go:112: 30 dias   série ticket                  4.7ms
+    desempenho_test.go:112: 30 dias   série movement               15.4ms
+    desempenho_test.go:112: 30 dias   série wait                   12.1ms
+    desempenho_test.go:112: 30 dias   série duration                8.6ms
+    desempenho_test.go:112: 30 dias   série loyalty                 600µs
+    desempenho_test.go:112: 30 dias   detalhamento payment_methods    2.3ms
+    desempenho_test.go:112: 30 dias   detalhamento outcomes         3.9ms
+    desempenho_test.go:112: 30 dias   detalhamento professionals     76ms
+    desempenho_test.go:112: 30 dias   detalhamento services        34.3ms
+    desempenho_test.go:112: 30 dias   detalhamento peak_hours      11.4ms
+    desempenho_test.go:112: 30 dias   detalhamento wait_bands         5ms
+    desempenho_test.go:112: 30 dias   detalhamento pending         21.1ms
+    desempenho_test.go:112: 30 dias   detalhamento recurrence       4.8ms
+    desempenho_test.go:139: plano (caixa, 30 dias):
+          ->  Bitmap Heap Scan on receipt r  (cost=162.11..1547.99 rows=4839 width=16) (actual time=0.275..4.062 rows=4843.00 loops=1)
+                ->  Bitmap Index Scan on receipt_est_registered_idx  (cost=0.00..160.90 rows=4839 width=0) (actual time=0.242..0.243 rows=4843.00 loops=1)
+                      Index Cond: ((establishment_id = '01a1f0c5-f5fc-7979-8b16-d37b296215bc'::uuid) AND (registered_at >= '2026-10-20 03:00:00+00'::timestamp with time zone) AND (registered_at < '2026-11-18 22:31:14.574766+00'::timestamp with time zone))
+                      Index Searches: 1
+        Planning Time: 0.161 ms
+        Execution Time: 5.154 ms
+    desempenho_test.go:112: 366 dias  resumo (com comparação)       257ms
+    desempenho_test.go:112: 366 dias  série cash                   68.6ms
+    desempenho_test.go:112: 366 dias  série ticket                 59.3ms
+    desempenho_test.go:112: 366 dias  série movement              169.2ms
+    desempenho_test.go:112: 366 dias  série wait                  140.1ms
+    desempenho_test.go:112: 366 dias  série duration              126.8ms
+    desempenho_test.go:112: 366 dias  série loyalty                 700µs
+    desempenho_test.go:112: 366 dias  detalhamento payment_methods   22.2ms
+    desempenho_test.go:112: 366 dias  detalhamento outcomes        49.4ms
+    desempenho_test.go:112: 366 dias  detalhamento professionals    446ms
+    desempenho_test.go:112: 366 dias  detalhamento services       219.9ms
+    desempenho_test.go:112: 366 dias  detalhamento peak_hours     138.6ms
+    desempenho_test.go:112: 366 dias  detalhamento wait_bands      65.4ms
+    desempenho_test.go:112: 366 dias  detalhamento pending         25.9ms
+    desempenho_test.go:112: 366 dias  detalhamento recurrence      49.3ms
+    desempenho_test.go:158: SEM ÍNDICES 30 dias série cash         25.9ms
+    desempenho_test.go:158: SEM ÍNDICES 30 dias série ticket         20ms
+    desempenho_test.go:158: SEM ÍNDICES 30 dias série movement     42.9ms
+    desempenho_test.go:158: SEM ÍNDICES 30 dias série wait         30.1ms
+    desempenho_test.go:158: SEM ÍNDICES 30 dias série duration     27.2ms
+    desempenho_test.go:162: SEM ÍNDICES 30 dias resumo            69.2ms
+ok  	fila/internal/analitico	214.973s
+ANTES (JOIN)     desempenho_test.go:112: 30 dias   resumo (com comparação)     166.5ms
+ANTES (JOIN)     desempenho_test.go:112: 30 dias   série cash                     34ms
+ANTES (JOIN)     desempenho_test.go:112: 30 dias   série ticket                  7.6ms
+ANTES (JOIN)     desempenho_test.go:112: 30 dias   série movement               25.6ms
+ANTES (JOIN)     desempenho_test.go:112: 30 dias   série wait                     22ms
+ANTES (JOIN)     desempenho_test.go:112: 30 dias   série duration               16.9ms
+ANTES (JOIN)     desempenho_test.go:112: 30 dias   série loyalty                 4.6ms
+ANTES (JOIN)     desempenho_test.go:112: 30 dias   detalhamento payment_methods   57.2ms
+ANTES (JOIN)     desempenho_test.go:112: 30 dias   detalhamento outcomes         7.2ms
+ANTES (JOIN)     desempenho_test.go:112: 30 dias   detalhamento professionals  143.3ms
+ANTES (JOIN)     desempenho_test.go:112: 30 dias   detalhamento services        60.7ms
+ANTES (JOIN)     desempenho_test.go:112: 30 dias   detalhamento peak_hours      18.3ms
+ANTES (JOIN)     desempenho_test.go:112: 30 dias   detalhamento wait_bands      11.5ms
+ANTES (JOIN)     desempenho_test.go:112: 30 dias   detalhamento pending         38.6ms
+ANTES (JOIN)     desempenho_test.go:112: 30 dias   detalhamento recurrence         7ms
+ANTES (JOIN)     desempenho_test.go:112: 366 dias  resumo (com comparação)     769.1ms
+ANTES (JOIN)     desempenho_test.go:112: 366 dias  série cash                    406ms
+ANTES (JOIN)     desempenho_test.go:112: 366 dias  série ticket                   88ms
+ANTES (JOIN)     desempenho_test.go:112: 366 dias  série movement              235.9ms
+ANTES (JOIN)     desempenho_test.go:112: 366 dias  série wait                  203.5ms
+ANTES (JOIN)     desempenho_test.go:112: 366 dias  série duration              205.1ms
+ANTES (JOIN)     desempenho_test.go:112: 366 dias  série loyalty                 1.5ms
+ANTES (JOIN)     desempenho_test.go:112: 366 dias  detalhamento payment_methods   95.9ms
+ANTES (JOIN)     desempenho_test.go:112: 366 dias  detalhamento outcomes        68.6ms
+ANTES (JOIN)     desempenho_test.go:112: 366 dias  detalhamento professionals  559.2ms
+ANTES (JOIN)     desempenho_test.go:112: 366 dias  detalhamento services         379ms
+ANTES (JOIN)     desempenho_test.go:112: 366 dias  detalhamento peak_hours     236.6ms
+ANTES (JOIN)     desempenho_test.go:112: 366 dias  detalhamento wait_bands       101ms
+ANTES (JOIN)     desempenho_test.go:112: 366 dias  detalhamento pending         34.8ms
+ANTES (JOIN)     desempenho_test.go:112: 366 dias  detalhamento recurrence      67.3ms
+ANTES (JOIN)     desempenho_test.go:158: SEM ÍNDICES 30 dias série cash         49.3ms
+ANTES (JOIN)     desempenho_test.go:158: SEM ÍNDICES 30 dias série ticket       23.6ms
+ANTES (JOIN)     desempenho_test.go:158: SEM ÍNDICES 30 dias série movement       62ms
+ANTES (JOIN)     desempenho_test.go:158: SEM ÍNDICES 30 dias série wait         42.2ms
+ANTES (JOIN)     desempenho_test.go:158: SEM ÍNDICES 30 dias série duration       46ms
+ANTES (JOIN)     desempenho_test.go:162: SEM ÍNDICES 30 dias resumo            97.4ms

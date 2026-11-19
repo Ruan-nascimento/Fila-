@@ -1,8 +1,24 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "carregador",
-  "description": "Só a tela local de carregamento pode chamar os comandos do programa. As páginas do painel (origem remota) não têm acesso a nenhum comando: não há chave \"remote\" aqui.",
+  "description": "Só as telas locais (carregamento e Dashboard) podem chamar os comandos do programa. As páginas do painel (origem remota) não têm acesso a nenhum comando: não há chave \"remote\" aqui.",
   "local": true,
-  "windows": ["principal"],
-  "permissions": ["allow-painel", "allow-verificar-painel"]
+  "windows": [
+    "principal"
+  ],
+  "permissions": [
+    "allow-painel",
+    "allow-verificar-painel",
+    "allow-estado-dashboard",
+    "allow-ativar-instalacao",
+    "allow-vincular-sessao",
+    "allow-contexto-dashboard",
+    "allow-consultar",
+    "allow-iniciar-fluxo",
+    "allow-parar-fluxo",
+    "allow-abrir-gestao",
+    "allow-sair-dashboard",
+    "allow-esquecer-instalacao",
+    "core:event:default"
+  ]
 }

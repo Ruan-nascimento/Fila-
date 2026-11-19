@@ -55,7 +55,20 @@ fn main() {
     println!("cargo:warning=Fila Gestão: painel {origem} ({modo})");
 
     // Os comandos do programa só ficam disponíveis para a tela local (ver capabilities/).
-    let manifesto = tauri_build::AppManifest::new().commands(&["painel", "verificar_painel"]);
+    let manifesto = tauri_build::AppManifest::new().commands(&[
+        "painel",
+        "verificar_painel",
+        "estado_dashboard",
+        "ativar_instalacao",
+        "vincular_sessao",
+        "contexto_dashboard",
+        "consultar",
+        "iniciar_fluxo",
+        "parar_fluxo",
+        "abrir_gestao",
+        "sair_dashboard",
+        "esquecer_instalacao",
+    ]);
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(manifesto))
         .expect("falha no tauri-build");
 }

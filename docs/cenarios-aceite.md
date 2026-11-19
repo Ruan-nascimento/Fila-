@@ -1038,10 +1038,10 @@ E a homologação nunca aceita chave de produção.
 
 ---
 
-## Sessão única do dono (ADR-0027)
+## Sessão única do dono e Dashboard desktop (ADR-0027)
 
 ### C-DON-01 — Outra sessão de dono ativa: cancelar mantém, confirmar transfere
-- Regras: ADR-0027 · Transições: T-SS-07 · Tipo: automatizado (TestOwnerSessionConflictThenCancel, TestOwnerSessionTakeover, frontend/src/pages/dono/sessao-unica.test.tsx)
+- Regras: ADR-0027 · Transições: T-SS-07 · Tipo: automatizado (TestOwnerSessionConflictThenCancel, TestOwnerSessionTakeover, TestDesktopFollowsOwnerSession, frontend/src/pages/dono/sessao-unica.test.tsx, desktop-dono/testes/janela.mjs dashboard)
 
 Dado o dono com a gestão aberta no navegador, quando entra em outro aparelho, então recebe owner_session_active sem cookie nem dados; cancelar mantém a sessão original; confirmar revoga a anterior e a nova recebe acesso só depois do commit; a sessão antiga perde leituras, mutações e SSE com a mensagem “Sua sessão foi encerrada porque você entrou em outro aparelho”; o logout atrasado dela não encerra a nova.
 
@@ -1054,6 +1054,16 @@ Dado uma conta dona, então dois logins simultâneos sem sessão prévia termina
 - Regras: ADR-0027 · Tipo: automatizado (TestOwnerSlotIsPerAccount, TestOwnerSameCookieAndChallengeBinding, TestOwnerSlotLifecycle, TestUpgradeKeepsOneOwnerSessionPerAccount)
 
 Dado o dono com a vaga ocupada, então abas com o mesmo cookie não disputam; duas contas donas da mesma loja trabalham juntas; trocar de loja não cria sessão; conta dona de A e profissional de B não abre segunda sessão pela rota de profissional; sessão de cliente não ocupa a vaga; expiração libera a vaga; vínculo removido tira o acesso de dono; na migração fica só a sessão de equipe usada por último de cada conta dona.
+
+### C-DON-04 — Dashboard só com instalação autorizada, sessão de dono e vínculo com a loja
+- Regras: ADR-0027 · Transições: T-DK-01, T-DK-02, T-DK-03, T-DK-04 · Tipo: automatizado (TestDesktopActivationAndProof, TestDesktopStoreScope, desktop-dono/testes/janela.mjs dashboard)
+
+Dado um dono logado no navegador, então ele acessa a gestão, mas a chamada direta ao analítico é recusada; instalação sem ativação, revogada, prova reutilizada, prova de outro pedido, prova vencida e token sem a chave são recusados; instalação autorizada sem sessão de dono não obtém ticket; dono de A e profissional de B vê só A e o id de B (URL ou filtro) não devolve dados de B; ticket de outra conta não serve.
+
+### C-DON-05 — Cálculos reconciliam com os registros
+- Regras: ADR-0027 · Tipo: automatizado (TestAnalyticsCalculations, desktop-dono/dashboard/src/dashboard.test.tsx)
+
+Dado o movimento controlado de dois dias no fuso da loja, então uma comanda com dois serviços e um recebimento não duplica; recebimento num dia e estorno efetivado no seguinte aparecem nas datas certas e o líquido do intervalo é a diferença; dinheiro com troco soma só o valor devido; Pix pendente e estorno em análise não entram; chamada ausente fica fora da espera; evento às 23:30 locais conta no dia local; gráfico, tabela e registros paginados mostram o mesmo total; antes da coleta, base zero e filtro inaplicável têm estados próprios; resposta atrasada da loja A não aparece sob a loja B.
 
 ## Critérios de pronto do anexo (§15) → cenários
 

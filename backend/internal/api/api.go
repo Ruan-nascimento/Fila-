@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"fila/internal/analitico"
 	"fila/internal/atendimento"
 	"fila/internal/auditoria"
 	"fila/internal/catalogo"
@@ -55,6 +56,8 @@ type Deps struct {
 	SnapshotHook func(stage string)
 	// Benefits (só testes) substitui o encerramento de pontos e reservas na exclusão. nil = fidelidade.
 	Benefits exclusao.Benefits
+	// AnalyticsStream (só testes) troca os tempos do fluxo do Dashboard. Zero = padrão.
+	AnalyticsStream analitico.StreamDeps
 	// DeletionFault (só testes) simula queda no meio da anonimização.
 	DeletionFault func(step string) error
 }
@@ -124,6 +127,9 @@ func New(d Deps, register func(mux *http.ServeMux)) (*API, error) {
 			return painel.Count(ctx, q, estID)
 		}, Loyalty: loyalty.Snapshot})
 	panel := &painel.Service{Pool: d.Pool, Auth: ident}
+	analyticsStream := d.AnalyticsStream
+	analyticsStream.Hub = hub
+	analytics := analitico.New(analitico.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Auth: ident, Stream: analyticsStream})
 
 	// Exclusão de conta encerra pontos e reservas (T-LG-03, T-RW-06); testes podem substituir.
 	var benefits exclusao.Benefits = loyalty
@@ -145,6 +151,7 @@ func New(d Deps, register func(mux *http.ServeMux)) (*API, error) {
 	a.routes = append(a.routes, loyalty.Routes()...)
 	a.routes = append(a.routes, (&auditoria.Service{Pool: d.Pool, Auth: ident}).Routes()...)
 	a.routes = append(a.routes, stream.Routes()...)
+	a.routes = append(a.routes, analytics.Routes()...)
 	a.routes = append(a.routes, deletion.Routes()...)
 	hs.Mount(a.mux, d.Log, a.routes)
 	if register != nil {

@@ -172,6 +172,11 @@ func (s *Service) login(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		if ownerAccount {
+			if prev.Session != nil {
+				if err := revokeBindings(ctx, tx, prev.Session.ID, now); err != nil {
+					return err
+				}
+			}
 			if err := occupySlot(ctx, tx, a.ID, id, now); err != nil {
 				return err
 			}
@@ -228,6 +233,9 @@ func (s *Service) logout(w http.ResponseWriter, r *http.Request) error {
 				WHERE account_id = $1 AND session_id = $2`, sess.AccountID, sess.ID, now); err != nil {
 				return err
 			}
+		}
+		if err := revokeBindings(ctx, tx, sess.ID, now); err != nil {
+			return err
 		}
 		if _, err := tx.Exec(ctx, `UPDATE account_session SET revoked_at = $2, revoke_reason = 'logout'
 			WHERE id = $1 AND revoked_at IS NULL`, sess.ID, now); err != nil {
