@@ -130,7 +130,7 @@ test("telas do cliente", async ({ page }, info) => {
 });
 
 test("telas da dona", async ({ page }, info) => {
-  await entrarNaTela(page, loja.donaEmail, true);
+  await entrarNaTela(page, loja.donaEmail, true, loja.dona);
   for (const aba of [
     "filas",
     "comandas",
@@ -187,7 +187,7 @@ test("só teclado: pular para o conteúdo, entrar e foco sempre visível", async
   await expect(page.getByRole("button", { name: "Mostrar senha" })).toBeFocused();
   expect(await focoVisivel()).toBe("ok");
   await page.keyboard.press("Tab");
-  await expect(page.getByRole("button", { name: "Entrar" })).toBeFocused();
+  await expect(page.getByRole("button", { name: "Entrar", exact: true })).toBeFocused();
   expect(await focoVisivel()).toBe("ok");
   await page.keyboard.press("Enter");
   await expect(page.getByRole("link", { name: "Minha conta" })).toBeVisible();

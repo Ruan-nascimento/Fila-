@@ -75,7 +75,10 @@ func TestNoPackageImportsExecutables(t *testing.T) {
 // Dono de cada tabela (ADR-0001: cada módulo acessa só as próprias tabelas; os outros usam
 // funções exportadas). A chave é o caminho do pacote sob internal/.
 var tableOwners = map[string][]string{
-	"identidade":           {"account", "account_token", "account_session", "invite", "visitor", "visitor_browser", "visitor_credential"},
+	"identidade": {"account", "account_token", "account_session", "invite", "visitor", "visitor_browser", "visitor_credential",
+		"owner_session_slot", "owner_session_challenge", "desktop_activation_code", "desktop_installation", "desktop_link_ticket",
+		"desktop_binding", "desktop_proof_seen", "external_identity", "oidc_transaction"},
+	"midia":                {"media_asset"},
 	"estabelecimento":      {"establishment", "professional", "staff_membership", "queue"},
 	"catalogo":             {"service", "service_professional", "service_revision"},
 	"fila":                 {"participation", "participation_transfer", "queue_counter"},
@@ -90,6 +93,13 @@ var tableOwners = map[string][]string{
 	"platform/outbox":      {"outbox", "event_log", "event_stream_state"},
 	"operacao":             {"operation_state"},
 }
+
+// Leitura analítica do dono (ADR-0027): o módulo analitico agrega, no banco, dados de vários
+// módulos (fila, comanda, recebimentos, fidelidade). Pode só LER estas tabelas: nenhuma escrita
+// (TestAnalyticsIsReadOnly) e nenhuma tabela de sessão, credencial ou dado pessoal de contato.
+var analyticsReadTables = []string{"establishment", "professional", "queue", "service", "participation",
+	"participation_transfer", "service_order", "order_item", "order_adjustment", "receipt", "refund",
+	"financial_issue", "pix_charge", "loyalty_program", "loyalty_ledger", "reward", "reward_reservation"}
 
 // Pacotes que podem tocar tabelas da plataforma para manutenção técnica.
 var maintenanceTables = map[string][]string{
@@ -121,7 +131,8 @@ func TestModulesOnlyQueryOwnTables(t *testing.T) {
 		for _, m := range sqlRef.FindAllStringSubmatch(string(src), -1) {
 			tb := strings.ToLower(m[1])
 			own, known := owner[tb]
-			if !known || own == pkg || slices.Contains(maintenanceTables[pkg], tb) {
+			if !known || own == pkg || slices.Contains(maintenanceTables[pkg], tb) ||
+				(pkg == "analitico" && slices.Contains(analyticsReadTables, tb)) {
 				continue
 			}
 			t.Errorf("%s consulta a tabela %s, que pertence a %s; use uma função exportada do módulo dono", path, tb, own)
@@ -131,4 +142,44 @@ func TestModulesOnlyQueryOwnTables(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+// O módulo analitico nunca escreve: só SELECT (sem INSERT, UPDATE, DELETE, MERGE, TRUNCATE nem
+// FOR UPDATE/SHARE) e só nas tabelas permitidas.
+func TestAnalyticsIsReadOnly(t *testing.T) {
+	write := regexp.MustCompile(`(?i)\b(INSERT\s+INTO|UPDATE\s+[a-z_]+\s+SET|DELETE\s+FROM|MERGE\s+INTO|TRUNCATE|FOR\s+(UPDATE|SHARE|NO\s+KEY))\b`)
+	ref := regexp.MustCompile(`(?i)\b(?:FROM|JOIN)\s+([a-z_]+)\b`)
+	dir := filepath.Join("..", "analitico")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("módulo analitico ausente: %v", err)
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
+			continue
+		}
+		src, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if m := write.FindString(string(src)); m != "" {
+			t.Errorf("%s: o módulo analitico só lê; encontrado %q", e.Name(), m)
+		}
+		for _, m := range ref.FindAllStringSubmatch(string(src), -1) {
+			tb := strings.ToLower(m[1])
+			if _, known := tableIndex()[tb]; known && !slices.Contains(analyticsReadTables, tb) {
+				t.Errorf("%s: o módulo analitico não pode ler a tabela %s", e.Name(), tb)
+			}
+		}
+	}
+}
+
+func tableIndex() map[string]string {
+	owner := map[string]string{}
+	for pkg, tables := range tableOwners {
+		for _, tb := range tables {
+			owner[tb] = pkg
+		}
+	}
+	return owner
 }

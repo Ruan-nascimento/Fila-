@@ -126,6 +126,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/auth/owner-session/takeover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Continua neste aparelho e encerra a outra sessão de dono (operação atômica).
+         * @description Valida o desafio (não vencido, não usado, desta tentativa pelo cookie `__Host-fila_owner_attempt`
+         *     e da MESMA geração da vaga que a pessoa viu), revoga a sessão anterior (`owner_session_replaced`),
+         *     cria a nova e só então define o cookie de sessão. Se a vaga mudou enquanto a confirmação estava
+         *     aberta, responde `owner_session_challenge_invalid` sem derrubar ninguém. Repetir a mesma
+         *     confirmação depois de uma queda de rede reentrega o acesso só se esta tentativa venceu e continua
+         *     ocupando a vaga (nunca revoga de novo).
+         */
+        post: operations["takeoverOwnerSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/owner-session/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancela e mantém a outra sessão (descarta o desafio). Sempre 204. */
+        post: operations["cancelOwnerTakeover"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/auth/logout": {
         parameters: {
             query?: never;
@@ -211,6 +253,95 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/auth/reauthenticate/email-code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Envia um código de 8 dígitos ao e-mail verificado para reautenticar conta sem senha (só Google).
+         * @description O código vale 10 minutos, só nesta sessão, e é usado em `reauthenticate` (`email_code`).
+         *     Conta com senha recebe `409 password_available` (use a senha).
+         */
+        post: operations["requestReauthCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/google/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Inicia o login (ou o vínculo) com Google — só jornada de cliente (ADR-0028).
+         * @description OpenID Connect com Authorization Code e PKCE S256 no backend. Cria uma transação de uso único
+         *     (10 min) presa a este navegador (cookie HttpOnly de correlação), à intenção, ao retorno
+         *     validado (lista fechada de rotas internas) e à loja resolvida. Responde a URL do Google.
+         *     `link` exige sessão de conta com reautenticação recente. Loja inexistente → 404 (não inicia).
+         *     Sessão aberta pelo Google é sempre de cliente: nunca dá acesso à gestão.
+         */
+        post: operations["startGoogleAuth"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/google/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Retorno do Google (redirect URI cadastrada). Sempre redireciona para uma rota interna limpa.
+         * @description Consome a transação (state de uso único, mesmo navegador, dentro do prazo) antes de trocar o
+         *     código; valida assinatura, emissor, audiência, expiração, nonce e azp do id_token. Não guarda
+         *     tokens do Google. Destinos: o retorno validado (sucesso), `/entrar?google=<situação>` ou
+         *     `/conta?google=<situação>` (vínculo). Situações: `cancelado`, `falhou`, `conta_existente`,
+         *     `verificar_email`, `indisponivel`, `conectado`, `ja_vinculado`.
+         */
+        get: operations["googleAuthCallback"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/google/unlink": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Desconecta o Google da conta (exige reautenticação e outro método de acesso).
+         * @description Conta só com Google recebe `409 last_access_method` (nunca fica sem acesso).
+         */
+        post: operations["unlinkGoogle"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/auth/invites/accept": {
         parameters: {
             query?: never;
@@ -240,14 +371,150 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Perfil da própria conta (não depende de loja selecionada). E-mail só leitura. */
+        get: operations["getMyProfile"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        /** Altera o nome exibido da própria conta. */
+        /**
+         * Altera o nome exibido e/ou a aparência da própria conta.
+         * @description Só `name`, `appearance` e `expected_version` (opcional; com ele a alteração é condicional e
+         *     versão diferente → `409 version_conflict` com o perfil atual). E-mail, papel, vínculo ou
+         *     verificação no corpo são recusados (campo desconhecido).
+         */
         patch: operations["updateMyProfile"];
+        trace?: never;
+    };
+    "/v1/me/avatar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Associa uma foto pessoal já processada (envio próprio, finalidade avatar).
+         * @description A foto antiga continua até esta troca confirmar. Versão esperada obrigatória (troca antiga não sobrescreve a nova).
+         */
+        put: operations["setMyAvatar"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/avatar/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Remove a foto pessoal (referência retirada na hora; arquivos apagados após a retenção). */
+        post: operations["removeMyAvatar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/avatar/{size}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Foto pessoal da própria conta (privada; autorização refeita a cada pedido, inclusive antes do 304). */
+        get: operations["getMyAvatar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/media/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Envia uma imagem (JPEG, PNG ou WebP estático, até 5 MiB, 12 MP, 8.192 px por eixo).
+         * @description Rota própria (o limite de corpo das demais rotas não muda). O formato real é conferido pela
+         *     assinatura; SVG, GIF, animação, HEIC e desconhecidos são recusados. A imagem é processada
+         *     depois (worker) e o envio NÃO altera o perfil: associe com `setMyAvatar`,
+         *     `setEstablishmentLogo` ou `setMyProfessionalPhoto`. `avatar`: qualquer conta (privado);
+         *     `logo`: dono da loja; `professional_photo`: quem atende na loja (públicas). Limites: 5
+         *     envios/min e 20/dia por conta (configuráveis) e no máximo 10 envios pendentes.
+         */
+        post: operations["uploadMedia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/media/uploads/{assetId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Situação do processamento de um envio próprio (consulta curta enquanto o envio está ativo). */
+        get: operations["getMediaUpload"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/public/media/{assetId}/{size}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Variante pública (logo ou foto profissional publicada). URL versionada pelo id; cache de 5 min. */
+        get: operations["getPublicMedia"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/public/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** O que está ligado (Google, fotos) e a origem pública canônica (links e QR Code). Sem segredos. */
+        get: operations["getPublicConfig"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/establishments/{establishmentId}/visitor-sessions": {
@@ -387,6 +654,27 @@ export interface paths {
         put?: never;
         /** Entra na fila de um profissional com ≥1 serviço; preço calculado no servidor. */
         post: operations["createParticipation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/establishments/{establishmentId}/participations/{participationId}/customer-avatar/{size}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Foto pessoal do cliente com conta, para a equipe da fila, SÓ enquanto a participação está ativa.
+         * @description Dono da loja ou o profissional da fila. Participação encerrada, visitante ou outra loja → 404.
+         *     A autorização é refeita a cada pedido (inclusive antes do 304); nunca vai para cache compartilhado.
+         */
+        get: operations["getCustomerAvatar"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1170,8 +1458,121 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Altera nome, slug e fuso da loja. */
+        /**
+         * Altera nome, slug, fuso, paleta e informações públicas da loja.
+         * @description `palette` é um identificador do catálogo de 16 paletas (nunca CSS ou hexadecimal). Textos
+         *     públicos são texto simples; string vazia remove. O telefone é normalizado para E.164 e será
+         *     publicado. A auditoria guarda os nomes dos campos alterados, nunca os valores.
+         */
         patch: operations["updateEstablishment"];
+        trace?: never;
+    };
+    "/v1/establishments/{establishmentId}/logo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Associa a logo (envio do próprio dono, finalidade logo, desta loja). Pública. */
+        put: operations["setEstablishmentLogo"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/establishments/{establishmentId}/logo/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Remove a logo (a loja passa a mostrar o nome). */
+        post: operations["removeEstablishmentLogo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/establishments/{establishmentId}/my-professional-profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Meu perfil na barbearia (quem atende nesta loja). Nome só leitura (quem renomeia é o dono). */
+        get: operations["getMyProfessionalProfile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/establishments/{establishmentId}/my-professional-profile/photo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Publica a foto pública do profissional (envio próprio ou cópia explícita da foto pessoal).
+         * @description Com `from_avatar`, as variantes da foto pessoal são COPIADAS para uma imagem pública nova; o avatar continua privado.
+         */
+        put: operations["setMyProfessionalPhoto"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/establishments/{establishmentId}/my-professional-profile/photo/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Despublica a foto pública (o avatar pessoal não muda). */
+        post: operations["removeMyProfessionalPhoto"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/establishments/{establishmentId}/professionals/{professionalId}/photo/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * O dono retira a publicação de uma foto profissional inadequada (motivo + auditoria).
+         * @description Não altera o avatar pessoal da conta do profissional (continua privado).
+         */
+        post: operations["removeProfessionalPhoto"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/establishments/{establishmentId}/professionals": {
@@ -1528,6 +1929,217 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/desktop/installations/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ativa um computador com o código de uso único emitido pelo operador (fila-admin).
+         * @description O componente nativo envia o código e um cabeçalho `DPoP` (RFC 9449, ES256) assinado pela chave
+         *     privada recém-criada da instalação, com a chave pública no cabeçalho `jwk`. O servidor guarda só
+         *     a chave pública e a impressão digital (RFC 7638). Sem sessão nem cookie.
+         */
+        post: operations["activateDesktopInstallation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/desktop/link-tickets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ticket de 60 s para o Dashboard local usar a MESMA sessão de dono (troca mediada pelo servidor).
+         * @description Pedido da gestão aberta na janela do programa, com o cookie da sessão de dono ocupante da vaga. O
+         *     ticket não é credencial sozinho: só vira acesso quando trocado com prova de posse da chave de uma
+         *     instalação autorizada da MESMA conta. Nenhum cookie é copiado para JavaScript ou arquivo.
+         */
+        post: operations["createDesktopLinkTicket"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/desktop/bindings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Troca o ticket (com prova DPoP) por um token de acesso preso à chave da instalação.
+         * @description O token (tipo DPoP) vale enquanto a sessão do ticket for a ocupante da vaga de dono, no máximo 2 h.
+         *     Revogar a sessão, trocar de aparelho, sair, remover o vínculo de dono ou revogar a instalação
+         *     invalida as consultas seguintes.
+         */
+        post: operations["createDesktopBinding"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/desktop/bindings/current/end": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Encerra o acesso do Dashboard local (a sessão de dono na gestão continua). */
+        post: operations["endDesktopBinding"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/desktop/context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Conta, instalação e lojas em que a conta é DONA (lojas só de profissional não aparecem). */
+        get: operations["getDesktopContext"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/desktop/analytics/establishments/{establishmentId}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Quatro indicadores da primeira dobra (+ comparação e pendências abertas agora).
+         * @description Exclusivo do programa desktop (ADR-0027): exige ao mesmo tempo sessão de dono ocupante da vaga,
+         *     prova DPoP de instalação autorizada e vínculo de dono com a loja. Loja sem vínculo de dono → 404.
+         *     Resposta `Cache-Control: no-store`; agregação no servidor. Dicionário: docs/desktop/metricas.md.
+         */
+        get: operations["getAnalyticsSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/desktop/analytics/establishments/{establishmentId}/series/{metric}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Série temporal de uma métrica (cash, ticket, movement, wait, duration, loyalty).
+         * @description Exclusivo do programa desktop (ADR-0027): exige ao mesmo tempo sessão de dono ocupante da vaga,
+         *     prova DPoP de instalação autorizada e vínculo de dono com a loja. Loja sem vínculo de dono → 404.
+         *     Resposta `Cache-Control: no-store`; agregação no servidor. Dicionário: docs/desktop/metricas.md.
+         */
+        get: operations["getAnalyticsSeries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/desktop/analytics/establishments/{establishmentId}/breakdowns/{dimension}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Agregado por categoria.
+         * @description Exclusivo do programa desktop (ADR-0027): exige ao mesmo tempo sessão de dono ocupante da vaga,
+         *     prova DPoP de instalação autorizada e vínculo de dono com a loja. Loja sem vínculo de dono → 404.
+         *     Resposta `Cache-Control: no-store`; agregação no servidor. Dicionário: docs/desktop/metricas.md.
+         */
+        get: operations["getAnalyticsBreakdown"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/desktop/analytics/establishments/{establishmentId}/records/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Registros que formam um total, paginados no servidor (50 por página).
+         * @description Exclusivo do programa desktop (ADR-0027): exige ao mesmo tempo sessão de dono ocupante da vaga,
+         *     prova DPoP de instalação autorizada e vínculo de dono com a loja. Loja sem vínculo de dono → 404.
+         *     Resposta `Cache-Control: no-store`; agregação no servidor. Dicionário: docs/desktop/metricas.md.
+         *     Filtro sem atribuição confiável neste tipo de registro → 422 `analytics_filter_not_applicable`.
+         */
+        get: operations["listAnalyticsRecords"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/desktop/analytics/establishments/{establishmentId}/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * SSE de invalidação do Dashboard (só nomes de áreas, agrupados; sem dados).
+         * @description `event: ready` (todas as áreas), `event: invalidate` ({"areas": [...]}, agrupado por ~3 s),
+         *     `event: session_ended` ({"reason": "owner_session_replaced" | "session_revoked"}). Reconferido a cada
+         *     30 s e a cada revogação. Mudança de posição na fila não invalida nada.
+         */
+        get: operations["openAnalyticsStream"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1609,7 +2221,7 @@ export interface components {
             message?: string;
         };
         /** @enum {string} */
-        ErrorCode: "validation_failed" | "unauthenticated" | "forbidden" | "not_found" | "csrf_failed" | "origin_not_allowed" | "reauthentication_required" | "rate_limited" | "payload_too_large" | "unsupported_media_type" | "idempotency_key_missing" | "idempotency_key_reused" | "idempotency_in_progress" | "version_conflict" | "invalid_transition" | "internal_error" | "service_unavailable" | "invalid_credentials" | "email_not_verified" | "token_invalid" | "recovery_code_invalid" | "invite_invalid" | "visitor_visit_in_progress" | "sole_owner" | "deletion_in_progress" | "queue_not_open" | "queue_has_pending_participants" | "active_participation_exists" | "pending_order_exists" | "service_not_eligible" | "service_inactive" | "no_waiting_participant" | "professional_busy" | "professional_inactive" | "professional_has_active_participations" | "tolerance_not_elapsed" | "transfer_consent_required" | "transfer_target_incompatible" | "slug_taken" | "order_requires_item" | "duplicate_service" | "change_request_pending" | "item_already_performed" | "performed_item_required" | "order_not_editable" | "order_not_payable" | "pix_charge_active" | "pix_charge_outcome_unknown" | "payment_amount_mismatch" | "payment_method_not_allowed" | "refund_exceeds_available" | "refund_not_allowed" | "provider_unavailable" | "webhook_unauthenticated" | "loyalty_program_disabled" | "account_required" | "insufficient_points" | "reward_out_of_stock" | "reward_inactive" | "reservation_already_active" | "reservation_expired";
+        ErrorCode: "validation_failed" | "unauthenticated" | "forbidden" | "not_found" | "csrf_failed" | "origin_not_allowed" | "reauthentication_required" | "rate_limited" | "payload_too_large" | "unsupported_media_type" | "idempotency_key_missing" | "idempotency_key_reused" | "idempotency_in_progress" | "version_conflict" | "invalid_transition" | "internal_error" | "service_unavailable" | "invalid_credentials" | "email_not_verified" | "token_invalid" | "recovery_code_invalid" | "invite_invalid" | "visitor_visit_in_progress" | "sole_owner" | "deletion_in_progress" | "queue_not_open" | "queue_has_pending_participants" | "active_participation_exists" | "pending_order_exists" | "service_not_eligible" | "service_inactive" | "no_waiting_participant" | "professional_busy" | "professional_inactive" | "professional_has_active_participations" | "tolerance_not_elapsed" | "transfer_consent_required" | "transfer_target_incompatible" | "slug_taken" | "order_requires_item" | "duplicate_service" | "change_request_pending" | "item_already_performed" | "performed_item_required" | "order_not_editable" | "order_not_payable" | "pix_charge_active" | "pix_charge_outcome_unknown" | "payment_amount_mismatch" | "payment_method_not_allowed" | "refund_exceeds_available" | "refund_not_allowed" | "provider_unavailable" | "webhook_unauthenticated" | "loyalty_program_disabled" | "account_required" | "insufficient_points" | "reward_out_of_stock" | "reward_inactive" | "reservation_already_active" | "reservation_expired" | "owner_session_active" | "owner_session_challenge_invalid" | "owner_session_replaced" | "owner_session_required" | "desktop_proof_invalid" | "desktop_activation_invalid" | "desktop_link_invalid" | "desktop_access_invalid" | "desktop_installation_invalid" | "analytics_filter_not_applicable" | "media_disabled" | "media_not_attachable" | "image_unsupported" | "image_invalid" | "image_dimensions" | "google_unavailable" | "identity_already_linked" | "last_access_method" | "no_password" | "password_available" | "reauth_code_invalid";
         /** @enum {string} */
         QueueStatus: "open" | "paused" | "closed";
         /** @enum {string} */
@@ -1696,8 +2308,10 @@ export interface components {
             current_password: string;
             new_password: string;
         };
+        /** @description `password` (conta com senha) OU `email_code` (conta só com Google; ver `requestReauthCode`). */
         ReauthenticateRequest: {
-            password: string;
+            password?: string;
+            email_code?: string;
         };
         AcceptInviteRequest: {
             token: string;
@@ -1706,8 +2320,33 @@ export interface components {
             /** @description Nova senha (conta nova) ou senha atual (conta existente). */
             password: string;
         };
+        /** @description Pelo menos `name` ou `appearance`. */
         UpdateProfileRequest: {
-            name: string;
+            name?: string;
+            appearance?: components["schemas"]["Appearance"];
+            expected_version?: components["schemas"]["Version"];
+        };
+        /**
+         * @description Preferência de aparência da pessoa (a cor principal é da loja).
+         * @enum {string}
+         */
+        Appearance: "system" | "light" | "dark";
+        GoogleStartRequest: {
+            /** @enum {string} */
+            intent: "login" | "link";
+            establishment_slug?: string;
+            /** @description Rota interna: /conta, /loja/{slug}, /loja/{slug}/historico ou /loja/{slug}/pontos. Qualquer outra → 400. */
+            return_to?: string;
+        };
+        SetAssetRequest: {
+            asset_id: components["schemas"]["Id"];
+            expected_version: components["schemas"]["Version"];
+        };
+        /** @description `asset_id` (envio próprio, finalidade professional_photo) OU `from_avatar: true`. */
+        SetProfessionalPhotoRequest: {
+            asset_id?: components["schemas"]["Id"];
+            from_avatar?: boolean;
+            expected_version: components["schemas"]["Version"];
         };
         CreateVisitorSessionRequest: {
             nick: components["schemas"]["Nick"];
@@ -1840,6 +2479,72 @@ export interface components {
             slug?: string;
             /** @description Identificador IANA, ex. America/Sao_Paulo. */
             timezone?: string;
+            palette?: components["schemas"]["Palette"];
+            /** @description Texto simples; vazio remove. */
+            public_description?: string;
+            /** @description Texto simples; vazio remove. */
+            public_address?: string;
+            /** @description Telefone/WhatsApp público (será publicado); normalizado para E.164; vazio remove. */
+            public_phone?: string;
+        };
+        /**
+         * @description Paleta do catálogo fechado (padrão purple).
+         * @enum {string}
+         */
+        Palette: "purple" | "violet" | "indigo" | "blue" | "sky" | "cyan" | "teal" | "emerald" | "green" | "lime" | "amber" | "orange" | "red" | "rose" | "pink" | "fuchsia";
+        /** @enum {string} */
+        MediaPurpose: "avatar" | "professional_photo" | "logo";
+        ImageVariant: {
+            width: number;
+            height: number;
+            /** @description Caminho relativo; muda quando a imagem muda. */
+            url: string;
+        };
+        /** @description Variantes prontas (dimensões reais declaradas). Nunca bytes nem chaves de armazenamento. */
+        ImageRef: {
+            variants: components["schemas"]["ImageVariant"][];
+        };
+        MediaUpload: {
+            id: components["schemas"]["Id"];
+            purpose: components["schemas"]["MediaPurpose"];
+            /** @enum {string} */
+            status: "processing" | "ready" | "failed" | "attached";
+            /** @enum {string|null} */
+            failure_reason: "invalid_image" | "unsupported_format" | "dimensions" | "processing_error" | null;
+        };
+        MyProfile: {
+            id: components["schemas"]["Id"];
+            name: string;
+            /**
+             * Format: email
+             * @description Só leitura (não há troca de e-mail por PATCH).
+             */
+            email: string;
+            status: components["schemas"]["AccountStatus"];
+            email_verified: boolean;
+            appearance: components["schemas"]["Appearance"];
+            avatar: components["schemas"]["ImageRef"] | null;
+            /** @description Falso em conta só com Google (não há senha para trocar ou conferir). */
+            has_password: boolean;
+            google: {
+                linked: boolean;
+                email: string | null;
+            };
+            version: components["schemas"]["Version"];
+        };
+        MyProfessionalProfile: {
+            professional_id: components["schemas"]["Id"];
+            establishment_id: components["schemas"]["Id"];
+            establishment_name: string;
+            display_name: string;
+            photo: components["schemas"]["ImageRef"] | null;
+            version: components["schemas"]["Version"];
+        };
+        PublicConfig: {
+            google_login: boolean;
+            media_uploads: boolean;
+            /** @description Origem pública canônica (FILA_PUBLIC_BASE_URL) usada em links e QR Codes. */
+            public_base_url: string;
         };
         CreateProfessionalRequest: {
             display_name: string;
@@ -1922,12 +2627,24 @@ export interface components {
                 kind: components["schemas"]["SessionKind"];
                 expires_at: components["schemas"]["Timestamp"];
                 reauth_valid_until: components["schemas"]["Timestamp"] | null;
+                /** @description Esta sessão ocupa a vaga de dono da conta (ADR-0027). Só ela exerce privilégios de dono. */
+                owner_authority?: boolean;
+                /**
+                 * @description Como a sessão foi aberta. Google só abre sessão de cliente (nunca de equipe).
+                 * @enum {string}
+                 */
+                auth_method?: "password" | "google";
             } | null;
             /** @description Credenciais de visitante ativas neste navegador (uma por loja). */
             visitors: components["schemas"]["VisitorView"][];
             /** @description Vínculos de equipe. Só concedem permissão com sessão de contexto staff. */
             memberships: components["schemas"]["MembershipView"][];
             csrf_token: string | null;
+            /**
+             * @description O cookie apresentado deixou de valer porque o dono entrou em outro aparelho (ou pela migração da sessão única).
+             * @enum {string}
+             */
+            ended_reason?: "owner_session_replaced" | "owner_session_migration";
         };
         AccountView: {
             id: components["schemas"]["Id"];
@@ -1959,6 +2676,12 @@ export interface components {
             slug: string;
             name: string;
             timezone: string;
+            palette: components["schemas"]["Palette"];
+            description: string | null;
+            address: string | null;
+            /** @description E.164 publicado pelo dono. */
+            phone: string | null;
+            logo: components["schemas"]["ImageRef"] | null;
         };
         PublicService: {
             id: components["schemas"]["Id"];
@@ -1973,6 +2696,8 @@ export interface components {
             professional: {
                 id: components["schemas"]["Id"];
                 display_name: string;
+                /** @description Só a foto profissional publicada (nunca avatar pessoal nem foto de cliente). */
+                photo: components["schemas"]["ImageRef"] | null;
             };
             status: components["schemas"]["QueueStatus"];
             waiting_count: number;
@@ -2189,6 +2914,8 @@ export interface components {
                 tolerance_ends_at?: components["schemas"]["Timestamp"] | null;
                 has_pending_change_request?: boolean;
                 version: components["schemas"]["Version"];
+                /** @description Foto pessoal do cliente com conta, só para a equipe e só com a participação ativa (URL reautorizada a cada pedido). */
+                customer_avatar?: components["schemas"]["ImageRef"] | null;
             }[];
         };
         Establishment: {
@@ -2197,6 +2924,13 @@ export interface components {
             slug: string;
             timezone: string;
             version: components["schemas"]["Version"];
+            palette: components["schemas"]["Palette"];
+            public_description: string | null;
+            public_address: string | null;
+            public_phone: string | null;
+            logo: components["schemas"]["ImageRef"] | null;
+            /** @description Link canônico da loja (origem pública configurada + slug). Base do QR Code. */
+            public_url: string;
         };
         Professional: {
             id: components["schemas"]["Id"];
@@ -2206,6 +2940,8 @@ export interface components {
             status: components["schemas"]["ProfessionalStatus"];
             /** @description Conta vinculada e ativa. */
             has_access: boolean;
+            /** @description Foto pública publicada pelo profissional (o dono pode retirar a publicação). */
+            photo?: components["schemas"]["ImageRef"] | null;
             pending_invite?: components["schemas"]["Invite"] | null;
             version: components["schemas"]["Version"];
         };
@@ -2372,6 +3108,184 @@ export interface components {
             pendencies?: components["schemas"]["Pendencies"] | null;
             loyalty?: components["schemas"]["LoyaltySummary"] | null;
         };
+        OwnerChallengeRequest: {
+            challenge: string;
+        };
+        /** @description Problem.current de `owner_session_active`. Só contexto confiável da outra sessão. */
+        OwnerSessionConflict: {
+            /** @description Uso único, 2 min, preso à conta, à tentativa (cookie) e à geração da vaga. Nunca em URL ou log. */
+            challenge: string;
+            expires_at: components["schemas"]["Timestamp"];
+            other_session: {
+                /**
+                 * @description unknown = outro aparelho ou navegador.
+                 * @enum {string}
+                 */
+                channel: "desktop_authorized" | "unknown";
+                installation_name: string | null;
+                last_used_at: components["schemas"]["Timestamp"];
+            };
+        };
+        DesktopInstallation: {
+            id: components["schemas"]["Id"];
+            label: string;
+            created_at: components["schemas"]["Timestamp"];
+        };
+        DesktopLinkTicket: {
+            ticket: string;
+            expires_at: components["schemas"]["Timestamp"];
+        };
+        DesktopBinding: {
+            access_token: string;
+            /** @constant */
+            token_type: "DPoP";
+            expires_at: components["schemas"]["Timestamp"];
+            installation: components["schemas"]["DesktopInstallation"];
+        };
+        DesktopContext: {
+            account: {
+                id: components["schemas"]["Id"];
+                name: string;
+            };
+            installation: {
+                id: components["schemas"]["Id"];
+                label: string;
+            };
+            access_expires_at: components["schemas"]["Timestamp"];
+            establishments: {
+                id: components["schemas"]["Id"];
+                name: string;
+                timezone: string;
+            }[];
+        };
+        /** @description value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição. */
+        AnalyticsValue: {
+            value: number | null;
+            /** @enum {string} */
+            status: "ok" | "empty" | "not_collected" | "not_applicable";
+            sample?: number;
+        };
+        AnalyticsPeriod: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            start: components["schemas"]["Timestamp"];
+            end: components["schemas"]["Timestamp"];
+            effective_end: components["schemas"]["Timestamp"];
+        };
+        AnalyticsMeta: {
+            establishment_id: components["schemas"]["Id"];
+            establishment_name: string;
+            timezone: string;
+            period: components["schemas"]["AnalyticsPeriod"];
+            compare_period: components["schemas"]["AnalyticsPeriod"] | null;
+            /** @enum {string} */
+            granularity?: "hour" | "day" | "week" | "month";
+            generated_at: components["schemas"]["Timestamp"];
+            snapshot_at?: components["schemas"]["Timestamp"];
+            collection_started_at: components["schemas"]["Timestamp"];
+            filters: {
+                /** Format: uuid */
+                professional_id: string | null;
+                /** Format: uuid */
+                service_id: string | null;
+                /** @enum {string|null} */
+                method: "pix" | "cash" | "card" | null;
+            };
+            /** @description Filtros ativos sem atribuição confiável nesta consulta (os valores afetados saem not_applicable). */
+            ignored_filters: string[];
+            units: {
+                /** @constant */
+                money: "cents";
+                /** @constant */
+                duration: "seconds";
+                /** @constant */
+                currency: "BRL";
+            };
+            missing: string;
+        };
+        AnalyticsCash: {
+            received_cents: components["schemas"]["AnalyticsValue"];
+            refunded_cents: components["schemas"]["AnalyticsValue"];
+            net_cents: components["schemas"]["AnalyticsValue"];
+            receipts: components["schemas"]["AnalyticsValue"];
+            refunds: components["schemas"]["AnalyticsValue"];
+            ignored_filters: string[];
+        };
+        AnalyticsSummaryPart: {
+            cash: components["schemas"]["AnalyticsCash"];
+            completed: {
+                count: components["schemas"]["AnalyticsValue"];
+                ignored_filters: string[];
+            };
+            wait: {
+                median_seconds: components["schemas"]["AnalyticsValue"];
+                p90_seconds: components["schemas"]["AnalyticsValue"];
+                ignored_filters: string[];
+            };
+        };
+        AnalyticsSummary: {
+            current: components["schemas"]["AnalyticsSummaryPart"];
+            compare: components["schemas"]["AnalyticsSummaryPart"] | null;
+            /** @description Fotografia do instante snapshot_at (não depende do período). */
+            pending_now: {
+                snapshot_at: components["schemas"]["Timestamp"];
+                total: number;
+                open_financial_issues: number;
+                open_financial_issues_cents: number;
+                orders_awaiting_payment: number;
+                orders_awaiting_payment_cents: number;
+                orders_awaiting_confirmation: number;
+                charges_unknown: number;
+                refunds_under_review: number;
+                ignored_filters: string[];
+            };
+        };
+        AnalyticsSeries: {
+            metric: string;
+            series: {
+                key: string;
+                label: string;
+                /** @enum {string} */
+                unit: "cents" | "count" | "seconds" | "points";
+            }[];
+            buckets: {
+                start: components["schemas"]["Timestamp"];
+                end: components["schemas"]["Timestamp"];
+                label: string;
+                collected: boolean;
+                partial: boolean;
+                values: {
+                    [key: string]: components["schemas"]["AnalyticsValue"];
+                };
+            }[];
+            totals: {
+                [key: string]: components["schemas"]["AnalyticsValue"];
+            };
+            compare_totals: {
+                [key: string]: components["schemas"]["AnalyticsValue"];
+            } | null;
+        };
+        AnalyticsBreakdown: {
+            dimension: string;
+            /** @enum {string} */
+            status: "ok" | "not_applicable" | "not_collected";
+            /** @description Formato por dimensão (docs/desktop/metricas.md §Detalhamentos). */
+            rows: unknown;
+        };
+        AnalyticsRecords: {
+            kind: string;
+            /** @description Quantidade do recorte inteiro (todas as páginas). */
+            total: number;
+            total_cents: number | null;
+            items: Record<string, never>[];
+            next_cursor: string | null;
+            window: {
+                start: components["schemas"]["Timestamp"];
+                end: components["schemas"]["Timestamp"];
+            };
+        };
     };
     responses: {
         /** @description Situação do processo. */
@@ -2454,6 +3368,58 @@ export interface components {
                 "application/json": {
                     data: components["schemas"]["Establishment"];
                 };
+            };
+        };
+        /** @description Perfil da própria conta. */
+        MyProfileOk: {
+            headers: {
+                "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    data: components["schemas"]["MyProfile"];
+                };
+            };
+        };
+        /** @description Meu perfil na barbearia. */
+        MyProfessionalProfileOk: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    data: components["schemas"]["MyProfessionalProfile"];
+                };
+            };
+        };
+        /** @description Imagem privada. Cache-Control: private, no-cache, must-revalidate; ETag; X-Content-Type-Options: nosniff. */
+        PrivateImage: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "image/jpeg": string;
+                "image/png": string;
+            };
+        };
+        /** @description Imagem pública. Cache-Control: public, max-age=300; ETag; X-Content-Type-Options: nosniff. */
+        PublicImage: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "image/jpeg": string;
+                "image/png": string;
+            };
+        };
+        /** @description Formato não aceito (`unsupported_media_type`, `image_unsupported`). */
+        UnsupportedMediaType: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
             };
         };
         /** @description Profissional. */
@@ -2605,6 +3571,17 @@ export interface components {
         };
     };
     parameters: {
+        /** @description Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min. */
+        DPoPProof: string;
+        /** @description Primeiro dia (data LOCAL da loja), inclusivo. */
+        AnalyticsFrom: string;
+        /** @description Último dia (data LOCAL da loja), inclusivo. Intervalo consultado [from 00:00, to+1 00:00) no fuso da loja; no máximo 366 dias. */
+        AnalyticsTo: string;
+        /** @description previous = período anterior equivalente, com o mesmo tempo transcorrido. */
+        AnalyticsCompare: "previous";
+        AnalyticsProfessional: components["schemas"]["Id"];
+        AnalyticsService: components["schemas"]["Id"];
+        AnalyticsMethod: "pix" | "cash" | "card";
         EstablishmentId: components["schemas"]["Id"];
         QueueId: components["schemas"]["Id"];
         ParticipationId: components["schemas"]["Id"];
@@ -2616,6 +3593,9 @@ export interface components {
         RefundId: components["schemas"]["Id"];
         IssueId: components["schemas"]["Id"];
         ProfessionalId: components["schemas"]["Id"];
+        AssetId: components["schemas"]["Id"];
+        /** @description Lado desejado em px; entrega a variante desse tamanho, a menor maior que ele ou a maior. */
+        ImageSize: number;
         ServiceId: components["schemas"]["Id"];
         RewardId: components["schemas"]["Id"];
         ReservationId: components["schemas"]["Id"];
@@ -2788,7 +3768,78 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            /**
+             * @description `owner_session_active` (ADR-0027): credenciais válidas, mas a conta tem vínculo de dono e
+             *     outra sessão válida ocupa a vaga de dono. A outra sessão continua; esta tentativa NÃO recebe
+             *     cookie de sessão. `current` segue OwnerSessionConflict (desafio de 2 min, só no corpo). Junto
+             *     vai o cookie HttpOnly `__Host-fila_owner_attempt` (5 min), que prende o desafio a esta tentativa.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    takeoverOwnerSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OwnerChallengeRequest"];
+            };
+        };
+        responses: {
+            /** @description Acesso de dono transferido para este aparelho. Set-Cookie com __Host-fila_session. */
+            200: {
+                headers: {
+                    "Set-Cookie": components["headers"]["SetSessionCookie"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["SessionView"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    cancelOwnerTakeover: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OwnerChallengeRequest"];
+            };
+        };
+        responses: {
+            /** @description Desafio descartado (ou já inexistente). A outra sessão continua. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
             default: components["responses"]["Unexpected"];
         };
     };
@@ -2918,6 +3969,107 @@ export interface operations {
             default: components["responses"]["Unexpected"];
         };
     };
+    requestReauthCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: components["responses"]["AcceptedGeneric"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    startGoogleAuth: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoogleStartRequest"];
+            };
+        };
+        responses: {
+            /** @description URL de autorização do Google. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            /** Format: uri */
+                            authorization_url: string;
+                        };
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    googleAuthCallback: {
+        parameters: {
+            query?: {
+                state?: string;
+                code?: string;
+                error?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redireciona para a rota interna (com a sessão de cliente, quando liberada). */
+            303: {
+                headers: {
+                    Location?: string;
+                    "Set-Cookie": components["headers"]["SetSessionCookie"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    unlinkGoogle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Desconectado (ou já estava). */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
     acceptInvite: {
         parameters: {
             query?: never;
@@ -2946,6 +4098,20 @@ export interface operations {
             default: components["responses"]["Unexpected"];
         };
     };
+    getMyProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["MyProfileOk"];
+            401: components["responses"]["Unauthorized"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
     updateMyProfile: {
         parameters: {
             query?: never;
@@ -2969,14 +4135,214 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        data: components["schemas"]["AccountView"];
+                        data: components["schemas"]["MyProfile"];
                     };
                 };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
             422: components["responses"]["IdempotencyMismatch"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    setMyAvatar: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetAssetRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["MyProfileOk"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyMismatch"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    removeMyAvatar: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VersionedRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["MyProfileOk"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyMismatch"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    getMyAvatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Lado desejado em px; entrega a variante desse tamanho, a menor maior que ele ou a maior. */
+                size: components["parameters"]["ImageSize"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["PrivateImage"];
+            /** @description Não modificada (depois de autorizar). */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    uploadMedia: {
+        parameters: {
+            query: {
+                purpose: components["schemas"]["MediaPurpose"];
+                /** @description Obrigatório para logo e professional_photo. */
+                establishment_id?: components["schemas"]["Id"];
+                crop_x?: number;
+                crop_y?: number;
+                /** @description Recorte quadrado normalizado sobre a imagem orientada (x,y relativos a largura/altura; size ao menor lado). Os três juntos ou nenhum. */
+                crop_size?: number;
+            };
+            header: {
+                /** @description Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "image/jpeg": string;
+                "image/png": string;
+                "image/webp": string;
+            };
+        };
+        responses: {
+            /** @description Recebida; processamento pendente (a foto antiga continua até associar a nova). */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["MediaUpload"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["IdempotencyMismatch"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    getMediaUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Situação. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["MediaUpload"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    getPublicMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+                /** @description Lado desejado em px; entrega a variante desse tamanho, a menor maior que ele ou a maior. */
+                size: components["parameters"]["ImageSize"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["PublicImage"];
+            /** @description Não modificada. */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    getPublicConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Configuração pública. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PublicConfig"];
+                    };
+                };
+            };
             default: components["responses"]["Unexpected"];
         };
     };
@@ -3219,6 +4585,34 @@ export interface operations {
             409: components["responses"]["Conflict"];
             422: components["responses"]["IdempotencyMismatch"];
             429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    getCustomerAvatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+                participationId: components["parameters"]["ParticipationId"];
+                /** @description Lado desejado em px; entrega a variante desse tamanho, a menor maior que ele ou a maior. */
+                size: components["parameters"]["ImageSize"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["PrivateImage"];
+            /** @description Não modificada (depois de autorizar). */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             default: components["responses"]["Unexpected"];
         };
     };
@@ -4571,6 +5965,166 @@ export interface operations {
             default: components["responses"]["Unexpected"];
         };
     };
+    setEstablishmentLogo: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetAssetRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["EstablishmentOk"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyMismatch"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    removeEstablishmentLogo: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VersionedRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["EstablishmentOk"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyMismatch"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    getMyProfessionalProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["MyProfessionalProfileOk"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    setMyProfessionalPhoto: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetProfessionalPhotoRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["MyProfessionalProfileOk"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyMismatch"];
+            503: components["responses"]["ServiceUnavailable"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    removeMyProfessionalPhoto: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VersionedRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["MyProfessionalProfileOk"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyMismatch"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    removeProfessionalPhoto: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+                professionalId: components["parameters"]["ProfessionalId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VersionedReasonRequiredRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["ProfessionalOk"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyMismatch"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
     listProfessionals: {
         parameters: {
             query?: never;
@@ -5288,6 +6842,368 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    activateDesktopInstallation: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min. */
+                DPoP: components["parameters"]["DPoPProof"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Formato XXXX-XXXX-XXXX-XXXX (Crockford). */
+                    code: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Instalação autorizada. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DesktopInstallation"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    createDesktopLinkTicket: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Ticket emitido (no-store). */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DesktopLinkTicket"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    createDesktopBinding: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min. */
+                DPoP: components["parameters"]["DPoPProof"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    ticket: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Vínculo criado (no-store). */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DesktopBinding"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    endDesktopBinding: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min. */
+                DPoP: components["parameters"]["DPoPProof"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Vínculo encerrado. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    getDesktopContext: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min. */
+                DPoP: components["parameters"]["DPoPProof"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Contexto do Dashboard (no-store). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DesktopContext"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    getAnalyticsSummary: {
+        parameters: {
+            query: {
+                /** @description Primeiro dia (data LOCAL da loja), inclusivo. */
+                from: components["parameters"]["AnalyticsFrom"];
+                /** @description Último dia (data LOCAL da loja), inclusivo. Intervalo consultado [from 00:00, to+1 00:00) no fuso da loja; no máximo 366 dias. */
+                to: components["parameters"]["AnalyticsTo"];
+                /** @description previous = período anterior equivalente, com o mesmo tempo transcorrido. */
+                compare?: components["parameters"]["AnalyticsCompare"];
+                professional_id?: components["parameters"]["AnalyticsProfessional"];
+                service_id?: components["parameters"]["AnalyticsService"];
+                method?: components["parameters"]["AnalyticsMethod"];
+            };
+            header: {
+                /** @description Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min. */
+                DPoP: components["parameters"]["DPoPProof"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Dados agregados com meta (período efetivo, fuso, instante, unidades, ausências). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["AnalyticsSummary"];
+                        meta: components["schemas"]["AnalyticsMeta"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    getAnalyticsSeries: {
+        parameters: {
+            query: {
+                granularity?: "hour" | "day" | "week" | "month";
+                /** @description Primeiro dia (data LOCAL da loja), inclusivo. */
+                from: components["parameters"]["AnalyticsFrom"];
+                /** @description Último dia (data LOCAL da loja), inclusivo. Intervalo consultado [from 00:00, to+1 00:00) no fuso da loja; no máximo 366 dias. */
+                to: components["parameters"]["AnalyticsTo"];
+                /** @description previous = período anterior equivalente, com o mesmo tempo transcorrido. */
+                compare?: components["parameters"]["AnalyticsCompare"];
+                professional_id?: components["parameters"]["AnalyticsProfessional"];
+                service_id?: components["parameters"]["AnalyticsService"];
+                method?: components["parameters"]["AnalyticsMethod"];
+            };
+            header: {
+                /** @description Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min. */
+                DPoP: components["parameters"]["DPoPProof"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+                metric: "cash" | "ticket" | "movement" | "wait" | "duration" | "loyalty";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Dados agregados com meta (período efetivo, fuso, instante, unidades, ausências). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["AnalyticsSeries"];
+                        meta: components["schemas"]["AnalyticsMeta"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    getAnalyticsBreakdown: {
+        parameters: {
+            query: {
+                /** @description Primeiro dia (data LOCAL da loja), inclusivo. */
+                from: components["parameters"]["AnalyticsFrom"];
+                /** @description Último dia (data LOCAL da loja), inclusivo. Intervalo consultado [from 00:00, to+1 00:00) no fuso da loja; no máximo 366 dias. */
+                to: components["parameters"]["AnalyticsTo"];
+                /** @description previous = período anterior equivalente, com o mesmo tempo transcorrido. */
+                compare?: components["parameters"]["AnalyticsCompare"];
+                professional_id?: components["parameters"]["AnalyticsProfessional"];
+                service_id?: components["parameters"]["AnalyticsService"];
+                method?: components["parameters"]["AnalyticsMethod"];
+            };
+            header: {
+                /** @description Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min. */
+                DPoP: components["parameters"]["DPoPProof"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+                dimension: "payment_methods" | "outcomes" | "professionals" | "services" | "peak_hours" | "wait_bands" | "pending" | "rewards" | "recurrence";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Dados agregados com meta (período efetivo, fuso, instante, unidades, ausências). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["AnalyticsBreakdown"];
+                        meta: components["schemas"]["AnalyticsMeta"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    listAnalyticsRecords: {
+        parameters: {
+            query: {
+                bucket_start?: components["schemas"]["Timestamp"];
+                bucket_end?: components["schemas"]["Timestamp"];
+                cursor?: string;
+                /** @description participations: entered|called|finished; service_items: performed|added */
+                ref?: string;
+                /** @description financial_issues: open (agora) | opened | resolved (no período) */
+                state?: "open" | "opened" | "resolved";
+                /** @description financial_issues: tipo; loyalty_entries: credited|used|returned|adjusted */
+                kind?: string;
+                status?: string;
+                dow?: number;
+                hour?: number;
+                band?: "0-5" | "5-15" | "15-30" | "30-60" | "60+";
+                /** @description Primeiro dia (data LOCAL da loja), inclusivo. */
+                from: components["parameters"]["AnalyticsFrom"];
+                /** @description Último dia (data LOCAL da loja), inclusivo. Intervalo consultado [from 00:00, to+1 00:00) no fuso da loja; no máximo 366 dias. */
+                to: components["parameters"]["AnalyticsTo"];
+                /** @description previous = período anterior equivalente, com o mesmo tempo transcorrido. */
+                compare?: components["parameters"]["AnalyticsCompare"];
+                professional_id?: components["parameters"]["AnalyticsProfessional"];
+                service_id?: components["parameters"]["AnalyticsService"];
+                method?: components["parameters"]["AnalyticsMethod"];
+            };
+            header: {
+                /** @description Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min. */
+                DPoP: components["parameters"]["DPoPProof"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+                kind: "receipts" | "refunds" | "orders" | "participations" | "service_items" | "financial_issues" | "loyalty_entries";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Dados agregados com meta (período efetivo, fuso, instante, unidades, ausências). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["AnalyticsRecords"];
+                        meta: components["schemas"]["AnalyticsMeta"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    openAnalyticsStream: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min. */
+                DPoP: components["parameters"]["DPoPProof"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Fluxo text/event-stream. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
             default: components["responses"]["Unexpected"];
         };
     };

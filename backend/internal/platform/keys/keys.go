@@ -32,6 +32,10 @@ const (
 	PurposeRecoveryCode = "visitante-codigo/v1"
 	PurposeRateLimit    = "limite-tentativas/v1"
 	PurposeMail         = "correio/v1"
+	// PurposeOIDC cifra o verificador PKCE das transações de login com Google (ADR-0028).
+	PurposeOIDC = "oidc-pkce/v1"
+	// PurposeReauthCode é o HMAC do código de reautenticação por e-mail (conta sem senha).
+	PurposeReauthCode = "reautenticacao-codigo/v1"
 )
 
 // Ring guarda a chave mestra e as subchaves já derivadas.

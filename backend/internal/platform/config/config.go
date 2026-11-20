@@ -46,7 +46,49 @@ type Config struct {
 	Mail      MailConfig
 	Payments  PaymentsConfig
 	Ops       OpsConfig
+	Google    GoogleConfig
+	Media     MediaConfig
 }
+
+// GoogleIssuer é o emissor oficial do Google (OpenID Connect). Fora de produção pode ser trocado
+// por um provedor de teste (FILA_GOOGLE_ISSUER); em homologação e produção, nunca.
+const GoogleIssuer = "https://accounts.google.com"
+
+// GoogleConfig configura o login com Google, exclusivo da jornada de cliente (ADR-0028). O secret
+// só existe no backend (nunca em VITE_, bundle ou desktop). Sem client ID e secret o recurso fica
+// desligado e e-mail/senha e visitante seguem funcionando.
+type GoogleConfig struct {
+	ClientID     string
+	ClientSecret Secret
+	// RedirectURL é fixa e cadastrada no Google Cloud (padrão: FILA_PUBLIC_BASE_URL +
+	// /v1/auth/google/callback). Nunca é montada a partir do Host do pedido.
+	RedirectURL string
+	Issuer      string
+}
+
+// Enabled informa se o login com Google está configurado.
+func (g GoogleConfig) Enabled() bool { return g.ClientID != "" && g.ClientSecret != "" }
+
+// Armazenamento de imagens (FILA_MEDIA_STORAGE).
+const (
+	MediaDisabled   = "disabled"
+	MediaFilesystem = "filesystem"
+)
+
+// MediaConfig configura fotos e logos (ADR-0028). Desligado por padrão: sem armazenamento
+// configurado, as telas mostram iniciais/nome e nenhum envio é aceito.
+type MediaConfig struct {
+	Storage string
+	// Dir: pasta persistente e NÃO pública (fora da raiz do site). Em produção precisa ser um volume
+	// persistente compartilhado entre API e worker e incluído no backup.
+	Dir           string
+	UploadsPerMin int
+	UploadsPerDay int
+	Workers       int
+}
+
+// Enabled informa se o envio de imagens está ligado.
+func (m MediaConfig) Enabled() bool { return m.Storage == MediaFilesystem }
 
 // OpsConfig reúne opções de operação (etapa 12, ADR-0026).
 type OpsConfig struct {
@@ -210,6 +252,15 @@ const (
 	VarSSEMax            = "FILA_SSE_MAX_CONNECTIONS"
 	VarSSEPerIP          = "FILA_SSE_MAX_PER_IP"
 	VarDeletionJournal   = "FILA_DELETION_JOURNAL_DIR"
+	VarGoogleClientID    = "FILA_GOOGLE_CLIENT_ID"
+	VarGoogleSecret      = "FILA_GOOGLE_CLIENT_SECRET"
+	VarGoogleRedirect    = "FILA_GOOGLE_REDIRECT_URL"
+	VarGoogleIssuer      = "FILA_GOOGLE_ISSUER"
+	VarMediaStorage      = "FILA_MEDIA_STORAGE"
+	VarMediaDir          = "FILA_MEDIA_DIR"
+	VarMediaPerMinute    = "FILA_MEDIA_UPLOADS_PER_MINUTE"
+	VarMediaPerDay       = "FILA_MEDIA_UPLOADS_PER_DAY"
+	VarMediaWorkers      = "FILA_MEDIA_WORKERS"
 	// VarTestDatabaseURL é lida só pelos testes de integração; aceita aqui para não ser "desconhecida".
 	VarTestDatabaseURL = "FILA_TEST_DATABASE_URL"
 	VarRequireDBTests  = "FILA_REQUIRE_DB_TESTS"
@@ -230,6 +281,8 @@ var knownVars = map[string]bool{
 	VarPixExpiresIn: true, VarAbacateTimeout: true, VarAbacateWebhook: true,
 	VarSecretKeyPrevious: true, VarMetricsAddr: true, VarRatePerMinute: true, VarSSEMax: true, VarSSEPerIP: true,
 	VarDeletionJournal: true,
+	VarGoogleClientID:  true, VarGoogleSecret: true, VarGoogleRedirect: true, VarGoogleIssuer: true,
+	VarMediaStorage: true, VarMediaDir: true, VarMediaPerMinute: true, VarMediaPerDay: true, VarMediaWorkers: true,
 }
 
 // DeployVars são variáveis da IMPLANTAÇÃO (deploy/compose.yaml, deploy/*.sh), não da aplicação:
@@ -242,7 +295,7 @@ var DeployVars = []string{"FILA_AMBIENTE", "FILA_BACKUPS_DIR", "FILA_BACKUP_RETE
 
 // FileVars são os segredos que também podem vir de arquivo: NOME_FILE=/caminho (segredos da
 // plataforma montados como arquivo, ex.: Docker secrets). Nunca as duas formas juntas.
-var FileVars = []string{VarDatabaseURL, VarSecretKey, VarSecretKeyPrevious, VarAbacateKey, VarAbacateWebhook}
+var FileVars = []string{VarDatabaseURL, VarSecretKey, VarSecretKeyPrevious, VarAbacateKey, VarAbacateWebhook, VarGoogleSecret}
 
 // Origens padrão fora de produção: o servidor de desenvolvimento do Vite.
 var devOrigins = []string{"http://127.0.0.1:5173", "http://localhost:5173"}
@@ -305,6 +358,8 @@ func Load(environ []string) (*Config, error) {
 	if _, ok := l.get(VarMetricsAddr); ok {
 		cfg.Ops.MetricsAddr = l.addr(VarMetricsAddr, "")
 	}
+	cfg.Google = l.google(cfg.Env, cfg.Security.PublicBaseURL)
+	cfg.Media = l.media(cfg.Env)
 	l.unknownVars()
 
 	if len(l.problems) > 0 {
@@ -681,6 +736,71 @@ func (l *loader) payments(env Environment) PaymentsConfig {
 	} else if prod && strings.ToLower(u.Hostname()) != OfficialAbacatePayHost {
 		// Produção nunca fala com simulador nem com outro endereço: a integração financeira é a real.
 		l.fail(VarAbacateBaseURL, "em produção só o endereço oficial da AbacatePay (https://"+OfficialAbacatePayHost+"/v2) é aceito")
+	}
+	return c
+}
+
+// google lê o login com Google (só cliente). Sem client ID e secret fica desligado; um sem o outro
+// é erro. Produção e homologação: emissor oficial e redirect https fixo.
+func (l *loader) google(env Environment, publicBase string) GoogleConfig {
+	prod := env.Hardened()
+	id, _ := l.get(VarGoogleClientID)
+	secret, _ := l.get(VarGoogleSecret)
+	c := GoogleConfig{ClientID: id, ClientSecret: Secret(secret), Issuer: GoogleIssuer}
+	if (id == "") != (secret == "") {
+		l.fail(VarGoogleClientID, "informe FILA_GOOGLE_CLIENT_ID e FILA_GOOGLE_CLIENT_SECRET juntos (ou nenhum dos dois para desligar o Google)")
+		return GoogleConfig{}
+	}
+	if id != "" && (len(id) > 200 || strings.ContainsAny(id, " \t/?#&")) {
+		l.fail(VarGoogleClientID, "formato inválido (copie o ID do cliente OAuth do Google Cloud)")
+	}
+	if iss, ok := l.get(VarGoogleIssuer); ok {
+		u, err := url.Parse(iss)
+		switch {
+		case prod:
+			l.fail(VarGoogleIssuer, "em produção e homologação só o emissor oficial do Google é aceito (remova a variável)")
+		case err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "":
+			l.fail(VarGoogleIssuer, "endereço inválido")
+		default:
+			c.Issuer = strings.TrimRight(iss, "/")
+		}
+	}
+	red, ok := l.get(VarGoogleRedirect)
+	if !ok && publicBase != "" {
+		red = publicBase + "/v1/auth/google/callback"
+	}
+	if red != "" {
+		u, err := url.Parse(red)
+		if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") || u.RawQuery != "" || u.Fragment != "" ||
+			u.Path != "/v1/auth/google/callback" {
+			l.fail(VarGoogleRedirect, "use o endereço público do site seguido de /v1/auth/google/callback (sem parâmetros)")
+		} else if prod && u.Scheme != "https" {
+			l.fail(VarGoogleRedirect, "em produção use https")
+		}
+	}
+	c.RedirectURL = red
+	return c
+}
+
+// media lê o armazenamento de imagens. Desligado por padrão em todos os ambientes; em produção a
+// pasta precisa ser informada explicitamente (volume persistente, fora da raiz pública).
+func (l *loader) media(env Environment) MediaConfig {
+	c := MediaConfig{
+		Storage:       l.oneOf(VarMediaStorage, MediaDisabled, MediaDisabled, MediaFilesystem),
+		UploadsPerMin: l.intRange(VarMediaPerMinute, 5, 1, 100),
+		UploadsPerDay: l.intRange(VarMediaPerDay, 20, 1, 1000),
+		Workers:       l.intRange(VarMediaWorkers, 2, 1, 8),
+	}
+	dir, ok := l.get(VarMediaDir)
+	if c.Storage == MediaFilesystem {
+		switch {
+		case ok:
+			c.Dir = dir
+		case env.Hardened():
+			l.fail(VarMediaDir, "obrigatória com FILA_MEDIA_STORAGE=filesystem em produção (volume persistente compartilhado por API e worker, incluído no backup)")
+		default:
+			c.Dir = ".midia"
+		}
 	}
 	return c
 }

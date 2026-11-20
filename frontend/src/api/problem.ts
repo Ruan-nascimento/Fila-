@@ -16,6 +16,12 @@ const fallback: Partial<Record<ErrorCode, string>> = {
   token_invalid: "Este link já foi usado, venceu ou não existe.",
   invite_invalid: "Este convite já foi usado, foi cancelado ou venceu.",
   recovery_code_invalid: "Código incorreto, já usado ou vencido.",
+  media_disabled: "O envio de fotos ainda não está disponível.",
+  image_unsupported: "Envie uma foto JPEG, PNG ou WebP (sem animação).",
+  image_invalid: "Não foi possível ler esta imagem.",
+  image_dimensions: "Imagem grande demais (até 8.192 px e 12 megapixels).",
+  google_unavailable: "Entrar com o Google não está disponível agora.",
+  reauth_code_invalid: "Código inválido ou vencido.",
 };
 
 /** Texto para mostrar ao usuário. Nunca mostra detalhes técnicos. */

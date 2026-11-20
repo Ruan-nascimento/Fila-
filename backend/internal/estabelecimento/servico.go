@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"fila/internal/acesso"
+	"fila/internal/midia"
 	"fila/internal/platform/clock"
 	"fila/internal/platform/database"
 	"fila/internal/platform/httpserver"
@@ -48,6 +49,12 @@ type Deps struct {
 	// AccessRevoked avisa o módulo identidade que estas contas perderam o vínculo de equipe:
 	// ele encerra sessões de equipe e convites pendentes (T-PR-02).
 	AccessRevoked func(ctx context.Context, q database.Querier, accountIDs []uuid.UUID, professionalID uuid.UUID, now time.Time) error
+	// PublicBaseURL: origem pública canônica (FILA_PUBLIC_BASE_URL), base do link e do QR da loja.
+	PublicBaseURL string
+	// Media copia o avatar para a foto profissional (publicação explícita). nil = fotos desligadas.
+	Media *midia.Service
+	// AvatarOf devolve a foto pessoal associada da conta (módulo identidade).
+	AvatarOf func(ctx context.Context, q database.Querier, accountID uuid.UUID) (*uuid.UUID, error)
 }
 
 // Service implementa loja, equipe e filas.

@@ -3,7 +3,7 @@ import { Clock, PauseCircle, Scissors, SquareX, UsersRound, X } from "lucide-rea
 import { api } from "../../api/client";
 import type { components } from "../../api/schema.gen";
 import { formatCents } from "../../money";
-import { Choice, ChoiceGroup, EmptyState, LoadError, Loading, Notice, Submit } from "../../ui/ui";
+import { Choice, ChoiceGroup, EmptyState, LoadError, Loading, Notice, Submit, Avatar } from "../../ui/ui";
 import { cx } from "../../ui/cx";
 import { useCommand } from "../gestao/comando";
 import { CommandError } from "../gestao/comum";
@@ -133,7 +133,18 @@ export function EntrarNaFila({
                     setMissing(false);
                     setSelection({ queueId: q.queue_id, serviceIds: selection.serviceIds });
                   }}
-                  label={q.professional.display_name}
+                  label={
+                    <span className="inline-flex items-center gap-2">
+                      {/* Foto profissional publicada; sem ela, iniciais (nunca bloqueia a escolha). */}
+                      <Avatar
+                        name={q.professional.display_name}
+                        image={q.professional.photo}
+                        size={32}
+                        className="size-8 text-xs"
+                      />
+                      {q.professional.display_name}
+                    </span>
+                  }
                   description={
                     <span className="inline-flex items-center gap-1.5">
                       <Icon aria-hidden="true" className="size-4 shrink-0" />

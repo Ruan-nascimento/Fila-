@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"fila/internal/analitico"
 	"fila/internal/atendimento"
 	"fila/internal/auditoria"
 	"fila/internal/catalogo"
@@ -22,6 +23,7 @@ import (
 	"fila/internal/fila"
 	"fila/internal/fluxo"
 	"fila/internal/identidade"
+	"fila/internal/midia"
 	"fila/internal/pagamento"
 	"fila/internal/painel"
 	"fila/internal/platform/clock"
@@ -55,8 +57,27 @@ type Deps struct {
 	SnapshotHook func(stage string)
 	// Benefits (só testes) substitui o encerramento de pontos e reservas na exclusão. nil = fidelidade.
 	Benefits exclusao.Benefits
+	// AnalyticsStream (só testes) troca os tempos do fluxo do Dashboard. Zero = padrão.
+	AnalyticsStream analitico.StreamDeps
 	// DeletionFault (só testes) simula queda no meio da anonimização.
 	DeletionFault func(step string) error
+	// MediaStore (só testes) substitui o armazenamento de imagens. nil = conforme a configuração
+	// (FILA_MEDIA_STORAGE: desligado ou pasta persistente).
+	MediaStore midia.Storage
+	// GoogleHTTPClient (só testes) fala com um provedor OpenID de teste.
+	GoogleHTTPClient *http.Client
+}
+
+// MediaStore escolhe o armazenamento de imagens: override (testes), pasta persistente quando
+// configurada, ou nil (envio de fotos desligado; as telas usam iniciais).
+func MediaStore(c config.MediaConfig, override midia.Storage) midia.Storage {
+	switch {
+	case override != nil:
+		return override
+	case c.Enabled():
+		return midia.FileStore{Root: c.Dir}
+	}
+	return nil
 }
 
 // API é a aplicação montada.
@@ -67,6 +88,7 @@ type API struct {
 	Deletion *exclusao.Service
 	Payments *pagamento.Service
 	Loyalty  *fidelidade.Service
+	Media    *midia.Service
 	routes   []hs.Route
 	mux      *http.ServeMux
 	handler  http.Handler
@@ -92,19 +114,26 @@ func New(d Deps, register func(mux *http.ServeMux)) (*API, error) {
 			CookieSecure:      d.Config.Security.CookieSecure,
 			PublicBaseURL:     d.Config.Security.PublicBaseURL,
 			TrustForwardedFor: d.Config.Security.TrustForwardedFor,
+			Google: identidade.GoogleSettings{ClientID: d.Config.Google.ClientID, ClientSecret: d.Config.Google.ClientSecret.Reveal(),
+				RedirectURL: d.Config.Google.RedirectURL, Issuer: d.Config.Google.Issuer, HTTPClient: d.GoogleHTTPClient},
 		},
 	})
+	media := midia.New(midia.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Store: MediaStore(d.Config.Media, d.MediaStore),
+		Auth: ident, AccountOf: ident.AccountOf, Limiter: ratelimit.New(d.Pool, d.Clock, ring),
+		PerMinute: d.Config.Media.UploadsPerMin, PerDay: d.Config.Media.UploadsPerDay})
+	ident.SetMedia(media)
 
 	fl := fila.New(fila.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Auth: ident, Customers: ident,
 		Limiter: ratelimit.New(d.Pool, d.Clock, ring), TrustForwardedFor: d.Config.Security.TrustForwardedFor,
-		VisitStarted: ident.VisitStarted, VisitClosed: ident.VisitClosed})
+		VisitStarted: ident.VisitStarted, VisitClosed: ident.VisitClosed, Media: media})
 	ident.SetActiveVisit(fl.VisitorBusy)
 	var occ estabelecimento.Occupancy = fl
 	if d.Occupancy != nil {
 		occ = d.Occupancy // testes da etapa 03 simulam ocupação
 	}
 	est := estabelecimento.New(estabelecimento.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Auth: ident,
-		Occupancy: occ, Activity: fl, PendingInvites: ident.PendingInvites, AccessRevoked: ident.AccessRevoked})
+		Occupancy: occ, Activity: fl, PendingInvites: ident.PendingInvites, AccessRevoked: ident.AccessRevoked,
+		PublicBaseURL: d.Config.Security.PublicBaseURL, Media: media, AvatarOf: identidade.AvatarAssetOf})
 	cat := catalogo.New(catalogo.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Auth: ident})
 	atd := atendimento.New(atendimento.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Auth: ident, Customers: ident,
 		Visits: fl, Charges: d.Charges, VisitClosed: ident.VisitClosed})
@@ -119,11 +148,14 @@ func New(d Deps, register func(mux *http.ServeMux)) (*API, error) {
 
 	hub := outbox.NewHub(d.Pool, d.Log)
 	stream := fluxo.New(fluxo.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Hub: hub, Auth: ident, Customers: ident,
-		Refresh: ident.Refresh, Sources: fl, Limits: streamLimits(d), TrustForwardedFor: d.Config.Security.TrustForwardedFor,
+		Refresh: ident.Refresh, Ended: ident.EndedReasonOf, Sources: fl, Limits: streamLimits(d), TrustForwardedFor: d.Config.Security.TrustForwardedFor,
 		SnapshotHook: d.SnapshotHook, Pendencies: func(ctx context.Context, q database.Querier, estID uuid.UUID) (any, error) {
 			return painel.Count(ctx, q, estID)
 		}, Loyalty: loyalty.Snapshot})
 	panel := &painel.Service{Pool: d.Pool, Auth: ident}
+	analyticsStream := d.AnalyticsStream
+	analyticsStream.Hub = hub
+	analytics := analitico.New(analitico.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Auth: ident, Stream: analyticsStream})
 
 	// Exclusão de conta encerra pontos e reservas (T-LG-03, T-RW-06); testes podem substituir.
 	var benefits exclusao.Benefits = loyalty
@@ -134,7 +166,7 @@ func New(d Deps, register func(mux *http.ServeMux)) (*API, error) {
 		Limiter: ratelimit.New(d.Pool, d.Clock, ring), TrustForwardedFor: d.Config.Security.TrustForwardedFor,
 		Identity: ident, Queue: fl, Benefits: benefits, Fault: d.DeletionFault})
 
-	a := &API{Identity: ident, Hub: hub, Stream: stream, Deletion: deletion, Payments: pay, Loyalty: loyalty, mux: http.NewServeMux()}
+	a := &API{Identity: ident, Hub: hub, Stream: stream, Deletion: deletion, Payments: pay, Loyalty: loyalty, Media: media, mux: http.NewServeMux()}
 	a.routes = append(a.routes, ident.Routes()...)
 	a.routes = append(a.routes, est.Routes()...)
 	a.routes = append(a.routes, cat.Routes()...)
@@ -145,7 +177,9 @@ func New(d Deps, register func(mux *http.ServeMux)) (*API, error) {
 	a.routes = append(a.routes, loyalty.Routes()...)
 	a.routes = append(a.routes, (&auditoria.Service{Pool: d.Pool, Auth: ident}).Routes()...)
 	a.routes = append(a.routes, stream.Routes()...)
+	a.routes = append(a.routes, analytics.Routes()...)
 	a.routes = append(a.routes, deletion.Routes()...)
+	a.routes = append(a.routes, media.Routes()...)
 	hs.Mount(a.mux, d.Log, a.routes)
 	if register != nil {
 		register(a.mux)

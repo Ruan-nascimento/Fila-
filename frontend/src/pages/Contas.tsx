@@ -5,6 +5,11 @@ import { api } from "../api/client";
 import { Field, Notice, PageHeader, PasswordField, Submit } from "../ui/ui";
 import { useForm } from "../ui/useForm";
 import { safeReturn } from "../ui/retorno";
+import { GoogleButton } from "../features/auth/GoogleButton";
+import { EntrarSemConta } from "../features/auth/EntrarSemConta";
+import { slugFromContext, usePublicShop } from "../features/auth/acessoLoja";
+import { usePublicConfig } from "../features/config/publicConfig";
+import { useStoreBrand } from "../features/theme/tema";
 
 type Sent = { message: string } | null;
 
@@ -27,6 +32,11 @@ export function Cadastro() {
   const form = useForm();
   const [params] = useSearchParams();
   const voltar = safeReturn(params.get("voltar"));
+  const slug = slugFromContext(params.get("loja"), voltar);
+  const { shop } = usePublicShop(slug);
+  useStoreBrand(shop?.palette);
+  const cfg = usePublicConfig();
+  const lojaVolta = voltar?.startsWith("/loja/") ? voltar : shop ? `/loja/${shop.slug}` : undefined;
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -41,13 +51,17 @@ export function Cadastro() {
     }
   }
 
-  const entrar = voltar ? `/entrar?voltar=${encodeURIComponent(voltar)}` : "/entrar";
+  const entrar = lojaVolta ? `/entrar?${new URLSearchParams({ voltar: lojaVolta }).toString()}` : "/entrar";
   return (
     <section aria-labelledby="titulo-cadastro" className="grid gap-5">
       <PageHeader
         id="titulo-cadastro"
         title="Criar conta de cliente"
-        description="Com conta você acompanha seu histórico e, quando a barbearia ativar, acumula pontos."
+        description={
+          shop
+            ? `Para ${shop.name}: com conta você acompanha seu histórico e, quando a barbearia ativar, acumula pontos.`
+            : "Com conta você acompanha seu histórico e, quando a barbearia ativar, acumula pontos."
+        }
       />
       {form.generalError}
       {sent && (
@@ -96,6 +110,17 @@ export function Cadastro() {
             Criar conta
           </Submit>
         </form>
+      )}
+      {!sent && (
+        <div className="grid gap-3">
+          {cfg?.google_login && (
+            <>
+              <p className="m-0 text-center text-sm text-fg-muted">ou</p>
+              <GoogleButton intent={{ kind: "login", establishmentSlug: shop?.slug, returnTo: lojaVolta }} />
+            </>
+          )}
+          <EntrarSemConta slug={shop?.slug ?? null} />
+        </div>
       )}
       <p className="m-0 text-center text-sm">
         Já tem conta?{" "}

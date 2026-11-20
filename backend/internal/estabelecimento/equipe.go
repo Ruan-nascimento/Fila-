@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"fila/internal/auditoria"
+	"fila/internal/midia"
 	"fila/internal/platform/database"
 	"fila/internal/platform/httpserver"
 	"fila/internal/platform/idempotency"
@@ -27,17 +28,20 @@ type professionalView struct {
 	HasAccess     bool        `json:"has_access"`
 	PendingInvite *InviteInfo `json:"pending_invite"`
 	Version       int64       `json:"version"`
+	// Photo: foto pública publicada pelo próprio profissional (o dono pode retirar a publicação).
+	Photo   *midia.ImageRef `json:"photo"`
+	photoID *uuid.UUID
 }
 
 const professionalSelect = `
 	SELECT p.id, p.display_name, q.id, p.queue_letter, p.status,
 	       EXISTS (SELECT 1 FROM staff_membership m WHERE m.professional_id = p.id AND m.status = 'active'),
-	       p.version
+	       p.version, p.photo_asset_id
 	FROM professional p JOIN queue q ON q.professional_id = p.id`
 
 func scanProfessional(row pgx.Row) (professionalView, error) {
 	var v professionalView
-	err := row.Scan(&v.ID, &v.DisplayName, &v.QueueID, &v.QueueLetter, &v.Status, &v.HasAccess, &v.Version)
+	err := row.Scan(&v.ID, &v.DisplayName, &v.QueueID, &v.QueueLetter, &v.Status, &v.HasAccess, &v.Version, &v.photoID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return v, httpserver.ErrNotFound()
 	}
@@ -91,6 +95,9 @@ func (s *Service) listProfessionals(w http.ResponseWriter, r *http.Request) erro
 	if err := s.withInvite(ctx, s.Pool, estID, list); err != nil {
 		return err
 	}
+	if err := withPhotos(ctx, s.Pool, list); err != nil {
+		return err
+	}
 	if list == nil {
 		list = []professionalView{}
 	}
@@ -114,6 +121,9 @@ func (s *Service) professionalResult(ctx context.Context, q pgx.Tx, estID, profI
 	}
 	list := []professionalView{v}
 	if err := s.withInvite(ctx, q, estID, list); err != nil {
+		return idempotency.Result{}, err
+	}
+	if err := withPhotos(ctx, q, list); err != nil {
 		return idempotency.Result{}, err
 	}
 	return idempotency.Result{Status: status, Body: httpserver.Data[professionalView]{Data: list[0]}}, nil

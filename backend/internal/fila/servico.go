@@ -3,6 +3,7 @@ package fila
 import (
 	"context"
 	"errors"
+	"fila/internal/midia"
 	"log/slog"
 	"net/http"
 	"time"
@@ -48,6 +49,8 @@ type Deps struct {
 	// VisitStarted/VisitClosed avisam o módulo identidade sobre a visita do visitante (R-VIS-03).
 	VisitStarted func(ctx context.Context, q database.Querier, visitorID uuid.UUID) error
 	VisitClosed  func(ctx context.Context, q database.Querier, visitorID uuid.UUID, at time.Time) error
+	// Media entrega a foto pessoal do cliente à equipe da fila (nil = fotos desligadas).
+	Media *midia.Service
 }
 
 // Service implementa a fila transacional.

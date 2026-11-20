@@ -1,12 +1,17 @@
 # Fila Gestão — programa do dono (Tauri 2)
 
-Programa instalável que abre a **gestão do site** direto no acesso do dono. Não há uma segunda interface: a janela carrega o frontend hospedado (mesmo login, mesmas telas, mesma API e o mesmo tempo real).
+Programa instalável que abre a **gestão do site** direto no acesso do dono. Não há uma segunda gestão: a janela carrega o frontend hospedado (mesmo login, mesmas telas, mesma API e o mesmo tempo real). Desde a versão 0.2.0, o programa traz também o **Dashboard analítico**, uma página local exclusiva deste programa num computador autorizado (ADR-0027).
+
+Passo a passo para o dono e o operador: [docs/desktop/guia-do-dono.md](../docs/desktop/guia-do-dono.md). Dicionário das métricas: [docs/desktop/metricas.md](../docs/desktop/metricas.md).
 
 | Pasta / arquivo | O que tem |
 |---|---|
 | `painel.url` | Origem HTTPS do painel em produção (uma linha, sem caminho) |
 | `carregador/` | Tela local: confere se o painel responde e abre `/dono`; sem resposta, mostra o motivo e **Tentar novamente** |
+| `dashboard/` | Dashboard local (React + Vite, tokens e componentes do `frontend/`); `npm run build:ui` gera `dist/` com o carregador |
 | `src-tauri/` | Projeto Tauri: janela, trava de origem, ícones, configuração de pacote (`tauri.conf.json`) |
+| `src-tauri/src/chave.rs` | Chave P-256 da instalação (cofre do sistema) e prova DPoP (RFC 9449, ES256) |
+| `src-tauri/src/api.rs` | Pedidos nativos **tipados** do Dashboard (só o painel fixado; sem pedido livre) e fluxo de invalidação |
 | `icone/icone.svg` | Fonte do ícone (`npm run icone` regenera `src-tauri/icons/`) |
 | `scripts/` | Gerar o instalador do Windows e o pacote do Linux |
 | `testes/janela.mjs` | Teste da janela real (Linux: tauri-driver + WebKitWebDriver) |
@@ -29,15 +34,27 @@ O que decide a permissão continua sendo **o servidor**: cada pedido é autoriza
 - Se a janela parar fora da origem (por exemplo, numa página de erro do WebView), ela volta à tela local.
 - As páginas do painel **não** têm acesso a nenhum comando do programa: só a tela local tem, conforme `src-tauri/capabilities/carregador.json`.
 
+## Dashboard: como a mesma sessão chega aos gráficos
+
+1. Na gestão (página remota, cookie HttpOnly da sessão de dono), o item **Dashboard** pede ao servidor um ticket de 60 s e navega para `/dono/painel-analitico#t=…`.
+2. O componente nativo intercepta essa navegação: guarda o ticket na memória, cancela a navegação e abre `dashboard.html` (local).
+3. O nativo troca o ticket por um acesso preso à chave da instalação (`POST /v1/desktop/bindings` com prova DPoP). O acesso vale enquanto a sessão de dono da gestão for a ativa.
+4. Cada consulta leva o token e uma prova nova. O servidor confere sessão, vaga de dono, instalação, prova e vínculo com a loja.
+
+O item **Dashboard** só aparece dentro do programa: o programa injeta `window.__GESTAO_DESKTOP__`, uma dica de apresentação. No navegador comum, `/dono/painel-analitico` mostra só um aviso e não consulta nada. Nenhum cookie é copiado. As páginas remotas continuam sem acesso a comando nenhum. Os dados analíticos ficam só em memória e são apagados ao sair, ao perder a sessão ou ao trocar de loja.
+
 ## 1. Desenvolvimento
 
 Na máquina de desenvolvimento: Node 24.15+ ou 26, Rust (stable) e, no Linux, as bibliotecas da seção 4. Com a API, o worker e o Vite do frontend rodando (README da raiz, passos 5 e 6):
 
 ```bash
+cd frontend && npm ci && cd ..   # o Dashboard usa estilos e componentes do frontend
 cd desktop-dono
 npm ci
-npm run dev
+npm run dev          # gera o Dashboard (build:ui) e abre o programa
 ```
+
+Para ativar o computador em desenvolvimento, na raiz do repositório: `go -C backend run ./cmd/fila-admin desktop emitir-codigo -email dono@exemplo.com -nome "PC de teste"`. No Linux, o cofre usado é o chaveiro da sessão (GNOME Keyring/KWallet), que precisa estar ativo.
 
 Em desenvolvimento a janela abre `http://127.0.0.1:5173/dono` (o Vite). O título mostra `Fila Gestão (desenvolvimento: …)`. Para usar outra origem em desenvolvimento: `FILA_PAINEL_URL=https://homologacao.exemplo npm run dev`.
 
@@ -76,7 +93,7 @@ cd desktop-dono
 powershell -ExecutionPolicy Bypass -File scripts\gerar-instalador-windows.ps1 -PainelUrl https://fila.suabarbearia.com.br
 ```
 
-Arquivo produzido: `desktop-dono\src-tauri\target\release\bundle\nsis\Fila Gestão_0.1.0_x64-setup.exe`
+Arquivo produzido: `desktop-dono\src-tauri\target\release\bundle\nsis\Fila Gestão_0.2.0_x64-setup.exe`
 
 Sem máquina Windows, há uma alternativa no GitHub: **Actions → "Fila Gestão (instaladores)" → Run workflow**, informando a URL. O `.exe` e o `.deb` ficam em *Artifacts* da execução. Workflows manuais só aparecem depois que o arquivo `.github/workflows/desktop-dono.yml` está no branch padrão.
 
@@ -106,12 +123,12 @@ cd desktop-dono
 scripts/gerar-pacote-linux.sh https://fila.suabarbearia.com.br
 ```
 
-Arquivo produzido: `desktop-dono/src-tauri/target/release/bundle/deb/Fila Gestao_0.1.0_amd64.deb` (sem acento no nome do arquivo e do pacote `fila-gestao`, exigência do Debian; no menu aparece "Fila Gestão"). Com `APPIMAGE=1`, sai também um `.AppImage` em `bundle/appimage/`.
+Arquivo produzido: `desktop-dono/src-tauri/target/release/bundle/deb/Fila Gestao_0.2.0_amd64.deb` (sem acento no nome do arquivo e do pacote `fila-gestao`, exigência do Debian; no menu aparece "Fila Gestão"). Com `APPIMAGE=1`, sai também um `.AppImage` em `bundle/appimage/`.
 
 ### No computador do dono
 
 ```bash
-sudo apt install ./"Fila Gestao_0.1.0_amd64.deb"
+sudo apt install ./"Fila Gestao_0.2.0_amd64.deb"
 ```
 
 Também dá para abrir o `.deb` com dois cliques (Instalador de pacotes). O programa aparece no menu como **Fila Gestão**. As dependências (`libwebkit2gtk-4.1-0`, `libgtk-3-0`) vêm do próprio Mint. Para remover: `sudo apt remove fila-gestao`.
@@ -119,14 +136,15 @@ Também dá para abrir o `.deb` com dois cliques (Instalador de pacotes). O prog
 ## 5. Testes
 
 ```bash
-cd desktop-dono/src-tauri && cargo test      # trava de origem
+cd desktop-dono/src-tauri && cargo test      # trava de origem, atalho do Dashboard, prova ES256, caminhos tipados
+cd desktop-dono && npm run test:ui           # Dashboard (jsdom): indicadores, tabela = gráfico, loja trocada, sessão encerrada
 ```
 
-O frontend tem testes de componente (`frontend/src/pages/dono/dono.test.tsx`) e de navegador real (`frontend/e2e/dono.spec.ts`, mesmo ambiente de `docs/web-validacao.md`).
+O frontend tem testes de componente (`frontend/src/pages/dono/*.test.tsx`) e de navegador real (`frontend/e2e/dono.spec.ts`, no mesmo ambiente de `docs/web-validacao.md`).
 
 A janela real é testada por `testes/janela.mjs`, só no Linux: o WebDriver do Tauri não existe para o WebView2 no Windows sem o Edge Driver.
 
-1. Suba um ambiente de **teste**: API, worker, Vite, e-mails em pasta.
+1. Suba um ambiente de **teste**: API, worker, Vite e e-mails em pasta.
 2. Gere um pacote com `FILA_PAINEL_TESTE_LOCAL=1` apontando para esse ambiente.
 3. Extraia o pacote (`dpkg -x pacote.deb pasta`).
 4. Rode `tauri-driver --native-driver /usr/bin/WebKitWebDriver`, que vem no pacote `webkit2gtk-driver`.
@@ -134,20 +152,20 @@ A janela real é testada por `testes/janela.mjs`, só no Linux: o WebDriver do T
 
 ```bash
 FG_APP=pasta/usr/bin/fila-gestao FG_BASE=http://127.0.0.1:15173 FG_ADMIN=…/fila-admin \
-FG_ADMIN_CWD=pasta-do-.env-de-teste FG_MAIL_DIR=pasta-dos-emails node testes/janela.mjs completo
+FG_ADMIN_CWD=pasta-do-.env-de-teste FG_MAIL_DIR=pasta-dos-emails node testes/janela.mjs completo   # ou: dashboard
 ```
 
-## Validação registrada (18/11/2026)
+O cenário `dashboard` usa o cofre de chaves real da sessão e, na primeira execução, ativa o computador. Para repetir do zero, apague a chave (botão **Ativar de novo** no programa) e o arquivo `~/.local/share/br.fila.gestao/cookies` **do ambiente de teste**.
+
+## Validação registrada (18/11/2026, versão 0.2.0)
 
 | O que | Plataforma | Resultado |
 |---|---|---|
-| Testes de componente do frontend, incluindo os 10 de `/dono` | Linux (Ubuntu 24.04, jsdom) | 91/91 |
-| `frontend/e2e/dono.spec.ts`: login do dono, recusa de conta profissional, só a loja de dono, URL direta, tempo real, navegador comum inalterado | Linux, Google Chrome, API real | 3/3 |
-| `testes/janela.mjs completo` no **pacote `.deb` extraído** (`dpkg -x`): as 13 verificações | Linux, WebKitGTK 2.50 (janela Tauri real) | 13/13 |
-| `testes/janela.mjs falha`: painel fora do ar, tela local e "Tentar novamente" | Linux, WebKitGTK | 3/3 |
-| Binário de produção (HTTPS, rustls) contra uma origem HTTPS sem `/healthz` | Linux | erro tratado na tela local |
-| Recusas do build de produção: sem URL, `http`, domínio de exemplo, com caminho, com usuário | Linux | 5/5 recusadas |
-| Instalador Windows (NSIS) | **não executado**: não havia Windows disponível; use a seção 3 ou o workflow | — |
+| `cargo test` (origem, atalho do Dashboard, prova ES256 verificável, caminhos tipados e recusa de injeção) | Linux | 4/4 |
+| `npm run test:ui` (Dashboard) | Linux, jsdom | 4/4 |
+| `testes/janela.mjs completo` no `.deb` extraído | Linux, WebKitGTK 2.52 (janela Tauri real) | 13/13 |
+| `testes/janela.mjs dashboard` no `.deb` extraído: ativação, mesma sessão, R$ conferido, abas, navegador recusado no analítico, troca web ↔ desktop com limpeza, alternância Dashboard/Filas | Linux, WebKitGTK 2.52, cofre Secret Service da sessão | 11/11 |
+| Instalador Windows (NSIS) e cofre do Windows | **não executado**: não havia Windows disponível; use a seção 3 ou o workflow | — |
 | `sudo apt install` do `.deb` | **não executado** (sem sudo na máquina de teste); o pacote foi extraído e executado | — |
 
 ## Limitações conhecidas
@@ -155,3 +173,5 @@ FG_ADMIN_CWD=pasta-do-.env-de-teste FG_MAIL_DIR=pasta-dos-emails node testes/jan
 - Se a rede cair **depois** que o painel abriu, o próprio site mostra os avisos de conexão e o "Reconectando…" do tempo real. A tela local só aparece ao abrir o programa ou quando a janela para fora da origem.
 - Sem atualização automática do programa. Isso só importa para mudanças na casca: as telas vêm do site e se atualizam a cada implantação do frontend.
 - Sem assinatura de código: há aviso do SmartScreen no Windows.
+- O cofre de chaves no Linux exige o chaveiro da sessão (Secret Service). Sem ele, o Dashboard explica o erro e a gestão continua funcionando.
+- O Dashboard é recarregado com o programa: mudanças na interface dos gráficos exigem um instalador novo.

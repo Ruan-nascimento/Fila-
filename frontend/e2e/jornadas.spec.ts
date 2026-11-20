@@ -262,7 +262,7 @@ test("dona no tablet: convida e cancela convite (com senha), vê pendências e a
     display_name: "Caio",
     queue_letter: "B",
   });
-  await entrarNaTela(p, loja.donaEmail, true);
+  await entrarNaTela(p, loja.donaEmail, true, loja.dona);
   await p.goto(`/gestao/${loja.estId}/profissionais`);
   const caio = p.getByRole("listitem").filter({ has: p.getByRole("heading", { name: /Caio/ }) });
   await caio.getByRole("button", { name: "Convidar" }).click();

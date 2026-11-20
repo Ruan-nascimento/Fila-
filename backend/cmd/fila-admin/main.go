@@ -49,6 +49,10 @@ comandos:
                      opções: -slug endereco-da-loja -email novo-dono@exemplo.com -motivo "texto"
   close-establishment  encerra a loja (só sem ninguém na fila e sem comanda pendente)
                      opções: -slug endereco-da-loja -motivo "texto"
+  desktop emitir-codigo -email dono@exemplo.com -nome "PC do balcão"
+                código de uso único (15 min) para ativar o programa Fila Gestão num computador
+  desktop listar -email dono@exemplo.com      computadores ativados da conta
+  desktop revogar -instalacao <id>            revoga um computador (perdido, trocado)
   eventos       mostra o atraso da publicação de eventos (outbox) e a posição do fluxo
   nova-epoca    troca a época do fluxo de eventos (a conciliação da restauração já faz isso)
   verificar     indicadores e alertas (saída 0 = sem alerta, 3 = alerta ativo)
@@ -85,6 +89,8 @@ func run(ctx context.Context, args, environ []string, stdout, stderr io.Writer) 
 		return bootstrap(ctx, args[1:], environ, stdout, stderr)
 	case "transfer-owner", "close-establishment":
 		return ownerProcess(ctx, args[0], args[1:], environ, stdout, stderr)
+	case "desktop":
+		return desktop(ctx, args[1:], environ, stdout, stderr)
 	case "verificar":
 		return verify(ctx, args[1:], environ, stdout, stderr)
 	case "manutencao":

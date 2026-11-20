@@ -3,6 +3,7 @@ package identidade
 import (
 	"context"
 	"errors"
+	"fila/internal/midia"
 	"fmt"
 	"time"
 
@@ -89,7 +90,7 @@ func (s *Service) AnonymizeAccount(ctx context.Context, tx pgx.Tx, accountID uui
 	if err != nil {
 		return nil, err
 	}
-	out := map[string]int64{"perfil": 0, "convites": 0, "tokens": 0}
+	out := map[string]int64{"perfil": 0, "convites": 0, "tokens": 0, "identidades": 0, "imagens": 0}
 	if status == StatusDeleted {
 		return out, nil
 	}
@@ -101,7 +102,7 @@ func (s *Service) AnonymizeAccount(ctx context.Context, tx pgx.Tx, accountID uui
 	placeholder := "excluida-" + accountID.String() + "@conta.invalid"
 	if _, err := tx.Exec(ctx, `
 		UPDATE account SET name = $2, email = $3, email_normalized = $3, password_hash = '$argon2id$conta-excluida',
-		       status = 'deleted', updated_at = $4
+		       status = 'deleted', updated_at = $4, avatar_asset_id = NULL, appearance = 'system'
 		WHERE id = $1`, accountID, DeletedName, placeholder, now); err != nil {
 		return nil, err
 	}
@@ -123,6 +124,21 @@ func (s *Service) AnonymizeAccount(ctx context.Context, tx pgx.Tx, accountID uui
 		return nil, err
 	}
 	out["tokens"] = tag.RowsAffected()
+	// Vínculos com o Google: removidos (sem eles, a mesma conta Google pode criar outra conta).
+	tag, err = tx.Exec(ctx, `DELETE FROM external_identity WHERE account_id = $1`, accountID)
+	if err != nil {
+		return nil, err
+	}
+	out["identidades"] = tag.RowsAffected()
+	if _, err := tx.Exec(ctx, `DELETE FROM oidc_transaction WHERE account_id = $1`, accountID); err != nil {
+		return nil, err
+	}
+	// Fotos: deixam de ser servidas na hora; os arquivos somem no prazo de retenção (24 h).
+	n, err := midia.ReleaseOwnedBy(ctx, tx, accountID, now)
+	if err != nil {
+		return nil, err
+	}
+	out["imagens"] = n
 	return out, nil
 }
 

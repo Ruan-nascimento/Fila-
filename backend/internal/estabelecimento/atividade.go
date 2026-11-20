@@ -3,6 +3,7 @@ package estabelecimento
 import (
 	"context"
 	"errors"
+	"fila/internal/midia"
 	"fmt"
 	"slices"
 	"time"
@@ -95,6 +96,9 @@ type StaffEntry struct {
 	ToleranceEndsAt         *time.Time `json:"tolerance_ends_at"`
 	HasPendingChangeRequest bool       `json:"has_pending_change_request"`
 	Version                 int64      `json:"version"`
+	// CustomerAvatar: foto pessoal do cliente com conta, só para a equipe desta fila e só enquanto
+	// a participação está ativa (a URL é autorizada de novo a cada pedido). Visitante não tem.
+	CustomerAvatar *midia.ImageRef `json:"customer_avatar"`
 }
 
 // PublicSnapshot é o que o público vê de uma fila: só senhas, situação, quantidade e estimativa.

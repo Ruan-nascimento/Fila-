@@ -6,6 +6,7 @@
 *.key
 # E-mails capturados em desenvolvimento (contêm links com tokens)
 .correio/
+.midia/
 
 # Binários e saídas de build
 /bin/

@@ -50,6 +50,12 @@ tags:
     description: Fluxo SSE de atualizações.
   - name: provedor
     description: Notificações do provedor de pagamento.
+  - name: desktop
+    description: Instalações do programa do dono (ativação, vínculo à sessão de dono, prova DPoP).
+  - name: analitico
+    description: Dashboard analítico exclusivo do programa desktop do dono.
+  - name: midia
+    description: Fotos de perfil, foto pública do profissional e logo da loja (ADR-0028).
 
 paths:
   /healthz/live:
@@ -178,7 +184,71 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: |
+            `owner_session_active` (ADR-0027): credenciais válidas, mas a conta tem vínculo de dono e
+            outra sessão válida ocupa a vaga de dono. A outra sessão continua; esta tentativa NÃO recebe
+            cookie de sessão. `current` segue OwnerSessionConflict (desafio de 2 min, só no corpo). Junto
+            vai o cookie HttpOnly `__Host-fila_owner_attempt` (5 min), que prende o desafio a esta tentativa.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/auth/owner-session/takeover:
+    post:
+      operationId: takeoverOwnerSession
+      tags: [sessao]
+      summary: Continua neste aparelho e encerra a outra sessão de dono (operação atômica).
+      description: |
+        Valida o desafio (não vencido, não usado, desta tentativa pelo cookie `__Host-fila_owner_attempt`
+        e da MESMA geração da vaga que a pessoa viu), revoga a sessão anterior (`owner_session_replaced`),
+        cria a nova e só então define o cookie de sessão. Se a vaga mudou enquanto a confirmação estava
+        aberta, responde `owner_session_challenge_invalid` sem derrubar ninguém. Repetir a mesma
+        confirmação depois de uma queda de rede reentrega o acesso só se esta tentativa venceu e continua
+        ocupando a vaga (nunca revoga de novo).
+      security: []
+      x-authz: [{ actor: public, scope: none }]
+      x-transitions: [T-SS-07]
+      x-events: [stream.session_ended]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OwnerChallengeRequest' }
+      responses:
+        '200':
+          description: Acesso de dono transferido para este aparelho. Set-Cookie com __Host-fila_session.
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/SetSessionCookie' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/SessionView' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/auth/owner-session/cancel:
+    post:
+      operationId: cancelOwnerTakeover
+      tags: [sessao]
+      summary: Cancela e mantém a outra sessão (descarta o desafio). Sempre 204.
+      security: []
+      x-authz: [{ actor: public, scope: none }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OwnerChallengeRequest' }
+      responses:
+        '204': { description: Desafio descartado (ou já inexistente). A outra sessão continua. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         default: { $ref: '#/components/responses/Unexpected' }
   /v1/auth/logout:
     post:
@@ -283,6 +353,106 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
         default: { $ref: '#/components/responses/Unexpected' }
+  /v1/auth/reauthenticate/email-code:
+    post:
+      operationId: requestReauthCode
+      tags: [sessao]
+      summary: Envia um código de 8 dígitos ao e-mail verificado para reautenticar conta sem senha (só Google).
+      description: |
+        O código vale 10 minutos, só nesta sessão, e é usado em `reauthenticate` (`email_code`).
+        Conta com senha recebe `409 password_available` (use a senha).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: customer, scope: self }, { actor: professional, scope: self }, { actor: owner, scope: self }]
+      x-transitions: [T-SS-06]
+      responses:
+        '202': { $ref: '#/components/responses/AcceptedGeneric' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/auth/google/start:
+    post:
+      operationId: startGoogleAuth
+      tags: [sessao]
+      summary: Inicia o login (ou o vínculo) com Google — só jornada de cliente (ADR-0028).
+      description: |
+        OpenID Connect com Authorization Code e PKCE S256 no backend. Cria uma transação de uso único
+        (10 min) presa a este navegador (cookie HttpOnly de correlação), à intenção, ao retorno
+        validado (lista fechada de rotas internas) e à loja resolvida. Responde a URL do Google.
+        `link` exige sessão de conta com reautenticação recente. Loja inexistente → 404 (não inicia).
+        Sessão aberta pelo Google é sempre de cliente: nunca dá acesso à gestão.
+      security: [{}, { accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: public, scope: none }]
+      x-transitions: [T-AC-06]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GoogleStartRequest' }
+      responses:
+        '200':
+          description: URL de autorização do Google.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [authorization_url]
+                    properties:
+                      authorization_url: { type: string, format: uri }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/auth/google/callback:
+    get:
+      operationId: googleAuthCallback
+      tags: [sessao]
+      summary: Retorno do Google (redirect URI cadastrada). Sempre redireciona para uma rota interna limpa.
+      description: |
+        Consome a transação (state de uso único, mesmo navegador, dentro do prazo) antes de trocar o
+        código; valida assinatura, emissor, audiência, expiração, nonce e azp do id_token. Não guarda
+        tokens do Google. Destinos: o retorno validado (sucesso), `/entrar?google=<situação>` ou
+        `/conta?google=<situação>` (vínculo). Situações: `cancelado`, `falhou`, `conta_existente`,
+        `verificar_email`, `indisponivel`, `conectado`, `ja_vinculado`.
+      security: []
+      x-authz: [{ actor: public, scope: none }]
+      x-transitions: [T-AC-05, T-AC-06, T-SS-08]
+      parameters:
+        - { name: state, in: query, required: false, schema: { type: string, maxLength: 64 } }
+        - { name: code, in: query, required: false, schema: { type: string, maxLength: 2048 } }
+        - { name: error, in: query, required: false, schema: { type: string, maxLength: 100 } }
+      responses:
+        '303':
+          description: Redireciona para a rota interna (com a sessão de cliente, quando liberada).
+          headers:
+            Location: { schema: { type: string } }
+            Set-Cookie: { $ref: '#/components/headers/SetSessionCookie' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/auth/google/unlink:
+    post:
+      operationId: unlinkGoogle
+      tags: [sessao]
+      summary: Desconecta o Google da conta (exige reautenticação e outro método de acesso).
+      description: Conta só com Google recebe `409 last_access_method` (nunca fica sem acesso).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: customer, scope: self }, { actor: professional, scope: self }, { actor: owner, scope: self }]
+      x-transitions: [T-AC-07]
+      x-reauth: true
+      responses:
+        '204': { description: Desconectado (ou já estava). }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/Unexpected' }
   /v1/auth/invites/accept:
     post:
       operationId: acceptInvite
@@ -294,7 +464,7 @@ paths:
         ela passa a usar a senha informada. Convite usado, revogado, vencido ou inexistente → 409 `invite_invalid` (mesma mensagem).
       security: []
       x-authz: [{ actor: public, scope: none }]
-      x-transitions: [T-IN-02]
+      x-transitions: [T-IN-02, T-AC-08]
       requestBody:
         required: true
         content:
@@ -309,10 +479,24 @@ paths:
         '429': { $ref: '#/components/responses/TooManyRequests' }
         default: { $ref: '#/components/responses/Unexpected' }
   /v1/me:
+    get:
+      operationId: getMyProfile
+      tags: [cliente]
+      summary: Perfil da própria conta (não depende de loja selecionada). E-mail só leitura.
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: customer, scope: self }, { actor: professional, scope: self }, { actor: owner, scope: self }]
+      responses:
+        '200': { $ref: '#/components/responses/MyProfileOk' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        default: { $ref: '#/components/responses/Unexpected' }
     patch:
       operationId: updateMyProfile
       tags: [cliente]
-      summary: Altera o nome exibido da própria conta.
+      summary: Altera o nome exibido e/ou a aparência da própria conta.
+      description: |
+        Só `name`, `appearance` e `expected_version` (opcional; com ele a alteração é condicional e
+        versão diferente → `409 version_conflict` com o perfil atual). E-mail, papel, vínculo ou
+        verificação no corpo são recusados (campo desconhecido).
       security: [{ accountSession: [], csrfToken: [] }]
       x-authz: [{ actor: customer, scope: self }, { actor: professional, scope: self }, { actor: owner, scope: self }]
       parameters:
@@ -331,11 +515,175 @@ paths:
                 type: object
                 required: [data]
                 properties:
-                  data: { $ref: '#/components/schemas/AccountView' }
+                  data: { $ref: '#/components/schemas/MyProfile' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/me/avatar:
+    put:
+      operationId: setMyAvatar
+      tags: [cliente]
+      summary: Associa uma foto pessoal já processada (envio próprio, finalidade avatar).
+      description: A foto antiga continua até esta troca confirmar. Versão esperada obrigatória (troca antiga não sobrescreve a nova).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: customer, scope: self }, { actor: professional, scope: self }, { actor: owner, scope: self }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetAssetRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/MyProfileOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/me/avatar/remove:
+    post:
+      operationId: removeMyAvatar
+      tags: [cliente]
+      summary: Remove a foto pessoal (referência retirada na hora; arquivos apagados após a retenção).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: customer, scope: self }, { actor: professional, scope: self }, { actor: owner, scope: self }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/MyProfileOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/me/avatar/{size}:
+    get:
+      operationId: getMyAvatar
+      tags: [midia]
+      summary: Foto pessoal da própria conta (privada; autorização refeita a cada pedido, inclusive antes do 304).
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: customer, scope: self }, { actor: professional, scope: self }, { actor: owner, scope: self }]
+      parameters:
+        - $ref: '#/components/parameters/ImageSize'
+      responses:
+        '200': { $ref: '#/components/responses/PrivateImage' }
+        '304': { description: Não modificada (depois de autorizar). }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/media/uploads:
+    post:
+      operationId: uploadMedia
+      tags: [midia]
+      summary: Envia uma imagem (JPEG, PNG ou WebP estático, até 5 MiB, 12 MP, 8.192 px por eixo).
+      description: |
+        Rota própria (o limite de corpo das demais rotas não muda). O formato real é conferido pela
+        assinatura; SVG, GIF, animação, HEIC e desconhecidos são recusados. A imagem é processada
+        depois (worker) e o envio NÃO altera o perfil: associe com `setMyAvatar`,
+        `setEstablishmentLogo` ou `setMyProfessionalPhoto`. `avatar`: qualquer conta (privado);
+        `logo`: dono da loja; `professional_photo`: quem atende na loja (públicas). Limites: 5
+        envios/min e 20/dia por conta (configuráveis) e no máximo 10 envios pendentes.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: customer, scope: self }, { actor: professional, scope: self }, { actor: owner, scope: self },
+                { actor: professional, scope: establishment_member }, { actor: owner, scope: establishment }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - { name: purpose, in: query, required: true, schema: { $ref: '#/components/schemas/MediaPurpose' } }
+        - { name: establishment_id, in: query, required: false, description: Obrigatório para logo e professional_photo., schema: { $ref: '#/components/schemas/Id' } }
+        - { name: crop_x, in: query, required: false, schema: { type: number, minimum: 0, exclusiveMaximum: 1 } }
+        - { name: crop_y, in: query, required: false, schema: { type: number, minimum: 0, exclusiveMaximum: 1 } }
+        - { name: crop_size, in: query, required: false, description: 'Recorte quadrado normalizado sobre a imagem orientada (x,y relativos a largura/altura; size ao menor lado). Os três juntos ou nenhum.', schema: { type: number, exclusiveMinimum: 0, maximum: 1 } }
+      requestBody:
+        required: true
+        content:
+          image/jpeg: { schema: { type: string, format: binary } }
+          image/png: { schema: { type: string, format: binary } }
+          image/webp: { schema: { type: string, format: binary } }
+      responses:
+        '202':
+          description: Recebida; processamento pendente (a foto antiga continua até associar a nova).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/MediaUpload' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/media/uploads/{assetId}:
+    get:
+      operationId: getMediaUpload
+      tags: [midia]
+      summary: Situação do processamento de um envio próprio (consulta curta enquanto o envio está ativo).
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: customer, scope: self }, { actor: professional, scope: self }, { actor: owner, scope: self }]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      responses:
+        '200':
+          description: Situação.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/MediaUpload' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/public/media/{assetId}/{size}:
+    get:
+      operationId: getPublicMedia
+      tags: [midia, publico]
+      summary: Variante pública (logo ou foto profissional publicada). URL versionada pelo id; cache de 5 min.
+      security: []
+      x-authz: [{ actor: public, scope: none }]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+        - $ref: '#/components/parameters/ImageSize'
+      responses:
+        '200': { $ref: '#/components/responses/PublicImage' }
+        '304': { description: Não modificada. }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/public/config:
+    get:
+      operationId: getPublicConfig
+      tags: [publico]
+      summary: O que está ligado (Google, fotos) e a origem pública canônica (links e QR Code). Sem segredos.
+      security: []
+      x-authz: [{ actor: public, scope: none }]
+      responses:
+        '200':
+          description: Configuração pública.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/PublicConfig' }
         default: { $ref: '#/components/responses/Unexpected' }
 
   # ---------------------------------------------------------------- visitante
@@ -561,6 +909,27 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/IdempotencyMismatch' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/participations/{participationId}/customer-avatar/{size}:
+    get:
+      operationId: getCustomerAvatar
+      tags: [midia, fila]
+      summary: Foto pessoal do cliente com conta, para a equipe da fila, SÓ enquanto a participação está ativa.
+      description: |
+        Dono da loja ou o profissional da fila. Participação encerrada, visitante ou outra loja → 404.
+        A autorização é refeita a cada pedido (inclusive antes do 304); nunca vai para cache compartilhado.
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: professional, scope: own_queue }, { actor: owner, scope: establishment }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/ParticipationId'
+        - $ref: '#/components/parameters/ImageSize'
+      responses:
+        '200': { $ref: '#/components/responses/PrivateImage' }
+        '304': { description: Não modificada (depois de autorizar). }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
         default: { $ref: '#/components/responses/Unexpected' }
   /v1/establishments/{establishmentId}/participations/{participationId}:
     get:
@@ -1851,7 +2220,11 @@ paths:
     patch:
       operationId: updateEstablishment
       tags: [administracao]
-      summary: Altera nome, slug e fuso da loja.
+      summary: Altera nome, slug, fuso, paleta e informações públicas da loja.
+      description: |
+        `palette` é um identificador do catálogo de 16 paletas (nunca CSS ou hexadecimal). Textos
+        públicos são texto simples; string vazia remove. O telefone é normalizado para E.164 e será
+        publicado. A auditoria guarda os nomes dos campos alterados, nunca os valores.
       security: [{ accountSession: [], csrfToken: [] }]
       x-authz: [{ actor: owner, scope: establishment }]
       x-transitions: [T-ES-01]
@@ -1865,6 +2238,150 @@ paths:
             schema: { $ref: '#/components/schemas/UpdateEstablishmentRequest' }
       responses:
         '200': { $ref: '#/components/responses/EstablishmentOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/logo:
+    put:
+      operationId: setEstablishmentLogo
+      tags: [administracao]
+      summary: Associa a logo (envio do próprio dono, finalidade logo, desta loja). Pública.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-ES-01]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetAssetRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/EstablishmentOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/logo/remove:
+    post:
+      operationId: removeEstablishmentLogo
+      tags: [administracao]
+      summary: Remove a logo (a loja passa a mostrar o nome).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-ES-01]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/EstablishmentOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/my-professional-profile:
+    get:
+      operationId: getMyProfessionalProfile
+      tags: [administracao]
+      summary: Meu perfil na barbearia (quem atende nesta loja). Nome só leitura (quem renomeia é o dono).
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: professional, scope: self }, { actor: owner, scope: self }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      responses:
+        '200': { $ref: '#/components/responses/MyProfessionalProfileOk' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/my-professional-profile/photo:
+    put:
+      operationId: setMyProfessionalPhoto
+      tags: [administracao]
+      summary: Publica a foto pública do profissional (envio próprio ou cópia explícita da foto pessoal).
+      description: Com `from_avatar`, as variantes da foto pessoal são COPIADAS para uma imagem pública nova; o avatar continua privado.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: professional, scope: self }, { actor: owner, scope: self }]
+      x-transitions: [T-PR-05]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetProfessionalPhotoRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/MyProfessionalProfileOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/my-professional-profile/photo/remove:
+    post:
+      operationId: removeMyProfessionalPhoto
+      tags: [administracao]
+      summary: Despublica a foto pública (o avatar pessoal não muda).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: professional, scope: self }, { actor: owner, scope: self }]
+      x-transitions: [T-PR-05]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/MyProfessionalProfileOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/professionals/{professionalId}/photo/remove:
+    post:
+      operationId: removeProfessionalPhoto
+      tags: [administracao]
+      summary: O dono retira a publicação de uma foto profissional inadequada (motivo + auditoria).
+      description: Não altera o avatar pessoal da conta do profissional (continua privado).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-PR-06]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/ProfessionalId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedReasonRequiredRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/ProfessionalOk' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -2552,6 +3069,334 @@ paths:
         '429': { $ref: '#/components/responses/TooManyRequests' }
         default: { $ref: '#/components/responses/Unexpected' }
 
+  /v1/desktop/installations/activate:
+    post:
+      operationId: activateDesktopInstallation
+      tags: [desktop]
+      summary: Ativa um computador com o código de uso único emitido pelo operador (fila-admin).
+      description: |
+        O componente nativo envia o código e um cabeçalho `DPoP` (RFC 9449, ES256) assinado pela chave
+        privada recém-criada da instalação, com a chave pública no cabeçalho `jwk`. O servidor guarda só
+        a chave pública e a impressão digital (RFC 7638). Sem sessão nem cookie.
+      security: [{ desktopProof: [] }]
+      x-authz: [{ actor: desktop_installation, scope: activation_code }]
+      x-transitions: [T-DK-02]
+      parameters:
+        - { $ref: '#/components/parameters/DPoPProof' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [code]
+              properties:
+                code: { type: string, minLength: 16, maxLength: 24, description: 'Formato XXXX-XXXX-XXXX-XXXX (Crockford).' }
+      responses:
+        '201':
+          description: Instalação autorizada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/DesktopInstallation' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/desktop/link-tickets:
+    post:
+      operationId: createDesktopLinkTicket
+      tags: [desktop]
+      summary: Ticket de 60 s para o Dashboard local usar a MESMA sessão de dono (troca mediada pelo servidor).
+      description: |
+        Pedido da gestão aberta na janela do programa, com o cookie da sessão de dono ocupante da vaga. O
+        ticket não é credencial sozinho: só vira acesso quando trocado com prova de posse da chave de uma
+        instalação autorizada da MESMA conta. Nenhum cookie é copiado para JavaScript ou arquivo.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: owner_session }]
+      responses:
+        '201':
+          description: Ticket emitido (no-store).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/DesktopLinkTicket' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/desktop/bindings:
+    post:
+      operationId: createDesktopBinding
+      tags: [desktop]
+      summary: Troca o ticket (com prova DPoP) por um token de acesso preso à chave da instalação.
+      description: |
+        O token (tipo DPoP) vale enquanto a sessão do ticket for a ocupante da vaga de dono, no máximo 2 h.
+        Revogar a sessão, trocar de aparelho, sair, remover o vínculo de dono ou revogar a instalação
+        invalida as consultas seguintes.
+      security: [{ desktopProof: [] }]
+      x-authz: [{ actor: desktop_installation, scope: link_ticket }]
+      x-transitions: [T-DK-03]
+      parameters:
+        - { $ref: '#/components/parameters/DPoPProof' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [ticket]
+              properties:
+                ticket: { type: string, minLength: 20, maxLength: 64 }
+      responses:
+        '201':
+          description: Vínculo criado (no-store).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/DesktopBinding' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/desktop/bindings/current/end:
+    post:
+      operationId: endDesktopBinding
+      tags: [desktop]
+      summary: Encerra o acesso do Dashboard local (a sessão de dono na gestão continua).
+      security: [{ desktopToken: [], desktopProof: [] }]
+      x-authz: [{ actor: owner_desktop, scope: self }]
+      parameters:
+        - { $ref: '#/components/parameters/DPoPProof' }
+      responses:
+        '204': { description: Vínculo encerrado. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/desktop/context:
+    get:
+      operationId: getDesktopContext
+      tags: [desktop]
+      summary: Conta, instalação e lojas em que a conta é DONA (lojas só de profissional não aparecem).
+      security: [{ desktopToken: [], desktopProof: [] }]
+      x-authz: [{ actor: owner_desktop, scope: self }]
+      parameters:
+        - { $ref: '#/components/parameters/DPoPProof' }
+      responses:
+        '200':
+          description: Contexto do Dashboard (no-store).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/DesktopContext' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/desktop/analytics/establishments/{establishmentId}/summary:
+    get:
+      operationId: getAnalyticsSummary
+      tags: [analitico]
+      summary: Quatro indicadores da primeira dobra (+ comparação e pendências abertas agora).
+      description: |
+        Exclusivo do programa desktop (ADR-0027): exige ao mesmo tempo sessão de dono ocupante da vaga,
+        prova DPoP de instalação autorizada e vínculo de dono com a loja. Loja sem vínculo de dono → 404.
+        Resposta `Cache-Control: no-store`; agregação no servidor. Dicionário: docs/desktop/metricas.md.
+      security: [{ desktopToken: [], desktopProof: [] }]
+      x-authz: [{ actor: owner_desktop, scope: establishment }]
+      parameters:
+        - { $ref: '#/components/parameters/DPoPProof' }
+        - { $ref: '#/components/parameters/EstablishmentId' }
+        - { $ref: '#/components/parameters/AnalyticsFrom' }
+        - { $ref: '#/components/parameters/AnalyticsTo' }
+        - { $ref: '#/components/parameters/AnalyticsCompare' }
+        - { $ref: '#/components/parameters/AnalyticsProfessional' }
+        - { $ref: '#/components/parameters/AnalyticsService' }
+        - { $ref: '#/components/parameters/AnalyticsMethod' }
+      responses:
+        '200':
+          description: Dados agregados com meta (período efetivo, fuso, instante, unidades, ausências).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data: { $ref: '#/components/schemas/AnalyticsSummary' }
+                  meta: { $ref: '#/components/schemas/AnalyticsMeta' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/desktop/analytics/establishments/{establishmentId}/series/{metric}:
+    get:
+      operationId: getAnalyticsSeries
+      tags: [analitico]
+      summary: Série temporal de uma métrica (cash, ticket, movement, wait, duration, loyalty).
+      description: |
+        Exclusivo do programa desktop (ADR-0027): exige ao mesmo tempo sessão de dono ocupante da vaga,
+        prova DPoP de instalação autorizada e vínculo de dono com a loja. Loja sem vínculo de dono → 404.
+        Resposta `Cache-Control: no-store`; agregação no servidor. Dicionário: docs/desktop/metricas.md.
+      security: [{ desktopToken: [], desktopProof: [] }]
+      x-authz: [{ actor: owner_desktop, scope: establishment }]
+      parameters:
+        - { $ref: '#/components/parameters/DPoPProof' }
+        - { $ref: '#/components/parameters/EstablishmentId' }
+        - name: metric
+          in: path
+          required: true
+          schema: { type: string, enum: [cash, ticket, movement, wait, duration, loyalty] }
+        - name: granularity
+          in: query
+          required: false
+          schema: { type: string, enum: [hour, day, week, month] }
+        - { $ref: '#/components/parameters/AnalyticsFrom' }
+        - { $ref: '#/components/parameters/AnalyticsTo' }
+        - { $ref: '#/components/parameters/AnalyticsCompare' }
+        - { $ref: '#/components/parameters/AnalyticsProfessional' }
+        - { $ref: '#/components/parameters/AnalyticsService' }
+        - { $ref: '#/components/parameters/AnalyticsMethod' }
+      responses:
+        '200':
+          description: Dados agregados com meta (período efetivo, fuso, instante, unidades, ausências).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data: { $ref: '#/components/schemas/AnalyticsSeries' }
+                  meta: { $ref: '#/components/schemas/AnalyticsMeta' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/desktop/analytics/establishments/{establishmentId}/breakdowns/{dimension}:
+    get:
+      operationId: getAnalyticsBreakdown
+      tags: [analitico]
+      summary: Agregado por categoria.
+      description: |
+        Exclusivo do programa desktop (ADR-0027): exige ao mesmo tempo sessão de dono ocupante da vaga,
+        prova DPoP de instalação autorizada e vínculo de dono com a loja. Loja sem vínculo de dono → 404.
+        Resposta `Cache-Control: no-store`; agregação no servidor. Dicionário: docs/desktop/metricas.md.
+      security: [{ desktopToken: [], desktopProof: [] }]
+      x-authz: [{ actor: owner_desktop, scope: establishment }]
+      parameters:
+        - { $ref: '#/components/parameters/DPoPProof' }
+        - { $ref: '#/components/parameters/EstablishmentId' }
+        - name: dimension
+          in: path
+          required: true
+          schema: { type: string, enum: [payment_methods, outcomes, professionals, services, peak_hours, wait_bands, pending, rewards, recurrence] }
+        - { $ref: '#/components/parameters/AnalyticsFrom' }
+        - { $ref: '#/components/parameters/AnalyticsTo' }
+        - { $ref: '#/components/parameters/AnalyticsCompare' }
+        - { $ref: '#/components/parameters/AnalyticsProfessional' }
+        - { $ref: '#/components/parameters/AnalyticsService' }
+        - { $ref: '#/components/parameters/AnalyticsMethod' }
+      responses:
+        '200':
+          description: Dados agregados com meta (período efetivo, fuso, instante, unidades, ausências).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data: { $ref: '#/components/schemas/AnalyticsBreakdown' }
+                  meta: { $ref: '#/components/schemas/AnalyticsMeta' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/desktop/analytics/establishments/{establishmentId}/records/{kind}:
+    get:
+      operationId: listAnalyticsRecords
+      tags: [analitico]
+      summary: Registros que formam um total, paginados no servidor (50 por página).
+      description: |
+        Exclusivo do programa desktop (ADR-0027): exige ao mesmo tempo sessão de dono ocupante da vaga,
+        prova DPoP de instalação autorizada e vínculo de dono com a loja. Loja sem vínculo de dono → 404.
+        Resposta `Cache-Control: no-store`; agregação no servidor. Dicionário: docs/desktop/metricas.md.
+        Filtro sem atribuição confiável neste tipo de registro → 422 `analytics_filter_not_applicable`.
+      security: [{ desktopToken: [], desktopProof: [] }]
+      x-authz: [{ actor: owner_desktop, scope: establishment }]
+      parameters:
+        - { $ref: '#/components/parameters/DPoPProof' }
+        - { $ref: '#/components/parameters/EstablishmentId' }
+        - name: kind
+          in: path
+          required: true
+          schema: { type: string, enum: [receipts, refunds, orders, participations, service_items, financial_issues, loyalty_entries] }
+        - { name: bucket_start, in: query, required: false, schema: { $ref: '#/components/schemas/Timestamp' } }
+        - { name: bucket_end, in: query, required: false, schema: { $ref: '#/components/schemas/Timestamp' } }
+        - { name: cursor, in: query, required: false, schema: { type: string, maxLength: 300 } }
+        - { name: ref, in: query, required: false, description: 'participations: entered|called|finished; service_items: performed|added', schema: { type: string } }
+        - { name: state, in: query, required: false, description: 'financial_issues: open (agora) | opened | resolved (no período)', schema: { type: string, enum: [open, opened, resolved] } }
+        - { name: kind, in: query, required: false, description: 'financial_issues: tipo; loyalty_entries: credited|used|returned|adjusted', schema: { type: string } }
+        - { name: status, in: query, required: false, schema: { type: string } }
+        - { name: dow, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 7 } }
+        - { name: hour, in: query, required: false, schema: { type: integer, minimum: 0, maximum: 23 } }
+        - { name: band, in: query, required: false, schema: { type: string, enum: ['0-5', '5-15', '15-30', '30-60', '60+'] } }
+        - { $ref: '#/components/parameters/AnalyticsFrom' }
+        - { $ref: '#/components/parameters/AnalyticsTo' }
+        - { $ref: '#/components/parameters/AnalyticsCompare' }
+        - { $ref: '#/components/parameters/AnalyticsProfessional' }
+        - { $ref: '#/components/parameters/AnalyticsService' }
+        - { $ref: '#/components/parameters/AnalyticsMethod' }
+      responses:
+        '200':
+          description: Dados agregados com meta (período efetivo, fuso, instante, unidades, ausências).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data: { $ref: '#/components/schemas/AnalyticsRecords' }
+                  meta: { $ref: '#/components/schemas/AnalyticsMeta' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/desktop/analytics/establishments/{establishmentId}/stream:
+    get:
+      operationId: openAnalyticsStream
+      tags: [analitico]
+      summary: SSE de invalidação do Dashboard (só nomes de áreas, agrupados; sem dados).
+      description: |
+        `event: ready` (todas as áreas), `event: invalidate` ({"areas": [...]}, agrupado por ~3 s),
+        `event: session_ended` ({"reason": "owner_session_replaced" | "session_revoked"}). Reconferido a cada
+        30 s e a cada revogação. Mudança de posição na fila não invalida nada.
+      security: [{ desktopToken: [], desktopProof: [] }]
+      x-authz: [{ actor: owner_desktop, scope: establishment }]
+      parameters:
+        - { $ref: '#/components/parameters/DPoPProof' }
+        - { $ref: '#/components/parameters/EstablishmentId' }
+      responses:
+        '200':
+          description: Fluxo text/event-stream.
+          content:
+            text/event-stream:
+              schema: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+
 components:
   securitySchemes:
     accountSession:
@@ -2569,6 +3414,15 @@ components:
       in: header
       name: X-CSRF-Token
       description: Token obtido em getSession, vinculado às sessões do navegador. Obrigatório em métodos não seguros quando há sessão; Origin é validado sempre.
+    desktopProof:
+      type: apiKey
+      in: header
+      name: DPoP
+      description: Prova de posse (RFC 9449, ES256, typ dpop+jwt) da chave da instalação desktop; htm/htu/iat/jti (e ath com token). Uso único.
+    desktopToken:
+      type: http
+      scheme: DPoP
+      description: 'Authorization: DPoP <token> (createDesktopBinding). Preso à chave (jkt) e subordinado à sessão de dono.'
 
   headers:
     SetSessionCookie:
@@ -2588,6 +3442,45 @@ components:
       schema: { type: string, enum: ['true'] }
 
   parameters:
+    DPoPProof:
+      name: DPoP
+      in: header
+      required: true
+      description: Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min.
+      schema: { type: string, maxLength: 4096 }
+    AnalyticsFrom:
+      name: from
+      in: query
+      required: true
+      description: Primeiro dia (data LOCAL da loja), inclusivo.
+      schema: { type: string, format: date }
+    AnalyticsTo:
+      name: to
+      in: query
+      required: true
+      description: Último dia (data LOCAL da loja), inclusivo. Intervalo consultado [from 00:00, to+1 00:00) no fuso da loja; no máximo 366 dias.
+      schema: { type: string, format: date }
+    AnalyticsCompare:
+      name: compare
+      in: query
+      required: false
+      description: previous = período anterior equivalente, com o mesmo tempo transcorrido.
+      schema: { type: string, enum: [previous] }
+    AnalyticsProfessional:
+      name: professional_id
+      in: query
+      required: false
+      schema: { $ref: '#/components/schemas/Id' }
+    AnalyticsService:
+      name: service_id
+      in: query
+      required: false
+      schema: { $ref: '#/components/schemas/Id' }
+    AnalyticsMethod:
+      name: method
+      in: query
+      required: false
+      schema: { type: string, enum: [pix, cash, card] }
     EstablishmentId:
       name: establishmentId
       in: path
@@ -2643,6 +3536,17 @@ components:
       in: path
       required: true
       schema: { $ref: '#/components/schemas/Id' }
+    AssetId:
+      name: assetId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    ImageSize:
+      name: size
+      in: path
+      required: true
+      description: Lado desejado em px; entrega a variante desse tamanho, a menor maior que ele ou a maior.
+      schema: { type: integer, minimum: 16, maximum: 1024 }
     ServiceId:
       name: serviceId
       in: path
@@ -2758,6 +3662,41 @@ components:
             required: [data]
             properties:
               data: { $ref: '#/components/schemas/Establishment' }
+    MyProfileOk:
+      description: Perfil da própria conta.
+      headers:
+        Idempotent-Replayed: { $ref: '#/components/headers/IdempotentReplayed' }
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: { $ref: '#/components/schemas/MyProfile' }
+    MyProfessionalProfileOk:
+      description: Meu perfil na barbearia.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: { $ref: '#/components/schemas/MyProfessionalProfile' }
+    PrivateImage:
+      description: 'Imagem privada. Cache-Control: private, no-cache, must-revalidate; ETag; X-Content-Type-Options: nosniff.'
+      content:
+        image/jpeg: { schema: { type: string, format: binary } }
+        image/png: { schema: { type: string, format: binary } }
+    PublicImage:
+      description: 'Imagem pública. Cache-Control: public, max-age=300; ETag; X-Content-Type-Options: nosniff.'
+      content:
+        image/jpeg: { schema: { type: string, format: binary } }
+        image/png: { schema: { type: string, format: binary } }
+    UnsupportedMediaType:
+      description: Formato não aceito (`unsupported_media_type`, `image_unsupported`).
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
     ProfessionalOk:
       description: Profissional.
       content:
@@ -3018,6 +3957,29 @@ components:
         - reward_inactive
         - reservation_already_active
         - reservation_expired
+        # sessão única do dono e programa desktop (ADR-0027)
+        - owner_session_active
+        - owner_session_challenge_invalid
+        - owner_session_replaced
+        - owner_session_required
+        - desktop_proof_invalid
+        - desktop_activation_invalid
+        - desktop_link_invalid
+        - desktop_access_invalid
+        - desktop_installation_invalid
+        - analytics_filter_not_applicable
+        # fotos, Google e identidade da loja (ADR-0028)
+        - media_disabled
+        - media_not_attachable
+        - image_unsupported
+        - image_invalid
+        - image_dimensions
+        - google_unavailable
+        - identity_already_linked
+        - last_access_method
+        - no_password
+        - password_available
+        - reauth_code_invalid
 
     # ------------------------------------------------------------ enums de estado
     QueueStatus:
@@ -3163,9 +4125,10 @@ components:
     ReauthenticateRequest:
       type: object
       additionalProperties: false
-      required: [password]
+      description: '`password` (conta com senha) OU `email_code` (conta só com Google; ver `requestReauthCode`).'
       properties:
         password: { type: string, minLength: 1, maxLength: 128 }
+        email_code: { type: string, pattern: '^[0-9]{8}$' }
     AcceptInviteRequest:
       type: object
       additionalProperties: false
@@ -3177,9 +4140,42 @@ components:
     UpdateProfileRequest:
       type: object
       additionalProperties: false
-      required: [name]
+      description: Pelo menos `name` ou `appearance`.
       properties:
         name: { type: string, minLength: 1, maxLength: 80 }
+        appearance: { $ref: '#/components/schemas/Appearance' }
+        expected_version: { $ref: '#/components/schemas/Version' }
+    Appearance:
+      type: string
+      enum: [system, light, dark]
+      description: Preferência de aparência da pessoa (a cor principal é da loja).
+    GoogleStartRequest:
+      type: object
+      additionalProperties: false
+      required: [intent]
+      properties:
+        intent: { type: string, enum: [login, link] }
+        establishment_slug: { type: string, pattern: '^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])$' }
+        return_to:
+          type: string
+          maxLength: 300
+          description: 'Rota interna: /conta, /loja/{slug}, /loja/{slug}/historico ou /loja/{slug}/pontos. Qualquer outra → 400.'
+    SetAssetRequest:
+      type: object
+      additionalProperties: false
+      required: [asset_id, expected_version]
+      properties:
+        asset_id: { $ref: '#/components/schemas/Id' }
+        expected_version: { $ref: '#/components/schemas/Version' }
+    SetProfessionalPhotoRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      description: '`asset_id` (envio próprio, finalidade professional_photo) OU `from_avatar: true`.'
+      properties:
+        asset_id: { $ref: '#/components/schemas/Id' }
+        from_avatar: { type: boolean }
+        expected_version: { $ref: '#/components/schemas/Version' }
     CreateVisitorSessionRequest:
       type: object
       additionalProperties: false
@@ -3413,6 +4409,84 @@ components:
         name: { type: string, minLength: 1, maxLength: 80 }
         slug: { type: string, pattern: '^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])$' }
         timezone: { type: string, maxLength: 64, description: 'Identificador IANA, ex. America/Sao_Paulo.' }
+        palette: { $ref: '#/components/schemas/Palette' }
+        public_description: { type: string, maxLength: 280, description: Texto simples; vazio remove. }
+        public_address: { type: string, maxLength: 200, description: Texto simples; vazio remove. }
+        public_phone: { type: string, maxLength: 30, description: 'Telefone/WhatsApp público (será publicado); normalizado para E.164; vazio remove.' }
+    Palette:
+      type: string
+      enum: [purple, violet, indigo, blue, sky, cyan, teal, emerald, green, lime, amber, orange, red, rose, pink, fuchsia]
+      description: Paleta do catálogo fechado (padrão purple).
+    MediaPurpose:
+      type: string
+      enum: [avatar, professional_photo, logo]
+    ImageVariant:
+      type: object
+      required: [width, height, url]
+      properties:
+        width: { type: integer, minimum: 1 }
+        height: { type: integer, minimum: 1 }
+        url: { type: string, description: Caminho relativo; muda quando a imagem muda. }
+    ImageRef:
+      type: object
+      description: Variantes prontas (dimensões reais declaradas). Nunca bytes nem chaves de armazenamento.
+      required: [variants]
+      properties:
+        variants:
+          type: array
+          items: { $ref: '#/components/schemas/ImageVariant' }
+    MediaUpload:
+      type: object
+      required: [id, purpose, status, failure_reason]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        purpose: { $ref: '#/components/schemas/MediaPurpose' }
+        status: { type: string, enum: [processing, ready, failed, attached] }
+        failure_reason:
+          type: [string, 'null']
+          enum: [invalid_image, unsupported_format, dimensions, processing_error, null]
+    MyProfile:
+      type: object
+      required: [id, name, email, status, email_verified, appearance, avatar, has_password, google, version]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        name: { type: string }
+        email: { type: string, format: email, description: Só leitura (não há troca de e-mail por PATCH). }
+        status: { $ref: '#/components/schemas/AccountStatus' }
+        email_verified: { type: boolean }
+        appearance: { $ref: '#/components/schemas/Appearance' }
+        avatar:
+          oneOf:
+            - $ref: '#/components/schemas/ImageRef'
+            - type: 'null'
+        has_password: { type: boolean, description: Falso em conta só com Google (não há senha para trocar ou conferir). }
+        google:
+          type: object
+          required: [linked, email]
+          properties:
+            linked: { type: boolean }
+            email: { type: [string, 'null'] }
+        version: { $ref: '#/components/schemas/Version' }
+    MyProfessionalProfile:
+      type: object
+      required: [professional_id, establishment_id, establishment_name, display_name, photo, version]
+      properties:
+        professional_id: { $ref: '#/components/schemas/Id' }
+        establishment_id: { $ref: '#/components/schemas/Id' }
+        establishment_name: { type: string }
+        display_name: { type: string }
+        photo:
+          oneOf:
+            - $ref: '#/components/schemas/ImageRef'
+            - type: 'null'
+        version: { $ref: '#/components/schemas/Version' }
+    PublicConfig:
+      type: object
+      required: [google_login, media_uploads, public_base_url]
+      properties:
+        google_login: { type: boolean }
+        media_uploads: { type: boolean }
+        public_base_url: { type: string, description: Origem pública canônica (FILA_PUBLIC_BASE_URL) usada em links e QR Codes. }
     CreateProfessionalRequest:
       type: object
       additionalProperties: false
@@ -3549,6 +4623,13 @@ components:
                   oneOf:
                     - $ref: '#/components/schemas/Timestamp'
                     - type: 'null'
+                owner_authority:
+                  type: boolean
+                  description: Esta sessão ocupa a vaga de dono da conta (ADR-0027). Só ela exerce privilégios de dono.
+                auth_method:
+                  type: string
+                  enum: [password, google]
+                  description: Como a sessão foi aberta. Google só abre sessão de cliente (nunca de equipe).
             - type: 'null'
         visitors:
           type: array
@@ -3559,6 +4640,10 @@ components:
           description: Vínculos de equipe. Só concedem permissão com sessão de contexto staff.
           items: { $ref: '#/components/schemas/MembershipView' }
         csrf_token: { type: [string, 'null'] }
+        ended_reason:
+          type: string
+          enum: [owner_session_replaced, owner_session_migration]
+          description: O cookie apresentado deixou de valer porque o dono entrou em outro aparelho (ou pela migração da sessão única).
     AccountView:
       type: object
       required: [id, name, email, status]
@@ -3595,12 +4680,20 @@ components:
         recovery_code_valid_until: { $ref: '#/components/schemas/Timestamp' }
     PublicEstablishment:
       type: object
-      required: [id, slug, name, timezone]
+      required: [id, slug, name, timezone, palette, description, address, phone, logo]
       properties:
         id: { $ref: '#/components/schemas/Id' }
         slug: { type: string }
         name: { type: string }
         timezone: { type: string }
+        palette: { $ref: '#/components/schemas/Palette' }
+        description: { type: [string, 'null'] }
+        address: { type: [string, 'null'] }
+        phone: { type: [string, 'null'], description: E.164 publicado pelo dono. }
+        logo:
+          oneOf:
+            - $ref: '#/components/schemas/ImageRef'
+            - type: 'null'
     PublicService:
       type: object
       required: [id, name, price, duration_minutes, professional_ids]
@@ -3620,10 +4713,15 @@ components:
         queue_id: { $ref: '#/components/schemas/Id' }
         professional:
           type: object
-          required: [id, display_name]
+          required: [id, display_name, photo]
           properties:
             id: { $ref: '#/components/schemas/Id' }
             display_name: { type: string }
+            photo:
+              description: Só a foto profissional publicada (nunca avatar pessoal nem foto de cliente).
+              oneOf:
+                - $ref: '#/components/schemas/ImageRef'
+                - type: 'null'
         status: { $ref: '#/components/schemas/QueueStatus' }
         waiting_count: { type: integer, minimum: 0 }
         tickets:
@@ -3900,15 +4998,29 @@ components:
               tolerance_ends_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
               has_pending_change_request: { type: boolean }
               version: { $ref: '#/components/schemas/Version' }
+              customer_avatar:
+                description: Foto pessoal do cliente com conta, só para a equipe e só com a participação ativa (URL reautorizada a cada pedido).
+                oneOf:
+                  - $ref: '#/components/schemas/ImageRef'
+                  - type: 'null'
     Establishment:
       type: object
-      required: [id, name, slug, timezone, version]
+      required: [id, name, slug, timezone, version, palette, public_description, public_address, public_phone, logo, public_url]
       properties:
         id: { $ref: '#/components/schemas/Id' }
         name: { type: string }
         slug: { type: string }
         timezone: { type: string }
         version: { $ref: '#/components/schemas/Version' }
+        palette: { $ref: '#/components/schemas/Palette' }
+        public_description: { type: [string, 'null'] }
+        public_address: { type: [string, 'null'] }
+        public_phone: { type: [string, 'null'] }
+        logo:
+          oneOf:
+            - $ref: '#/components/schemas/ImageRef'
+            - type: 'null'
+        public_url: { type: string, description: Link canônico da loja (origem pública configurada + slug). Base do QR Code. }
     Professional:
       type: object
       required: [id, display_name, queue_id, queue_letter, status, has_access, version]
@@ -3919,6 +5031,11 @@ components:
         queue_letter: { type: string }
         status: { $ref: '#/components/schemas/ProfessionalStatus' }
         has_access: { type: boolean, description: Conta vinculada e ativa. }
+        photo:
+          description: Foto pública publicada pelo profissional (o dono pode retirar a publicação).
+          oneOf:
+            - $ref: '#/components/schemas/ImageRef'
+            - type: 'null'
         pending_invite:
           oneOf:
             - $ref: '#/components/schemas/Invite'
@@ -4139,3 +5256,234 @@ components:
           oneOf:
             - $ref: '#/components/schemas/LoyaltySummary'
             - type: 'null'
+    OwnerChallengeRequest:
+      type: object
+      additionalProperties: false
+      required: [challenge]
+      properties:
+        challenge: { type: string, minLength: 20, maxLength: 64 }
+    OwnerSessionConflict:
+      type: object
+      description: Problem.current de `owner_session_active`. Só contexto confiável da outra sessão.
+      required: [challenge, expires_at, other_session]
+      properties:
+        challenge: { type: string, description: 'Uso único, 2 min, preso à conta, à tentativa (cookie) e à geração da vaga. Nunca em URL ou log.' }
+        expires_at: { $ref: '#/components/schemas/Timestamp' }
+        other_session:
+          type: object
+          required: [channel, installation_name, last_used_at]
+          properties:
+            channel: { type: string, enum: [desktop_authorized, unknown], description: 'unknown = outro aparelho ou navegador.' }
+            installation_name: { type: [string, 'null'] }
+            last_used_at: { $ref: '#/components/schemas/Timestamp' }
+    DesktopInstallation:
+      type: object
+      required: [id, label, created_at]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        label: { type: string }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+    DesktopLinkTicket:
+      type: object
+      required: [ticket, expires_at]
+      properties:
+        ticket: { type: string }
+        expires_at: { $ref: '#/components/schemas/Timestamp' }
+    DesktopBinding:
+      type: object
+      required: [access_token, token_type, expires_at, installation]
+      properties:
+        access_token: { type: string }
+        token_type: { type: string, const: DPoP }
+        expires_at: { $ref: '#/components/schemas/Timestamp' }
+        installation: { $ref: '#/components/schemas/DesktopInstallation' }
+    DesktopContext:
+      type: object
+      required: [account, installation, access_expires_at, establishments]
+      properties:
+        account:
+          type: object
+          required: [id, name]
+          properties:
+            id: { $ref: '#/components/schemas/Id' }
+            name: { type: string }
+        installation:
+          type: object
+          required: [id, label]
+          properties:
+            id: { $ref: '#/components/schemas/Id' }
+            label: { type: string }
+        access_expires_at: { $ref: '#/components/schemas/Timestamp' }
+        establishments:
+          type: array
+          items:
+            type: object
+            required: [id, name, timezone]
+            properties:
+              id: { $ref: '#/components/schemas/Id' }
+              name: { type: string }
+              timezone: { type: string }
+    AnalyticsValue:
+      type: object
+      description: 'value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.'
+      required: [value, status]
+      properties:
+        value: { type: [number, 'null'] }
+        status: { type: string, enum: [ok, empty, not_collected, not_applicable] }
+        sample: { type: integer, minimum: 0 }
+    AnalyticsPeriod:
+      type: object
+      required: [from, to, start, end, effective_end]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        start: { $ref: '#/components/schemas/Timestamp' }
+        end: { $ref: '#/components/schemas/Timestamp' }
+        effective_end: { $ref: '#/components/schemas/Timestamp' }
+    AnalyticsMeta:
+      type: object
+      required: [establishment_id, establishment_name, timezone, period, compare_period, generated_at, collection_started_at, filters, ignored_filters, units, missing]
+      properties:
+        establishment_id: { $ref: '#/components/schemas/Id' }
+        establishment_name: { type: string }
+        timezone: { type: string }
+        period: { $ref: '#/components/schemas/AnalyticsPeriod' }
+        compare_period:
+          oneOf:
+            - $ref: '#/components/schemas/AnalyticsPeriod'
+            - type: 'null'
+        granularity: { type: string, enum: [hour, day, week, month] }
+        generated_at: { $ref: '#/components/schemas/Timestamp' }
+        snapshot_at: { $ref: '#/components/schemas/Timestamp' }
+        collection_started_at: { $ref: '#/components/schemas/Timestamp' }
+        filters:
+          type: object
+          required: [professional_id, service_id, method]
+          properties:
+            professional_id: { type: [string, 'null'], format: uuid }
+            service_id: { type: [string, 'null'], format: uuid }
+            method: { type: [string, 'null'], enum: [pix, cash, card, null] }
+        ignored_filters:
+          type: array
+          description: Filtros ativos sem atribuição confiável nesta consulta (os valores afetados saem not_applicable).
+          items: { type: string }
+        units:
+          type: object
+          required: [money, duration, currency]
+          properties:
+            money: { type: string, const: cents }
+            duration: { type: string, const: seconds }
+            currency: { type: string, const: BRL }
+        missing: { type: string }
+    AnalyticsCash:
+      type: object
+      required: [received_cents, refunded_cents, net_cents, receipts, refunds, ignored_filters]
+      properties:
+        received_cents: { $ref: '#/components/schemas/AnalyticsValue' }
+        refunded_cents: { $ref: '#/components/schemas/AnalyticsValue' }
+        net_cents: { $ref: '#/components/schemas/AnalyticsValue' }
+        receipts: { $ref: '#/components/schemas/AnalyticsValue' }
+        refunds: { $ref: '#/components/schemas/AnalyticsValue' }
+        ignored_filters: { type: array, items: { type: string } }
+    AnalyticsSummaryPart:
+      type: object
+      required: [cash, completed, wait]
+      properties:
+        cash: { $ref: '#/components/schemas/AnalyticsCash' }
+        completed:
+          type: object
+          required: [count, ignored_filters]
+          properties:
+            count: { $ref: '#/components/schemas/AnalyticsValue' }
+            ignored_filters: { type: array, items: { type: string } }
+        wait:
+          type: object
+          required: [median_seconds, p90_seconds, ignored_filters]
+          properties:
+            median_seconds: { $ref: '#/components/schemas/AnalyticsValue' }
+            p90_seconds: { $ref: '#/components/schemas/AnalyticsValue' }
+            ignored_filters: { type: array, items: { type: string } }
+    AnalyticsSummary:
+      type: object
+      required: [current, compare, pending_now]
+      properties:
+        current: { $ref: '#/components/schemas/AnalyticsSummaryPart' }
+        compare:
+          oneOf:
+            - $ref: '#/components/schemas/AnalyticsSummaryPart'
+            - type: 'null'
+        pending_now:
+          type: object
+          description: Fotografia do instante snapshot_at (não depende do período).
+          required: [snapshot_at, total, open_financial_issues, open_financial_issues_cents, orders_awaiting_payment,
+                     orders_awaiting_payment_cents, orders_awaiting_confirmation, charges_unknown, refunds_under_review, ignored_filters]
+          properties:
+            snapshot_at: { $ref: '#/components/schemas/Timestamp' }
+            total: { type: integer }
+            open_financial_issues: { type: integer }
+            open_financial_issues_cents: { type: integer }
+            orders_awaiting_payment: { type: integer }
+            orders_awaiting_payment_cents: { type: integer }
+            orders_awaiting_confirmation: { type: integer }
+            charges_unknown: { type: integer }
+            refunds_under_review: { type: integer }
+            ignored_filters: { type: array, items: { type: string } }
+    AnalyticsSeries:
+      type: object
+      required: [metric, series, buckets, totals, compare_totals]
+      properties:
+        metric: { type: string }
+        series:
+          type: array
+          items:
+            type: object
+            required: [key, label, unit]
+            properties:
+              key: { type: string }
+              label: { type: string }
+              unit: { type: string, enum: [cents, count, seconds, points] }
+        buckets:
+          type: array
+          items:
+            type: object
+            required: [start, end, label, collected, partial, values]
+            properties:
+              start: { $ref: '#/components/schemas/Timestamp' }
+              end: { $ref: '#/components/schemas/Timestamp' }
+              label: { type: string }
+              collected: { type: boolean }
+              partial: { type: boolean }
+              values:
+                type: object
+                additionalProperties: { $ref: '#/components/schemas/AnalyticsValue' }
+        totals:
+          type: object
+          additionalProperties: { $ref: '#/components/schemas/AnalyticsValue' }
+        compare_totals:
+          type: [object, 'null']
+          additionalProperties: { $ref: '#/components/schemas/AnalyticsValue' }
+    AnalyticsBreakdown:
+      type: object
+      required: [dimension, status, rows]
+      properties:
+        dimension: { type: string }
+        status: { type: string, enum: [ok, not_applicable, not_collected] }
+        rows:
+          description: Formato por dimensão (docs/desktop/metricas.md §Detalhamentos).
+    AnalyticsRecords:
+      type: object
+      required: [kind, total, total_cents, items, next_cursor, window]
+      properties:
+        kind: { type: string }
+        total: { type: integer, description: Quantidade do recorte inteiro (todas as páginas). }
+        total_cents: { type: [integer, 'null'] }
+        items:
+          type: array
+          items: { type: object, description: Formato por tipo (docs/desktop/metricas.md §Registros). }
+        next_cursor: { type: [string, 'null'] }
+        window:
+          type: object
+          required: [start, end]
+          properties:
+            start: { $ref: '#/components/schemas/Timestamp' }
+            end: { $ref: '#/components/schemas/Timestamp' }

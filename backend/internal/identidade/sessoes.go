@@ -11,6 +11,7 @@ import (
 	"fila/internal/acesso"
 	"fila/internal/auditoria"
 	"fila/internal/estabelecimento"
+	"fila/internal/midia"
 	"fila/internal/platform/database"
 	"fila/internal/platform/httpserver"
 	"fila/internal/platform/validate"
@@ -77,6 +78,14 @@ func (s *Service) login(w http.ResponseWriter, r *http.Request) error {
 		}
 		return errInvalidCredentials
 	}
+	if a.PasswordHash == "" {
+		// Conta só com Google: senha nenhuma confere (mesmo custo e mesma resposta de senha errada).
+		s.hasher.Burn(ctx, *req.Password)
+		if err := s.hit(ctx, limits...); err != nil {
+			return err
+		}
+		return errInvalidCredentials
+	}
 	ok, rehash, err := s.hasher.Verify(ctx, *req.Password, a.PasswordHash)
 	if err != nil {
 		return err
@@ -92,6 +101,7 @@ func (s *Service) login(w http.ResponseWriter, r *http.Request) error {
 			Detail: "Abra o link enviado para o seu e-mail para ativar a conta. Você pode pedir um novo link."}
 	}
 	kind := *req.Context
+	ownerAccount := false
 	if kind == KindStaff {
 		ms, err := estabelecimento.ActiveMemberships(ctx, s.pool, a.ID)
 		if err != nil {
@@ -100,7 +110,12 @@ func (s *Service) login(w http.ResponseWriter, r *http.Request) error {
 		if len(ms) == 0 {
 			return httpserver.ErrForbidden("Esta conta não tem acesso de equipe ativo. Entre como cliente.")
 		}
+		// Qualquer sessão de equipe de uma conta com vínculo de dono pode exercer poderes de dono:
+		// passa pela vaga única, inclusive quando a pessoa entra pela rota comum de profissional.
+		ownerAccount = hasOwnerMembership(ms)
 	}
+	// Login e troca travam a vaga em modo exclusivo: sem a guarda de transação da sessão anterior.
+	ctx = database.WithoutTxGuard(ctx)
 
 	now := s.clock.Now()
 	var newHash string
@@ -112,10 +127,35 @@ func (s *Service) login(w http.ResponseWriter, r *http.Request) error {
 	prev := PrincipalFrom(ctx)
 	token, tokenHash := newToken()
 	var sess *AccountSession
+	var conflict *ownerConflictView
+	var attemptToken string
 	err = database.InTx(ctx, s.pool, func(tx pgx.Tx) error {
 		if newHash != "" {
 			if _, err := tx.Exec(ctx, `UPDATE account SET password_hash = $2, updated_at = $3 WHERE id = $1`, a.ID, newHash, now); err != nil {
 				return err
+			}
+		}
+		var st slotState
+		if ownerAccount {
+			var err error
+			if st, err = lockSlot(ctx, tx, a.ID, now); err != nil {
+				return err
+			}
+			// Outra sessão válida ocupa a vaga: ela continua funcionando; esta tentativa recebe só
+			// um desafio (sem cookie de sessão nem dados da loja). A mesma sessão (mesmo cookie)
+			// renovando o login não conta como conflito.
+			if st.Holder != nil && (prev.Session == nil || prev.Session.ID != st.Holder.SessionID) {
+				var attemptHash []byte
+				attemptToken, attemptHash = newToken()
+				v, err := newOwnerChallenge(ctx, tx, a.ID, st, attemptHash, now)
+				if err != nil {
+					return err
+				}
+				conflict = &v
+				return auditoria.Record(ctx, tx, auditoria.Event{OccurredAt: now, ActorKind: auditoria.ActorOwner,
+					ActorID: auditoria.Ptr(a.ID), Action: "T-SS-07", TargetType: "session", TargetID: st.Holder.SessionID,
+					FromState: "active", ToState: "active", Reason: "nova entrada de dono aguardando confirmação",
+					RequestID: httpserver.RequestIDFrom(ctx)})
 			}
 		}
 		// Um navegador tem uma sessão de conta por vez: a anterior é encerrada.
@@ -140,6 +180,16 @@ func (s *Service) login(w http.ResponseWriter, r *http.Request) error {
 			VALUES ($1, $2, $3, $4, $4, $5, $6) RETURNING id`, a.ID, tokenHash, kind, now, absolute, idle).Scan(&id); err != nil {
 			return err
 		}
+		if ownerAccount {
+			if prev.Session != nil {
+				if err := revokeBindings(ctx, tx, prev.Session.ID, now); err != nil {
+					return err
+				}
+			}
+			if err := occupySlot(ctx, tx, a.ID, id, now); err != nil {
+				return err
+			}
+		}
 		if err := auditoria.Record(ctx, tx, auditoria.Event{OccurredAt: now, ActorKind: auditoria.ActorCustomer,
 			ActorID: auditoria.Ptr(a.ID), Action: "T-SS-01", TargetType: "session", TargetID: id,
 			ToState: "active", RequestID: httpserver.RequestIDFrom(ctx)}); err != nil {
@@ -150,6 +200,10 @@ func (s *Service) login(w http.ResponseWriter, r *http.Request) error {
 	})
 	if err != nil {
 		return err
+	}
+	if conflict != nil {
+		s.setCookie(w, s.attemptCookieName(), attemptToken, attemptCookieAge)
+		return ownerConflict(*conflict)
 	}
 	p := &Principal{Session: sess, BrowserID: prev.BrowserID, Visitors: prev.Visitors}
 	view, err := s.buildSessionView(ctx, s.pool, p)
@@ -174,9 +228,24 @@ func (s *Service) logout(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	ctx := r.Context()
+	// Logout trava a vaga em modo exclusivo (sem a guarda compartilhada da própria sessão).
+	ctx := database.WithoutTxGuard(r.Context())
 	now := s.clock.Now()
 	err = database.InTx(ctx, s.pool, func(tx pgx.Tx) error {
+		// Ordem de travas: vaga → sessão. O logout só libera a vaga se ESTA sessão (o cookie
+		// apresentado) for a ocupante: um logout atrasado de uma sessão antiga nunca encerra a nova.
+		if sess.OwnerHolder {
+			if _, err := tx.Exec(ctx, `SELECT 1 FROM owner_session_slot WHERE account_id = $1 FOR UPDATE`, sess.AccountID); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx, `UPDATE owner_session_slot SET session_id = NULL, generation = generation + 1, updated_at = $3
+				WHERE account_id = $1 AND session_id = $2`, sess.AccountID, sess.ID, now); err != nil {
+				return err
+			}
+		}
+		if err := revokeBindings(ctx, tx, sess.ID, now); err != nil {
+			return err
+		}
 		if _, err := tx.Exec(ctx, `UPDATE account_session SET revoked_at = $2, revoke_reason = 'logout'
 			WHERE id = $1 AND revoked_at IS NULL`, sess.ID, now); err != nil {
 			return err
@@ -200,7 +269,8 @@ func (s *Service) logout(w http.ResponseWriter, r *http.Request) error {
 // reauthenticate (T-SS-06)
 
 type reauthRequest struct {
-	Password *string `json:"password"`
+	Password  *string `json:"password"`
+	EmailCode *string `json:"email_code"`
 }
 
 func (s *Service) reauthenticate(w http.ResponseWriter, r *http.Request) error {
@@ -212,15 +282,30 @@ func (s *Service) reauthenticate(w http.ResponseWriter, r *http.Request) error {
 	if _, err := httpserver.DecodeJSON(r, &req); err != nil {
 		return err
 	}
-	if req.Password == nil || *req.Password == "" {
-		return httpserver.ErrValidation(httpserver.FieldError{Field: "/password", Code: httpserver.FieldRequired})
-	}
-	if len([]rune(*req.Password)) > MaxPasswordLen {
-		return httpserver.ErrValidation(httpserver.FieldError{Field: "/password", Code: httpserver.FieldTooLong})
-	}
 	ctx := r.Context()
-	if err := s.checkPassword(ctx, r, sess.AccountID, sess.EmailNormalized, *req.Password); err != nil {
-		return err
+	switch {
+	case req.EmailCode != nil && req.Password == nil:
+		// Conta sem senha (só Google): código enviado ao e-mail verificado, preso a esta sessão.
+		if !codePattern.MatchString(*req.EmailCode) {
+			return httpserver.ErrValidation(httpserver.FieldError{Field: "/email_code", Code: httpserver.FieldInvalidFormat,
+				Message: "8 dígitos"})
+		}
+		if err := s.checkReauthCode(ctx, sess, *req.EmailCode); err != nil {
+			return err
+		}
+	case req.EmailCode != nil:
+		return httpserver.ErrValidation(httpserver.FieldError{Field: "/email_code", Code: httpserver.FieldNotAllowed,
+			Message: "envie a senha OU o código"})
+	default:
+		if req.Password == nil || *req.Password == "" {
+			return httpserver.ErrValidation(httpserver.FieldError{Field: "/password", Code: httpserver.FieldRequired})
+		}
+		if len([]rune(*req.Password)) > MaxPasswordLen {
+			return httpserver.ErrValidation(httpserver.FieldError{Field: "/password", Code: httpserver.FieldTooLong})
+		}
+		if err := s.checkPassword(ctx, r, sess.AccountID, sess.EmailNormalized, *req.Password); err != nil {
+			return err
+		}
 	}
 	now := s.clock.Now()
 	until := now.Add(ReauthWindow)
@@ -264,8 +349,33 @@ func (s *Service) publicEstablishment(w http.ResponseWriter, r *http.Request) er
 	if err != nil {
 		return err
 	}
-	httpserver.WriteJSON(w, http.StatusOK, httpserver.Data[publicEstablishmentView]{Data: publicEstablishmentView{
-		ID: e.ID, Slug: e.Slug, Name: e.Name, Timezone: e.Timezone}})
+	view := publicEstablishmentView{ID: e.ID, Slug: e.Slug, Name: e.Name, Timezone: e.Timezone, Palette: e.Palette,
+		Description: e.Description, Address: e.Address, Phone: e.Phone}
+	logo, err := midia.AttachedOne(r.Context(), s.pool, e.LogoAssetID, "public")
+	if err != nil {
+		return err
+	}
+	if logo != nil {
+		view.Logo = logo.PublicRef()
+	}
+	// Dados públicos: cache curto (troca de logo/paleta aparece em até 1 minuto).
+	w.Header().Set("Cache-Control", "public, max-age=60")
+	httpserver.WriteJSON(w, http.StatusOK, httpserver.Data[publicEstablishmentView]{Data: view})
+	return nil
+}
+
+type publicConfigView struct {
+	GoogleLogin   bool   `json:"google_login"`
+	MediaUploads  bool   `json:"media_uploads"`
+	PublicBaseURL string `json:"public_base_url"`
+}
+
+// getPublicConfig informa à interface o que está ligado e a origem pública canônica (usada nos
+// links e QR Codes). Nenhum segredo: só booleanos e o endereço público do site.
+func (s *Service) getPublicConfig(w http.ResponseWriter, _ *http.Request) error {
+	w.Header().Set("Cache-Control", "public, max-age=300")
+	httpserver.WriteJSON(w, http.StatusOK, httpserver.Data[publicConfigView]{Data: publicConfigView{
+		GoogleLogin: s.cfg.Google.enabled(), MediaUploads: s.media.Enabled(), PublicBaseURL: s.cfg.PublicBaseURL}})
 	return nil
 }
 
@@ -276,6 +386,9 @@ func (s *Service) publicEstablishment(w http.ResponseWriter, r *http.Request) er
 func requireAccount(r *http.Request) (*AccountSession, error) {
 	p := PrincipalFrom(r.Context())
 	if p.Session == nil {
+		if p.EndedReason == EndedOwnerReplaced {
+			return nil, errOwnerReplaced()
+		}
 		return nil, httpserver.ErrUnauthenticated()
 	}
 	return p.Session, nil
@@ -302,13 +415,23 @@ func (s *Service) staffActor(r *http.Request, estID uuid.UUID) (acesso.Actor, er
 		return acesso.Actor{}, httpserver.ErrForbidden("Para esta ação, entre com o acesso de equipe.")
 	}
 	a := acesso.Actor{AccountID: sess.AccountID, EstablishmentID: estID, Role: acesso.RoleProfessional}
+	owner := false
 	for _, m := range ms {
 		if m.Role == estabelecimento.RoleOwner {
-			a.Role = acesso.RoleOwner
+			owner = true
 		}
 		if m.ProfessionalID != nil {
 			a.ProfessionalID = m.ProfessionalID
 		}
+	}
+	// ADR-0027: só a sessão ocupante da vaga exerce privilégios de dono. Outra sessão de equipe da
+	// mesma conta (anterior à migração, ou aberta antes de a conta virar dona) age só como
+	// profissional, se tiver esse vínculo aqui.
+	if owner && sess.OwnerHolder {
+		a.Role = acesso.RoleOwner
+	} else if a.ProfessionalID == nil {
+		return acesso.Actor{}, &httpserver.Error{Status: 403, Code: "owner_session_required", Title: "Entre de novo como dono",
+			Detail: "Esta sessão não tem o acesso de dono. Saia e entre de novo para continuar."}
 	}
 	return a, nil
 }

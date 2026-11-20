@@ -107,7 +107,8 @@ func TestAuthorizationSweepAllRoutes(t *testing.T) {
 					return "proprio"
 				}
 			}
-			if ok, sc := grantFor(rt, "owner"); ok && slices.Contains(sc, "self") {
+			// owner_session: operação sobre a própria sessão de dono (ticket do Dashboard), sem loja.
+			if ok, sc := grantFor(rt, "owner"); ok && (slices.Contains(sc, "self") || slices.Contains(sc, "owner_session")) {
 				return "proprio"
 			}
 		}
@@ -144,7 +145,10 @@ func TestAuthorizationSweepAllRoutes(t *testing.T) {
 	corpoValido := func(rt hs.Route) map[string]any {
 		body := map[string]any{}
 		ps := params(rt)
-		alvo := ps[len(ps)-1]
+		alvo := ""
+		if len(ps) > 0 {
+			alvo = ps[len(ps)-1]
+		}
 		if tb, ok := versao[alvo]; ok {
 			var v int64
 			if err := e.pool.QueryRow(t.Context(), "SELECT version FROM "+tb+" WHERE id = $1", ids[alvo]).Scan(&v); err == nil {
@@ -156,12 +160,16 @@ func TestAuthorizationSweepAllRoutes(t *testing.T) {
 			body["display_name"] = "Invasor"
 		case "setServiceProfessionals":
 			body["professional_ids"] = []string{}
-		case "revertRewardDelivery":
+		case "revertRewardDelivery", "removeProfessionalPhoto":
 			body["reason"] = "teste de autorização"
 		case "resolveFinancialIssue":
 			body = map[string]any{"resolution_note": "teste de autorização"}
 		case "signalAvailability":
 			body = map[string]any{"unavailable": true}
+		case "activateDesktopInstallation":
+			body = map[string]any{"code": "ABCD-EFGH-JKMN-PQRS"}
+		case "createDesktopBinding":
+			body = map[string]any{"ticket": strings.Repeat("t", 43)}
 		}
 		return body
 	}

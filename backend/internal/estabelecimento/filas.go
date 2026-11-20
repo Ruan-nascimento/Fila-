@@ -3,6 +3,7 @@ package estabelecimento
 import (
 	"context"
 	"errors"
+	"fila/internal/midia"
 	"net/http"
 	"time"
 
@@ -339,7 +340,10 @@ type publicQueueView struct {
 	Professional struct {
 		ID          uuid.UUID `json:"id"`
 		DisplayName string    `json:"display_name"`
+		// Photo: só a foto profissional publicada (nunca avatar pessoal nem foto de cliente).
+		Photo *midia.ImageRef `json:"photo"`
 	} `json:"professional"`
+	photoID       *uuid.UUID
 	Status        string         `json:"status"`
 	WaitingCount  int            `json:"waiting_count"`
 	Tickets       []PublicTicket `json:"tickets"`
@@ -391,7 +395,7 @@ func PublicQueues(ctx context.Context, q database.Querier, activity QueueActivit
 
 func publicQueues(ctx context.Context, q database.Querier, activity QueueActivity, estID uuid.UUID, now time.Time) ([]publicQueueView, error) {
 	rows, err := q.Query(ctx, `
-		SELECT q.id, p.id, p.display_name, q.status, q.version
+		SELECT q.id, p.id, p.display_name, q.status, q.version, p.photo_asset_id
 		FROM queue q JOIN professional p ON p.id = q.professional_id
 		WHERE q.establishment_id = $1 AND p.status = 'active'
 		ORDER BY p.queue_letter`, estID)
@@ -400,7 +404,7 @@ func publicQueues(ctx context.Context, q database.Querier, activity QueueActivit
 	}
 	list, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (publicQueueView, error) {
 		var v publicQueueView
-		err := row.Scan(&v.QueueID, &v.Professional.ID, &v.Professional.DisplayName, &v.Status, &v.Version)
+		err := row.Scan(&v.QueueID, &v.Professional.ID, &v.Professional.DisplayName, &v.Status, &v.Version, &v.photoID)
 		v.Tickets = []PublicTicket{}
 		v.EstimatedWait = estimate{Kind: "estimate", Minutes: 0, ComputedAt: now}
 		return v, err
@@ -419,6 +423,26 @@ func publicQueues(ctx context.Context, q database.Querier, activity QueueActivit
 		}
 		for i := range list {
 			list[i].apply(snaps)
+		}
+	}
+	var photos []uuid.UUID
+	for _, v := range list {
+		if v.photoID != nil {
+			photos = append(photos, *v.photoID)
+		}
+	}
+	if len(photos) > 0 {
+		assets, err := midia.Attached(ctx, q, photos, "public")
+		if err != nil {
+			return nil, err
+		}
+		for i := range list {
+			if list[i].photoID == nil {
+				continue
+			}
+			if a, ok := assets[*list[i].photoID]; ok {
+				list[i].Professional.Photo = a.PublicRef()
+			}
 		}
 	}
 	if list == nil {

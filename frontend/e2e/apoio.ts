@@ -74,7 +74,23 @@ export function tokenDe(link: string): string {
 
 /** Cliente da API com cookies próprios (como um navegador), Origin e CSRF. */
 export class Api {
-  private constructor(readonly ctx: APIRequestContext) {}
+  private constructor(public ctx: APIRequestContext) {}
+
+  /**
+   * Sessão única do dono (ADR-0027): quando a mesma conta entra no navegador, a sessão desta API
+   * (preparação do teste) deixa de valer. Aqui ela passa a usar os cookies do navegador, como uma
+   * segunda aba do mesmo navegador (mesma sessão, sem disputa).
+   */
+  async adotarSessao(page: Page): Promise<void> {
+    const antigo = this.ctx;
+    this.ctx = await request.newContext({
+      baseURL,
+      ignoreHTTPSErrors,
+      extraHTTPHeaders: { Origin: baseURL },
+      storageState: await page.context().storageState(),
+    });
+    await antigo.dispose();
+  }
 
   static async nova(): Promise<Api> {
     return new Api(
@@ -210,13 +226,30 @@ export async function montarLoja(tag: string): Promise<Loja> {
 }
 
 /** Entra pela tela de login. */
-export async function entrarNaTela(page: Page, email: string, comoEquipe: boolean): Promise<void> {
+export async function entrarNaTela(page: Page, email: string, comoEquipe: boolean, api?: Api): Promise<void> {
   await page.goto("/entrar");
   await page.getByLabel("E-mail").fill(email);
   await page.getByLabel("Senha", { exact: true }).fill(senha);
   await page.getByRole("radio", { name: comoEquipe ? /Equipe/ : /Cliente/ }).check();
-  await page.getByRole("button", { name: "Entrar" }).click();
+  await page.getByRole("button", { name: "Entrar", exact: true }).click();
+  await confirmarTrocaSeHouver(page);
   await expect(page.getByRole("link", { name: "Minha conta" })).toBeVisible();
+  if (api) await api.adotarSessao(page);
+}
+
+/**
+ * Sessão única do dono (ADR-0027): se a conta já tem a sessão de dono aberta em outro lugar (ex.:
+ * a preparação do teste pela API), o login pede confirmação. O teste assume neste navegador.
+ * Devolve se a confirmação apareceu.
+ */
+export async function confirmarTrocaSeHouver(page: Page): Promise<boolean> {
+  const continuar = page.getByRole("button", { name: "Continuar neste aparelho e encerrar a outra sessão" });
+  const apareceu = await continuar
+    .waitFor({ state: "visible", timeout: 3000 })
+    .then(() => true)
+    .catch(() => false);
+  if (apareceu) await continuar.click();
+  return apareceu;
 }
 
 /** Controle do simulador de Pix do ambiente local (nunca a AbacatePay real). */

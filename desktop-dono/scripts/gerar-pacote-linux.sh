@@ -17,6 +17,8 @@ fi
 if [[ $# -ge 1 ]]; then export FILA_PAINEL_URL="$1"; fi
 unset FILA_PAINEL_TESTE_LOCAL
 
+# O Dashboard reaproveita estilos e componentes de frontend/src (e as dependências deles).
+npm ci --prefix ../frontend
 npm ci
 npm run build:linux
 if [[ "${APPIMAGE:-0}" == "1" ]]; then npm run build:linux:appimage; fi

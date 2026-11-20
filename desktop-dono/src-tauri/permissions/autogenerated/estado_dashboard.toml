@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-estado-dashboard"
+description = "Enables the estado_dashboard command without any pre-configured scope."
+commands.allow = ["estado_dashboard"]
+
+[[permission]]
+identifier = "deny-estado-dashboard"
+description = "Denies the estado_dashboard command without any pre-configured scope."
+commands.deny = ["estado_dashboard"]

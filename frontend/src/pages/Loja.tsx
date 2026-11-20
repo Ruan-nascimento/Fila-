@@ -1,13 +1,15 @@
-import { useEffect, useRef, useState } from "react";
-import { Navigate, NavLink, Route, Routes, useParams } from "react-router";
-import { History, Star, Store, UsersRound } from "lucide-react";
+import { useEffect, useRef, useState, type RefObject } from "react";
+import { Link, Navigate, NavLink, Route, Routes, useParams, useSearchParams } from "react-router";
+import { History, MapPin, Phone, Star, Store, UsersRound } from "lucide-react";
+import { useStoreBrand } from "../features/theme/tema";
+import { formatPhone } from "../features/auth/acessoLoja";
 import { api } from "../api/client";
 import { call, problemMessage } from "../api/problem";
 import type { components } from "../api/schema.gen";
 import { useSession } from "../session/context";
 import { StreamProvider, StreamStatusNotice } from "../stream/StreamProvider";
 import { PublicShell } from "../ui/layout";
-import { ButtonLink, EmptyState, LoadError, Loading } from "../ui/ui";
+import { ButtonLink, EmptyState, LoadError, Loading, Notice } from "../ui/ui";
 import { cx } from "../ui/cx";
 import { Pontos } from "./fidelidade/Pontos";
 import { StoreDataProvider } from "./fila/dados";
@@ -26,6 +28,8 @@ export function Loja() {
   const [error, setError] = useState<{ notFound: boolean; message: string } | null>(null);
   const [attempt, setAttempt] = useState(0);
   const { state } = useSession();
+  // A cor da loja vale só aqui dentro; ao sair ou trocar de loja, os tokens são limpos.
+  useStoreBrand(shop?.slug === slug ? shop.palette : null);
 
   useEffect(() => {
     let active = true;
@@ -99,9 +103,40 @@ function LojaConteudo({ shop }: { shop: PublicEstablishment }) {
   const account = state.status === "ready" ? state.session.account : null;
   return (
     <div className="grid gap-5">
-      <header className="grid gap-1">
-        <h1 className="m-0 text-2xl font-bold tracking-tight sm:text-[1.75rem]">{shop.name}</h1>
-        <ResumoFilas />
+      <header className="flex flex-wrap items-start gap-4">
+        {shop.logo && (
+          <img
+            src={shop.logo.variants[0]?.url}
+            srcSet={shop.logo.variants.map((v) => `${v.url} ${v.width}w`).join(", ")}
+            sizes="64px"
+            width={64}
+            height={64}
+            alt={`Logo de ${shop.name}`}
+            decoding="async"
+            className="size-16 shrink-0 rounded-xl border border-line bg-surface object-contain"
+          />
+        )}
+        <div className="grid min-w-0 flex-1 gap-1">
+          <h1 className="m-0 text-2xl font-bold tracking-tight sm:text-[1.75rem]">{shop.name}</h1>
+          {shop.description && <p className="m-0 text-fg-muted">{shop.description}</p>}
+          <ResumoFilas />
+          {(shop.address || shop.phone) && (
+            <ul className="m-0 flex list-none flex-wrap gap-x-4 gap-y-1 p-0 text-sm text-fg-muted">
+              {shop.address && (
+                <li className="inline-flex items-center gap-1">
+                  <MapPin aria-hidden="true" className="size-4" />
+                  {shop.address}
+                </li>
+              )}
+              {shop.phone && (
+                <li className="inline-flex items-center gap-1">
+                  <Phone aria-hidden="true" className="size-4" />
+                  <a href={`tel:${shop.phone}`}>{formatPhone(shop.phone)}</a>
+                </li>
+              )}
+            </ul>
+          )}
+        </div>
       </header>
       {account && (
         <nav aria-label="Nesta loja" className="-mx-1 overflow-x-auto">
@@ -173,18 +208,29 @@ function ResumoFilas() {
   );
 }
 
+function useFocusNick(when: boolean, ref: RefObject<HTMLInputElement | null>) {
+  useEffect(() => {
+    if (when) ref.current?.focus();
+  }, [when, ref]);
+}
+
 function FilaDaLoja({ shop }: { shop: PublicEstablishment }) {
   const { state, refresh } = useSession();
   const { selection } = useStoreData();
   const [created, setCreated] = useState<VisitorCreated | null>(null);
-  const [needIdentity, setNeedIdentity] = useState(false);
+  const [params, setParams] = useSearchParams();
+  // QR "entrar sem conta": abre a identificação por apelido, mas nunca cria visita sozinho.
+  const guestEntry = params.get("entrada") === "visitante";
+  const [needIdentity, setNeedIdentity] = useState(guestEntry);
   const nickRef = useRef<HTMLInputElement>(null);
 
-  if (state.status === "loading") return <Loading />;
   const visitor =
     state.status === "ready" ? state.session.visitors.find((v) => v.establishment_id === shop.id) : undefined;
   const account = state.status === "ready" ? state.session.account : null;
   const identity = account ? "account" : visitor ? "visitor" : "none";
+  // Entrada sem conta pelo QR: leva o foco ao apelido (só quando ainda não há identidade).
+  useFocusNick(state.status === "ready" && guestEntry && identity === "none", nickRef);
+  if (state.status === "loading") return <Loading />;
 
   async function identified(c: VisitorCreated) {
     setCreated(c);
@@ -208,6 +254,31 @@ function FilaDaLoja({ shop }: { shop: PublicEstablishment }) {
         />
       </div>
       <aside aria-label="Identificação" className="grid gap-4 lg:sticky lg:top-20">
+        {guestEntry && identity === "account" && account && (
+          <Notice kind="info" title="Você está conectado com sua conta">
+            <p>
+              O link é de entrada sem conta, mas nada foi trocado: você continua como {account.name}. Para
+              entrar como visitante, saia da conta antes em <Link to="/conta">Minha conta</Link>.
+            </p>
+            <p>
+              <button
+                type="button"
+                className="min-h-11 font-semibold underline"
+                onClick={() => {
+                  params.delete("entrada");
+                  setParams(params, { replace: true });
+                }}
+              >
+                Continuar com minha conta
+              </button>
+            </p>
+          </Notice>
+        )}
+        {guestEntry && identity === "visitor" && visitor && (
+          <Notice kind="info">
+            <p>Você já está nesta loja sem conta, como “{visitor.nick}”. Sua visita continua aqui.</p>
+          </Notice>
+        )}
         {created && (
           <CodigoUmaVez
             created={created}

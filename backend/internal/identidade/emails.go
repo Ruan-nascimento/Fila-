@@ -69,3 +69,27 @@ Se você já tem conta com este e-mail, informe a senha dela. Se não tem, a con
 Se não esperava este convite, ignore este e-mail.`, establishmentName, papel, s.link("/convite", token))
 	return s.outbox.Enqueue(ctx, q, "convite_"+role, mail.Message{To: to, Subject: "Convite para a equipe", Body: body}, now)
 }
+
+func (s *Service) mailGoogleOnly(ctx context.Context, q database.Querier, to string, now time.Time) error {
+	body := fmt.Sprintf(`Olá.
+
+Recebemos um pedido para redefinir a senha da sua conta na Fila, mas esta conta entra com o Google
+e não tem senha. Para entrar, use o botão "Continuar com o Google":
+
+%s
+
+Se você não pediu, ignore este e-mail. Nada foi alterado.`, s.cfg.PublicBaseURL+"/entrar")
+	return s.outbox.Enqueue(ctx, q, "conta_google", mail.Message{To: to, Subject: "Sua conta entra com o Google", Body: body}, now)
+}
+
+func (s *Service) mailReauthCode(ctx context.Context, q database.Querier, to, code string, now time.Time) error {
+	body := fmt.Sprintf(`Olá.
+
+Seu código para confirmar sua identidade na Fila é:
+
+%s
+
+Ele vale por 10 minutos e só funciona na sessão em que foi pedido.
+Se não foi você, ignore este e-mail e confira seus acessos.`, code)
+	return s.outbox.Enqueue(ctx, q, "codigo_reautenticacao", mail.Message{To: to, Subject: "Código de confirmação", Body: body}, now)
+}

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-vincular-sessao"
+description = "Enables the vincular_sessao command without any pre-configured scope."
+commands.allow = ["vincular_sessao"]
+
+[[permission]]
+identifier = "deny-vincular-sessao"
+description = "Denies the vincular_sessao command without any pre-configured scope."
+commands.deny = ["vincular_sessao"]

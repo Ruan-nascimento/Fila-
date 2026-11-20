@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ativar-instalacao"
+description = "Enables the ativar_instalacao command without any pre-configured scope."
+commands.allow = ["ativar_instalacao"]
+
+[[permission]]
+identifier = "deny-ativar-instalacao"
+description = "Denies the ativar_instalacao command without any pre-configured scope."
+commands.deny = ["ativar_instalacao"]

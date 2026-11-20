@@ -3,7 +3,11 @@ package fila
 import (
 	"context"
 	"errors"
+	"fila/internal/identidade"
+	"fila/internal/midia"
+	"fmt"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -114,6 +118,10 @@ func (s *Service) StaffEntries(ctx context.Context, q database.Querier, queueIDs
 		return nil, err
 	}
 	out := map[uuid.UUID][]estabelecimento.StaffEntry{}
+	avatars, err := activeAvatars(ctx, q, states)
+	if err != nil {
+		return nil, err
+	}
 	for qid, list := range states {
 		for _, e := range list {
 			names := e.summary.ServiceNames
@@ -124,6 +132,52 @@ func (s *Service) StaffEntries(ctx context.Context, q database.Querier, queueIDs
 				ParticipationID: e.ID, OrderID: e.OrderID, TicketCode: e.TicketCode, Nick: e.Nick, Status: e.Status,
 				ServiceNames: names, CalledAt: e.CalledAt, ToleranceEndsAt: e.ToleranceEndsAt, Version: e.Version,
 				HasPendingChangeRequest: e.summary.HasPendingChangeRequest,
+				CustomerAvatar:          avatars[e.ID],
+			})
+		}
+	}
+	return out, nil
+}
+
+// activeAvatars resolve a foto pessoal de quem tem conta nas participações ATIVAS listadas. A URL
+// passa pelo endpoint da participação, que confere de novo equipe, loja e situação a cada pedido.
+func activeAvatars(ctx context.Context, q database.Querier, states map[uuid.UUID][]queued) (map[uuid.UUID]*midia.ImageRef, error) {
+	out := map[uuid.UUID]*midia.ImageRef{}
+	var accounts []uuid.UUID
+	for _, list := range states {
+		for _, e := range list {
+			if e.AccountID != nil {
+				accounts = append(accounts, *e.AccountID)
+			}
+		}
+	}
+	if len(accounts) == 0 {
+		return out, nil
+	}
+	assetOf, err := identidade.AvatarAssetsOf(ctx, q, accounts)
+	if err != nil || len(assetOf) == 0 {
+		return out, err
+	}
+	ids := make([]uuid.UUID, 0, len(assetOf))
+	for _, id := range assetOf {
+		ids = append(ids, id)
+	}
+	assets, err := midia.Attached(ctx, q, ids, "private")
+	if err != nil {
+		return nil, err
+	}
+	for _, list := range states {
+		for _, e := range list {
+			if e.AccountID == nil {
+				continue
+			}
+			a, ok := assets[assetOf[*e.AccountID]]
+			if !ok {
+				continue
+			}
+			est, part, asset := e.EstablishmentID, e.ID, a.ID
+			out[e.ID] = a.Ref(func(size int) string {
+				return fmt.Sprintf("/v1/establishments/%s/participations/%s/customer-avatar/%d?v=%s", est, part, size, asset)
 			})
 		}
 	}
@@ -296,6 +350,45 @@ func (s *Service) getParticipation(w http.ResponseWriter, r *http.Request) error
 	}
 	hs.WriteJSON(w, http.StatusOK, hs.Data[participationView]{Data: v.Participation})
 	return nil
+}
+
+// getCustomerAvatar entrega a foto pessoal do cliente à equipe autorizada (dono da loja ou o
+// profissional da fila) SÓ enquanto a participação está ativa (aguardando, chamada ou em
+// atendimento). Encerrada a finalidade operacional, o acesso é negado; visitante não tem foto.
+// A autorização é refeita a cada pedido, antes de responder 304.
+func (s *Service) getCustomerAvatar(w http.ResponseWriter, r *http.Request) error {
+	estID, err := pathID(r, "establishmentId")
+	if err != nil {
+		return err
+	}
+	id, err := pathID(r, "participationId")
+	if err != nil {
+		return err
+	}
+	ctx := r.Context()
+	p, err := load(ctx, s.Pool, estID, id, false)
+	if err != nil {
+		return err
+	}
+	qi, err := estabelecimento.GetQueue(ctx, s.Pool, estID, p.QueueID)
+	if err != nil {
+		return err
+	}
+	who, err := s.authorize(r, p, qi.ProfessionalID, allow{professional: true, owner: true})
+	if err != nil {
+		return err
+	}
+	if !who.isStaff || p.AccountID == nil || !slices.Contains(activeStatuses, p.Status) || s.Media == nil {
+		return hs.ErrNotFound()
+	}
+	asset, err := identidade.AvatarAssetOf(ctx, s.Pool, *p.AccountID)
+	if err != nil {
+		return err
+	}
+	if asset == nil {
+		return hs.ErrNotFound()
+	}
+	return s.Media.ServePrivate(w, r, *asset)
 }
 
 // getCurrentVisit: visita da identidade em uso nesta loja (conta, se houver sessão de conta;

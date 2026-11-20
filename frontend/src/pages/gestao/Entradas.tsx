@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { ArrowLeftRight, Ban, ChevronDown, Clock, Play, Scissors, UserX } from "lucide-react";
 import { api } from "../../api/client";
 import type { components } from "../../api/schema.gen";
-import { Badge, Button, Card, Choice, SelectField, Submit, TextArea } from "../../ui/ui";
+import { Avatar, Badge, Button, Card, Choice, SelectField, Submit, TextArea } from "../../ui/ui";
 import { cx } from "../../ui/cx";
 import { useInlinePanel } from "../../ui/useInlinePanel";
 import { Atendimento } from "./Atendimento";
@@ -193,8 +193,13 @@ function Atual({
         <Badge tone="primary" icon={called ? Clock : Scissors}>
           {called ? "Chamado" : "Em atendimento"}
         </Badge>
-        <p className="m-0 text-3xl font-bold tracking-tight">
-          {e.ticket_code} · <span className="break-words">{e.nick}</span>
+        <p className="m-0 flex items-center gap-3 text-3xl font-bold tracking-tight">
+          {e.customer_avatar && (
+            <Avatar name={e.nick} image={e.customer_avatar} size={48} className="size-12" />
+          )}
+          <span>
+            {e.ticket_code} · <span className="break-words">{e.nick}</span>
+          </span>
         </p>
         <p className="m-0 text-fg-muted">{e.service_names.join(" + ")}</p>
         {e.has_pending_change_request && (
@@ -266,6 +271,8 @@ function Aguardando({
         >
           {position}
         </span>
+        {/* Foto pessoal: só para a equipe e só com a participação ativa (o servidor confere). */}
+        {e.customer_avatar && <Avatar name={e.nick} image={e.customer_avatar} size={32} className="size-8" />}
         <div className="grid min-w-0 flex-1 gap-0.5">
           <p className="m-0 font-semibold">
             {e.ticket_code} · <span className="break-words">{e.nick}</span>

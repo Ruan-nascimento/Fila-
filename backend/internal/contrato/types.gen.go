@@ -35,6 +35,189 @@ func (e AccountStatus) Valid() bool {
 	}
 }
 
+// Defines values for AnalyticsBreakdownStatus.
+const (
+	AnalyticsBreakdownStatusNotApplicable AnalyticsBreakdownStatus = "not_applicable"
+	AnalyticsBreakdownStatusNotCollected  AnalyticsBreakdownStatus = "not_collected"
+	AnalyticsBreakdownStatusOk            AnalyticsBreakdownStatus = "ok"
+)
+
+// Valid indicates whether the value is a known member of the AnalyticsBreakdownStatus enum.
+func (e AnalyticsBreakdownStatus) Valid() bool {
+	switch e {
+	case AnalyticsBreakdownStatusNotApplicable:
+		return true
+	case AnalyticsBreakdownStatusNotCollected:
+		return true
+	case AnalyticsBreakdownStatusOk:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AnalyticsMetaFiltersMethod.
+const (
+	AnalyticsMetaFiltersMethodCard        AnalyticsMetaFiltersMethod = "card"
+	AnalyticsMetaFiltersMethodCash        AnalyticsMetaFiltersMethod = "cash"
+	AnalyticsMetaFiltersMethodLessThannil AnalyticsMetaFiltersMethod = "<nil>"
+	AnalyticsMetaFiltersMethodPix         AnalyticsMetaFiltersMethod = "pix"
+)
+
+// Valid indicates whether the value is a known member of the AnalyticsMetaFiltersMethod enum.
+func (e AnalyticsMetaFiltersMethod) Valid() bool {
+	switch e {
+	case AnalyticsMetaFiltersMethodCard:
+		return true
+	case AnalyticsMetaFiltersMethodCash:
+		return true
+	case AnalyticsMetaFiltersMethodLessThannil:
+		return true
+	case AnalyticsMetaFiltersMethodPix:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AnalyticsMetaGranularity.
+const (
+	AnalyticsMetaGranularityDay   AnalyticsMetaGranularity = "day"
+	AnalyticsMetaGranularityHour  AnalyticsMetaGranularity = "hour"
+	AnalyticsMetaGranularityMonth AnalyticsMetaGranularity = "month"
+	AnalyticsMetaGranularityWeek  AnalyticsMetaGranularity = "week"
+)
+
+// Valid indicates whether the value is a known member of the AnalyticsMetaGranularity enum.
+func (e AnalyticsMetaGranularity) Valid() bool {
+	switch e {
+	case AnalyticsMetaGranularityDay:
+		return true
+	case AnalyticsMetaGranularityHour:
+		return true
+	case AnalyticsMetaGranularityMonth:
+		return true
+	case AnalyticsMetaGranularityWeek:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AnalyticsMetaUnitsCurrency.
+const (
+	AnalyticsMetaUnitsCurrencyBRL AnalyticsMetaUnitsCurrency = "BRL"
+)
+
+// Valid indicates whether the value is a known member of the AnalyticsMetaUnitsCurrency enum.
+func (e AnalyticsMetaUnitsCurrency) Valid() bool {
+	switch e {
+	case AnalyticsMetaUnitsCurrencyBRL:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AnalyticsMetaUnitsDuration.
+const (
+	AnalyticsMetaUnitsDurationSeconds AnalyticsMetaUnitsDuration = "seconds"
+)
+
+// Valid indicates whether the value is a known member of the AnalyticsMetaUnitsDuration enum.
+func (e AnalyticsMetaUnitsDuration) Valid() bool {
+	switch e {
+	case AnalyticsMetaUnitsDurationSeconds:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AnalyticsMetaUnitsMoney.
+const (
+	AnalyticsMetaUnitsMoneyCents AnalyticsMetaUnitsMoney = "cents"
+)
+
+// Valid indicates whether the value is a known member of the AnalyticsMetaUnitsMoney enum.
+func (e AnalyticsMetaUnitsMoney) Valid() bool {
+	switch e {
+	case AnalyticsMetaUnitsMoneyCents:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AnalyticsSeriesSeriesUnit.
+const (
+	AnalyticsSeriesSeriesUnitCents   AnalyticsSeriesSeriesUnit = "cents"
+	AnalyticsSeriesSeriesUnitCount   AnalyticsSeriesSeriesUnit = "count"
+	AnalyticsSeriesSeriesUnitPoints  AnalyticsSeriesSeriesUnit = "points"
+	AnalyticsSeriesSeriesUnitSeconds AnalyticsSeriesSeriesUnit = "seconds"
+)
+
+// Valid indicates whether the value is a known member of the AnalyticsSeriesSeriesUnit enum.
+func (e AnalyticsSeriesSeriesUnit) Valid() bool {
+	switch e {
+	case AnalyticsSeriesSeriesUnitCents:
+		return true
+	case AnalyticsSeriesSeriesUnitCount:
+		return true
+	case AnalyticsSeriesSeriesUnitPoints:
+		return true
+	case AnalyticsSeriesSeriesUnitSeconds:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AnalyticsValueStatus.
+const (
+	AnalyticsValueStatusEmpty         AnalyticsValueStatus = "empty"
+	AnalyticsValueStatusNotApplicable AnalyticsValueStatus = "not_applicable"
+	AnalyticsValueStatusNotCollected  AnalyticsValueStatus = "not_collected"
+	AnalyticsValueStatusOk            AnalyticsValueStatus = "ok"
+)
+
+// Valid indicates whether the value is a known member of the AnalyticsValueStatus enum.
+func (e AnalyticsValueStatus) Valid() bool {
+	switch e {
+	case AnalyticsValueStatusEmpty:
+		return true
+	case AnalyticsValueStatusNotApplicable:
+		return true
+	case AnalyticsValueStatusNotCollected:
+		return true
+	case AnalyticsValueStatusOk:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for Appearance.
+const (
+	AppearanceDark   Appearance = "dark"
+	AppearanceLight  Appearance = "light"
+	AppearanceSystem Appearance = "system"
+)
+
+// Valid indicates whether the value is a known member of the Appearance enum.
+func (e Appearance) Valid() bool {
+	switch e {
+	case AppearanceDark:
+		return true
+	case AppearanceLight:
+		return true
+	case AppearanceSystem:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AudienceKind.
 const (
 	AudienceKindAccount      AudienceKind = "account"
@@ -245,32 +428,67 @@ func (e DeletionStatus) Valid() bool {
 	}
 }
 
+// Defines values for DesktopBindingTokenType.
+const (
+	DPoP DesktopBindingTokenType = "DPoP"
+)
+
+// Valid indicates whether the value is a known member of the DesktopBindingTokenType enum.
+func (e DesktopBindingTokenType) Valid() bool {
+	switch e {
+	case DPoP:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ErrorCode.
 const (
 	ErrorCodeAccountRequired                     ErrorCode = "account_required"
 	ErrorCodeActiveParticipationExists           ErrorCode = "active_participation_exists"
+	ErrorCodeAnalyticsFilterNotApplicable        ErrorCode = "analytics_filter_not_applicable"
 	ErrorCodeChangeRequestPending                ErrorCode = "change_request_pending"
 	ErrorCodeCsrfFailed                          ErrorCode = "csrf_failed"
 	ErrorCodeDeletionInProgress                  ErrorCode = "deletion_in_progress"
+	ErrorCodeDesktopAccessInvalid                ErrorCode = "desktop_access_invalid"
+	ErrorCodeDesktopActivationInvalid            ErrorCode = "desktop_activation_invalid"
+	ErrorCodeDesktopInstallationInvalid          ErrorCode = "desktop_installation_invalid"
+	ErrorCodeDesktopLinkInvalid                  ErrorCode = "desktop_link_invalid"
+	ErrorCodeDesktopProofInvalid                 ErrorCode = "desktop_proof_invalid"
 	ErrorCodeDuplicateService                    ErrorCode = "duplicate_service"
 	ErrorCodeEmailNotVerified                    ErrorCode = "email_not_verified"
 	ErrorCodeForbidden                           ErrorCode = "forbidden"
+	ErrorCodeGoogleUnavailable                   ErrorCode = "google_unavailable"
 	ErrorCodeIdempotencyInProgress               ErrorCode = "idempotency_in_progress"
 	ErrorCodeIdempotencyKeyMissing               ErrorCode = "idempotency_key_missing"
 	ErrorCodeIdempotencyKeyReused                ErrorCode = "idempotency_key_reused"
+	ErrorCodeIdentityAlreadyLinked               ErrorCode = "identity_already_linked"
+	ErrorCodeImageDimensions                     ErrorCode = "image_dimensions"
+	ErrorCodeImageInvalid                        ErrorCode = "image_invalid"
+	ErrorCodeImageUnsupported                    ErrorCode = "image_unsupported"
 	ErrorCodeInsufficientPoints                  ErrorCode = "insufficient_points"
 	ErrorCodeInternalError                       ErrorCode = "internal_error"
 	ErrorCodeInvalidCredentials                  ErrorCode = "invalid_credentials"
 	ErrorCodeInvalidTransition                   ErrorCode = "invalid_transition"
 	ErrorCodeInviteInvalid                       ErrorCode = "invite_invalid"
 	ErrorCodeItemAlreadyPerformed                ErrorCode = "item_already_performed"
+	ErrorCodeLastAccessMethod                    ErrorCode = "last_access_method"
 	ErrorCodeLoyaltyProgramDisabled              ErrorCode = "loyalty_program_disabled"
+	ErrorCodeMediaDisabled                       ErrorCode = "media_disabled"
+	ErrorCodeMediaNotAttachable                  ErrorCode = "media_not_attachable"
+	ErrorCodeNoPassword                          ErrorCode = "no_password"
 	ErrorCodeNoWaitingParticipant                ErrorCode = "no_waiting_participant"
 	ErrorCodeNotFound                            ErrorCode = "not_found"
 	ErrorCodeOrderNotEditable                    ErrorCode = "order_not_editable"
 	ErrorCodeOrderNotPayable                     ErrorCode = "order_not_payable"
 	ErrorCodeOrderRequiresItem                   ErrorCode = "order_requires_item"
 	ErrorCodeOriginNotAllowed                    ErrorCode = "origin_not_allowed"
+	ErrorCodeOwnerSessionActive                  ErrorCode = "owner_session_active"
+	ErrorCodeOwnerSessionChallengeInvalid        ErrorCode = "owner_session_challenge_invalid"
+	ErrorCodeOwnerSessionReplaced                ErrorCode = "owner_session_replaced"
+	ErrorCodeOwnerSessionRequired                ErrorCode = "owner_session_required"
+	ErrorCodePasswordAvailable                   ErrorCode = "password_available"
 	ErrorCodePayloadTooLarge                     ErrorCode = "payload_too_large"
 	ErrorCodePaymentAmountMismatch               ErrorCode = "payment_amount_mismatch"
 	ErrorCodePaymentMethodNotAllowed             ErrorCode = "payment_method_not_allowed"
@@ -285,6 +503,7 @@ const (
 	ErrorCodeQueueHasPendingParticipants         ErrorCode = "queue_has_pending_participants"
 	ErrorCodeQueueNotOpen                        ErrorCode = "queue_not_open"
 	ErrorCodeRateLimited                         ErrorCode = "rate_limited"
+	ErrorCodeReauthCodeInvalid                   ErrorCode = "reauth_code_invalid"
 	ErrorCodeReauthenticationRequired            ErrorCode = "reauthentication_required"
 	ErrorCodeRecoveryCodeInvalid                 ErrorCode = "recovery_code_invalid"
 	ErrorCodeRefundExceedsAvailable              ErrorCode = "refund_exceeds_available"
@@ -317,11 +536,23 @@ func (e ErrorCode) Valid() bool {
 		return true
 	case ErrorCodeActiveParticipationExists:
 		return true
+	case ErrorCodeAnalyticsFilterNotApplicable:
+		return true
 	case ErrorCodeChangeRequestPending:
 		return true
 	case ErrorCodeCsrfFailed:
 		return true
 	case ErrorCodeDeletionInProgress:
+		return true
+	case ErrorCodeDesktopAccessInvalid:
+		return true
+	case ErrorCodeDesktopActivationInvalid:
+		return true
+	case ErrorCodeDesktopInstallationInvalid:
+		return true
+	case ErrorCodeDesktopLinkInvalid:
+		return true
+	case ErrorCodeDesktopProofInvalid:
 		return true
 	case ErrorCodeDuplicateService:
 		return true
@@ -329,11 +560,21 @@ func (e ErrorCode) Valid() bool {
 		return true
 	case ErrorCodeForbidden:
 		return true
+	case ErrorCodeGoogleUnavailable:
+		return true
 	case ErrorCodeIdempotencyInProgress:
 		return true
 	case ErrorCodeIdempotencyKeyMissing:
 		return true
 	case ErrorCodeIdempotencyKeyReused:
+		return true
+	case ErrorCodeIdentityAlreadyLinked:
+		return true
+	case ErrorCodeImageDimensions:
+		return true
+	case ErrorCodeImageInvalid:
+		return true
+	case ErrorCodeImageUnsupported:
 		return true
 	case ErrorCodeInsufficientPoints:
 		return true
@@ -347,7 +588,15 @@ func (e ErrorCode) Valid() bool {
 		return true
 	case ErrorCodeItemAlreadyPerformed:
 		return true
+	case ErrorCodeLastAccessMethod:
+		return true
 	case ErrorCodeLoyaltyProgramDisabled:
+		return true
+	case ErrorCodeMediaDisabled:
+		return true
+	case ErrorCodeMediaNotAttachable:
+		return true
+	case ErrorCodeNoPassword:
 		return true
 	case ErrorCodeNoWaitingParticipant:
 		return true
@@ -360,6 +609,16 @@ func (e ErrorCode) Valid() bool {
 	case ErrorCodeOrderRequiresItem:
 		return true
 	case ErrorCodeOriginNotAllowed:
+		return true
+	case ErrorCodeOwnerSessionActive:
+		return true
+	case ErrorCodeOwnerSessionChallengeInvalid:
+		return true
+	case ErrorCodeOwnerSessionReplaced:
+		return true
+	case ErrorCodeOwnerSessionRequired:
+		return true
+	case ErrorCodePasswordAvailable:
 		return true
 	case ErrorCodePayloadTooLarge:
 		return true
@@ -388,6 +647,8 @@ func (e ErrorCode) Valid() bool {
 	case ErrorCodeQueueNotOpen:
 		return true
 	case ErrorCodeRateLimited:
+		return true
+	case ErrorCodeReauthCodeInvalid:
 		return true
 	case ErrorCodeReauthenticationRequired:
 		return true
@@ -656,6 +917,24 @@ func (e FinancialIssueStatus) Valid() bool {
 	}
 }
 
+// Defines values for GoogleStartRequestIntent.
+const (
+	Link  GoogleStartRequestIntent = "link"
+	Login GoogleStartRequestIntent = "login"
+)
+
+// Valid indicates whether the value is a known member of the GoogleStartRequestIntent enum.
+func (e GoogleStartRequestIntent) Valid() bool {
+	switch e {
+	case Link:
+		return true
+	case Login:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for InterruptServiceRequestItemsOutcome.
 const (
 	InterruptServiceRequestItemsOutcomeFullyPerformed     InterruptServiceRequestItemsOutcome = "fully_performed"
@@ -755,15 +1034,87 @@ func (e LedgerEntryKind) Valid() bool {
 	}
 }
 
+// Defines values for MediaPurpose.
+const (
+	Avatar            MediaPurpose = "avatar"
+	Logo              MediaPurpose = "logo"
+	ProfessionalPhoto MediaPurpose = "professional_photo"
+)
+
+// Valid indicates whether the value is a known member of the MediaPurpose enum.
+func (e MediaPurpose) Valid() bool {
+	switch e {
+	case Avatar:
+		return true
+	case Logo:
+		return true
+	case ProfessionalPhoto:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MediaUploadFailureReason.
+const (
+	MediaUploadFailureReasonDimensions        MediaUploadFailureReason = "dimensions"
+	MediaUploadFailureReasonInvalidImage      MediaUploadFailureReason = "invalid_image"
+	MediaUploadFailureReasonLessThannil       MediaUploadFailureReason = "<nil>"
+	MediaUploadFailureReasonProcessingError   MediaUploadFailureReason = "processing_error"
+	MediaUploadFailureReasonUnsupportedFormat MediaUploadFailureReason = "unsupported_format"
+)
+
+// Valid indicates whether the value is a known member of the MediaUploadFailureReason enum.
+func (e MediaUploadFailureReason) Valid() bool {
+	switch e {
+	case MediaUploadFailureReasonDimensions:
+		return true
+	case MediaUploadFailureReasonInvalidImage:
+		return true
+	case MediaUploadFailureReasonLessThannil:
+		return true
+	case MediaUploadFailureReasonProcessingError:
+		return true
+	case MediaUploadFailureReasonUnsupportedFormat:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MediaUploadStatus.
+const (
+	MediaUploadStatusAttached   MediaUploadStatus = "attached"
+	MediaUploadStatusFailed     MediaUploadStatus = "failed"
+	MediaUploadStatusProcessing MediaUploadStatus = "processing"
+	MediaUploadStatusReady      MediaUploadStatus = "ready"
+)
+
+// Valid indicates whether the value is a known member of the MediaUploadStatus enum.
+func (e MediaUploadStatus) Valid() bool {
+	switch e {
+	case MediaUploadStatusAttached:
+		return true
+	case MediaUploadStatusFailed:
+		return true
+	case MediaUploadStatusProcessing:
+		return true
+	case MediaUploadStatusReady:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for MoneyCurrency.
 const (
-	BRL MoneyCurrency = "BRL"
+	MoneyCurrencyBRL MoneyCurrency = "BRL"
 )
 
 // Valid indicates whether the value is a known member of the MoneyCurrency enum.
 func (e MoneyCurrency) Valid() bool {
 	switch e {
-	case BRL:
+	case MoneyCurrencyBRL:
 		return true
 	default:
 		return false
@@ -842,6 +1193,84 @@ func (e OrderStatus) Valid() bool {
 	case OrderStatusPendingReview:
 		return true
 	case OrderStatusSettled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for OwnerSessionConflictOtherSessionChannel.
+const (
+	OwnerSessionConflictOtherSessionChannelDesktopAuthorized OwnerSessionConflictOtherSessionChannel = "desktop_authorized"
+	OwnerSessionConflictOtherSessionChannelUnknown           OwnerSessionConflictOtherSessionChannel = "unknown"
+)
+
+// Valid indicates whether the value is a known member of the OwnerSessionConflictOtherSessionChannel enum.
+func (e OwnerSessionConflictOtherSessionChannel) Valid() bool {
+	switch e {
+	case OwnerSessionConflictOtherSessionChannelDesktopAuthorized:
+		return true
+	case OwnerSessionConflictOtherSessionChannelUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for Palette.
+const (
+	Amber   Palette = "amber"
+	Blue    Palette = "blue"
+	Cyan    Palette = "cyan"
+	Emerald Palette = "emerald"
+	Fuchsia Palette = "fuchsia"
+	Green   Palette = "green"
+	Indigo  Palette = "indigo"
+	Lime    Palette = "lime"
+	Orange  Palette = "orange"
+	Pink    Palette = "pink"
+	Purple  Palette = "purple"
+	Red     Palette = "red"
+	Rose    Palette = "rose"
+	Sky     Palette = "sky"
+	Teal    Palette = "teal"
+	Violet  Palette = "violet"
+)
+
+// Valid indicates whether the value is a known member of the Palette enum.
+func (e Palette) Valid() bool {
+	switch e {
+	case Amber:
+		return true
+	case Blue:
+		return true
+	case Cyan:
+		return true
+	case Emerald:
+		return true
+	case Fuchsia:
+		return true
+	case Green:
+		return true
+	case Indigo:
+		return true
+	case Lime:
+		return true
+	case Orange:
+		return true
+	case Pink:
+		return true
+	case Purple:
+		return true
+	case Red:
+		return true
+	case Rose:
+		return true
+	case Sky:
+		return true
+	case Teal:
+		return true
+	case Violet:
 		return true
 	default:
 		return false
@@ -1280,6 +1709,42 @@ func (e SessionKind) Valid() bool {
 	}
 }
 
+// Defines values for SessionViewEndedReason.
+const (
+	SessionViewEndedReasonOwnerSessionMigration SessionViewEndedReason = "owner_session_migration"
+	SessionViewEndedReasonOwnerSessionReplaced  SessionViewEndedReason = "owner_session_replaced"
+)
+
+// Valid indicates whether the value is a known member of the SessionViewEndedReason enum.
+func (e SessionViewEndedReason) Valid() bool {
+	switch e {
+	case SessionViewEndedReasonOwnerSessionMigration:
+		return true
+	case SessionViewEndedReasonOwnerSessionReplaced:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionViewSessionAuthMethod.
+const (
+	Google   SessionViewSessionAuthMethod = "google"
+	Password SessionViewSessionAuthMethod = "password"
+)
+
+// Valid indicates whether the value is a known member of the SessionViewSessionAuthMethod enum.
+func (e SessionViewSessionAuthMethod) Valid() bool {
+	switch e {
+	case Google:
+		return true
+	case Password:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for StaffRole.
 const (
 	StaffRoleOwner        StaffRole = "owner"
@@ -1352,6 +1817,42 @@ func (e TransferRequestCustomerConsentMethod) Valid() bool {
 	}
 }
 
+// Defines values for AnalyticsCompare.
+const (
+	AnalyticsComparePrevious AnalyticsCompare = "previous"
+)
+
+// Valid indicates whether the value is a known member of the AnalyticsCompare enum.
+func (e AnalyticsCompare) Valid() bool {
+	switch e {
+	case AnalyticsComparePrevious:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AnalyticsMethod.
+const (
+	AnalyticsMethodCard AnalyticsMethod = "card"
+	AnalyticsMethodCash AnalyticsMethod = "cash"
+	AnalyticsMethodPix  AnalyticsMethod = "pix"
+)
+
+// Valid indicates whether the value is a known member of the AnalyticsMethod enum.
+func (e AnalyticsMethod) Valid() bool {
+	switch e {
+	case AnalyticsMethodCard:
+		return true
+	case AnalyticsMethodCash:
+		return true
+	case AnalyticsMethodPix:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for HealthStatus.
 const (
 	HealthStatusNotReady HealthStatus = "not_ready"
@@ -1406,6 +1907,324 @@ func (e GetReadiness200JSONResponseBodyStatus) Valid() bool {
 	}
 }
 
+// Defines values for GetAnalyticsBreakdownParamsCompare.
+const (
+	GetAnalyticsBreakdownParamsComparePrevious GetAnalyticsBreakdownParamsCompare = "previous"
+)
+
+// Valid indicates whether the value is a known member of the GetAnalyticsBreakdownParamsCompare enum.
+func (e GetAnalyticsBreakdownParamsCompare) Valid() bool {
+	switch e {
+	case GetAnalyticsBreakdownParamsComparePrevious:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetAnalyticsBreakdownParamsMethod.
+const (
+	GetAnalyticsBreakdownParamsMethodCard GetAnalyticsBreakdownParamsMethod = "card"
+	GetAnalyticsBreakdownParamsMethodCash GetAnalyticsBreakdownParamsMethod = "cash"
+	GetAnalyticsBreakdownParamsMethodPix  GetAnalyticsBreakdownParamsMethod = "pix"
+)
+
+// Valid indicates whether the value is a known member of the GetAnalyticsBreakdownParamsMethod enum.
+func (e GetAnalyticsBreakdownParamsMethod) Valid() bool {
+	switch e {
+	case GetAnalyticsBreakdownParamsMethodCard:
+		return true
+	case GetAnalyticsBreakdownParamsMethodCash:
+		return true
+	case GetAnalyticsBreakdownParamsMethodPix:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetAnalyticsBreakdownParamsDimension.
+const (
+	GetAnalyticsBreakdownParamsDimensionOutcomes       GetAnalyticsBreakdownParamsDimension = "outcomes"
+	GetAnalyticsBreakdownParamsDimensionPaymentMethods GetAnalyticsBreakdownParamsDimension = "payment_methods"
+	GetAnalyticsBreakdownParamsDimensionPeakHours      GetAnalyticsBreakdownParamsDimension = "peak_hours"
+	GetAnalyticsBreakdownParamsDimensionPending        GetAnalyticsBreakdownParamsDimension = "pending"
+	GetAnalyticsBreakdownParamsDimensionProfessionals  GetAnalyticsBreakdownParamsDimension = "professionals"
+	GetAnalyticsBreakdownParamsDimensionRecurrence     GetAnalyticsBreakdownParamsDimension = "recurrence"
+	GetAnalyticsBreakdownParamsDimensionRewards        GetAnalyticsBreakdownParamsDimension = "rewards"
+	GetAnalyticsBreakdownParamsDimensionServices       GetAnalyticsBreakdownParamsDimension = "services"
+	GetAnalyticsBreakdownParamsDimensionWaitBands      GetAnalyticsBreakdownParamsDimension = "wait_bands"
+)
+
+// Valid indicates whether the value is a known member of the GetAnalyticsBreakdownParamsDimension enum.
+func (e GetAnalyticsBreakdownParamsDimension) Valid() bool {
+	switch e {
+	case GetAnalyticsBreakdownParamsDimensionOutcomes:
+		return true
+	case GetAnalyticsBreakdownParamsDimensionPaymentMethods:
+		return true
+	case GetAnalyticsBreakdownParamsDimensionPeakHours:
+		return true
+	case GetAnalyticsBreakdownParamsDimensionPending:
+		return true
+	case GetAnalyticsBreakdownParamsDimensionProfessionals:
+		return true
+	case GetAnalyticsBreakdownParamsDimensionRecurrence:
+		return true
+	case GetAnalyticsBreakdownParamsDimensionRewards:
+		return true
+	case GetAnalyticsBreakdownParamsDimensionServices:
+		return true
+	case GetAnalyticsBreakdownParamsDimensionWaitBands:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListAnalyticsRecordsParamsState.
+const (
+	ListAnalyticsRecordsParamsStateOpen     ListAnalyticsRecordsParamsState = "open"
+	ListAnalyticsRecordsParamsStateOpened   ListAnalyticsRecordsParamsState = "opened"
+	ListAnalyticsRecordsParamsStateResolved ListAnalyticsRecordsParamsState = "resolved"
+)
+
+// Valid indicates whether the value is a known member of the ListAnalyticsRecordsParamsState enum.
+func (e ListAnalyticsRecordsParamsState) Valid() bool {
+	switch e {
+	case ListAnalyticsRecordsParamsStateOpen:
+		return true
+	case ListAnalyticsRecordsParamsStateOpened:
+		return true
+	case ListAnalyticsRecordsParamsStateResolved:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListAnalyticsRecordsParamsBand.
+const (
+	N05   ListAnalyticsRecordsParamsBand = "0-5"
+	N1530 ListAnalyticsRecordsParamsBand = "15-30"
+	N3060 ListAnalyticsRecordsParamsBand = "30-60"
+	N515  ListAnalyticsRecordsParamsBand = "5-15"
+	N60   ListAnalyticsRecordsParamsBand = "60+"
+)
+
+// Valid indicates whether the value is a known member of the ListAnalyticsRecordsParamsBand enum.
+func (e ListAnalyticsRecordsParamsBand) Valid() bool {
+	switch e {
+	case N05:
+		return true
+	case N1530:
+		return true
+	case N3060:
+		return true
+	case N515:
+		return true
+	case N60:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListAnalyticsRecordsParamsCompare.
+const (
+	ListAnalyticsRecordsParamsComparePrevious ListAnalyticsRecordsParamsCompare = "previous"
+)
+
+// Valid indicates whether the value is a known member of the ListAnalyticsRecordsParamsCompare enum.
+func (e ListAnalyticsRecordsParamsCompare) Valid() bool {
+	switch e {
+	case ListAnalyticsRecordsParamsComparePrevious:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListAnalyticsRecordsParamsMethod.
+const (
+	ListAnalyticsRecordsParamsMethodCard ListAnalyticsRecordsParamsMethod = "card"
+	ListAnalyticsRecordsParamsMethodCash ListAnalyticsRecordsParamsMethod = "cash"
+	ListAnalyticsRecordsParamsMethodPix  ListAnalyticsRecordsParamsMethod = "pix"
+)
+
+// Valid indicates whether the value is a known member of the ListAnalyticsRecordsParamsMethod enum.
+func (e ListAnalyticsRecordsParamsMethod) Valid() bool {
+	switch e {
+	case ListAnalyticsRecordsParamsMethodCard:
+		return true
+	case ListAnalyticsRecordsParamsMethodCash:
+		return true
+	case ListAnalyticsRecordsParamsMethodPix:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListAnalyticsRecordsParamsKind.
+const (
+	FinancialIssues ListAnalyticsRecordsParamsKind = "financial_issues"
+	LoyaltyEntries  ListAnalyticsRecordsParamsKind = "loyalty_entries"
+	Orders          ListAnalyticsRecordsParamsKind = "orders"
+	Participations  ListAnalyticsRecordsParamsKind = "participations"
+	Receipts        ListAnalyticsRecordsParamsKind = "receipts"
+	Refunds         ListAnalyticsRecordsParamsKind = "refunds"
+	ServiceItems    ListAnalyticsRecordsParamsKind = "service_items"
+)
+
+// Valid indicates whether the value is a known member of the ListAnalyticsRecordsParamsKind enum.
+func (e ListAnalyticsRecordsParamsKind) Valid() bool {
+	switch e {
+	case FinancialIssues:
+		return true
+	case LoyaltyEntries:
+		return true
+	case Orders:
+		return true
+	case Participations:
+		return true
+	case Receipts:
+		return true
+	case Refunds:
+		return true
+	case ServiceItems:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetAnalyticsSeriesParamsGranularity.
+const (
+	GetAnalyticsSeriesParamsGranularityDay   GetAnalyticsSeriesParamsGranularity = "day"
+	GetAnalyticsSeriesParamsGranularityHour  GetAnalyticsSeriesParamsGranularity = "hour"
+	GetAnalyticsSeriesParamsGranularityMonth GetAnalyticsSeriesParamsGranularity = "month"
+	GetAnalyticsSeriesParamsGranularityWeek  GetAnalyticsSeriesParamsGranularity = "week"
+)
+
+// Valid indicates whether the value is a known member of the GetAnalyticsSeriesParamsGranularity enum.
+func (e GetAnalyticsSeriesParamsGranularity) Valid() bool {
+	switch e {
+	case GetAnalyticsSeriesParamsGranularityDay:
+		return true
+	case GetAnalyticsSeriesParamsGranularityHour:
+		return true
+	case GetAnalyticsSeriesParamsGranularityMonth:
+		return true
+	case GetAnalyticsSeriesParamsGranularityWeek:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetAnalyticsSeriesParamsCompare.
+const (
+	GetAnalyticsSeriesParamsComparePrevious GetAnalyticsSeriesParamsCompare = "previous"
+)
+
+// Valid indicates whether the value is a known member of the GetAnalyticsSeriesParamsCompare enum.
+func (e GetAnalyticsSeriesParamsCompare) Valid() bool {
+	switch e {
+	case GetAnalyticsSeriesParamsComparePrevious:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetAnalyticsSeriesParamsMethod.
+const (
+	GetAnalyticsSeriesParamsMethodCard GetAnalyticsSeriesParamsMethod = "card"
+	GetAnalyticsSeriesParamsMethodCash GetAnalyticsSeriesParamsMethod = "cash"
+	GetAnalyticsSeriesParamsMethodPix  GetAnalyticsSeriesParamsMethod = "pix"
+)
+
+// Valid indicates whether the value is a known member of the GetAnalyticsSeriesParamsMethod enum.
+func (e GetAnalyticsSeriesParamsMethod) Valid() bool {
+	switch e {
+	case GetAnalyticsSeriesParamsMethodCard:
+		return true
+	case GetAnalyticsSeriesParamsMethodCash:
+		return true
+	case GetAnalyticsSeriesParamsMethodPix:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetAnalyticsSeriesParamsMetric.
+const (
+	GetAnalyticsSeriesParamsMetricCash     GetAnalyticsSeriesParamsMetric = "cash"
+	GetAnalyticsSeriesParamsMetricDuration GetAnalyticsSeriesParamsMetric = "duration"
+	GetAnalyticsSeriesParamsMetricLoyalty  GetAnalyticsSeriesParamsMetric = "loyalty"
+	GetAnalyticsSeriesParamsMetricMovement GetAnalyticsSeriesParamsMetric = "movement"
+	GetAnalyticsSeriesParamsMetricTicket   GetAnalyticsSeriesParamsMetric = "ticket"
+	GetAnalyticsSeriesParamsMetricWait     GetAnalyticsSeriesParamsMetric = "wait"
+)
+
+// Valid indicates whether the value is a known member of the GetAnalyticsSeriesParamsMetric enum.
+func (e GetAnalyticsSeriesParamsMetric) Valid() bool {
+	switch e {
+	case GetAnalyticsSeriesParamsMetricCash:
+		return true
+	case GetAnalyticsSeriesParamsMetricDuration:
+		return true
+	case GetAnalyticsSeriesParamsMetricLoyalty:
+		return true
+	case GetAnalyticsSeriesParamsMetricMovement:
+		return true
+	case GetAnalyticsSeriesParamsMetricTicket:
+		return true
+	case GetAnalyticsSeriesParamsMetricWait:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetAnalyticsSummaryParamsCompare.
+const (
+	GetAnalyticsSummaryParamsComparePrevious GetAnalyticsSummaryParamsCompare = "previous"
+)
+
+// Valid indicates whether the value is a known member of the GetAnalyticsSummaryParamsCompare enum.
+func (e GetAnalyticsSummaryParamsCompare) Valid() bool {
+	switch e {
+	case GetAnalyticsSummaryParamsComparePrevious:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetAnalyticsSummaryParamsMethod.
+const (
+	GetAnalyticsSummaryParamsMethodCard GetAnalyticsSummaryParamsMethod = "card"
+	GetAnalyticsSummaryParamsMethodCash GetAnalyticsSummaryParamsMethod = "cash"
+	GetAnalyticsSummaryParamsMethodPix  GetAnalyticsSummaryParamsMethod = "pix"
+)
+
+// Valid indicates whether the value is a known member of the GetAnalyticsSummaryParamsMethod enum.
+func (e GetAnalyticsSummaryParamsMethod) Valid() bool {
+	switch e {
+	case GetAnalyticsSummaryParamsMethodCard:
+		return true
+	case GetAnalyticsSummaryParamsMethodCash:
+		return true
+	case GetAnalyticsSummaryParamsMethodPix:
+		return true
+	default:
+		return false
+	}
+}
+
 // AcceptInviteRequest defines model for AcceptInviteRequest.
 type AcceptInviteRequest struct {
 	// Name Obrigatório quando cria conta nova.
@@ -1439,6 +2258,200 @@ type AdjustOrderRequest struct {
 	Reason          Reason  `json:"reason"`
 	UnchargeItemIds *[]Id   `json:"uncharge_item_ids,omitempty"`
 }
+
+// AnalyticsBreakdown defines model for AnalyticsBreakdown.
+type AnalyticsBreakdown struct {
+	Dimension string `json:"dimension"`
+
+	// Rows Formato por dimensão (docs/desktop/metricas.md §Detalhamentos).
+	Rows   interface{}              `json:"rows"`
+	Status AnalyticsBreakdownStatus `json:"status"`
+}
+
+// AnalyticsBreakdownStatus defines model for AnalyticsBreakdown.Status.
+type AnalyticsBreakdownStatus string
+
+// AnalyticsCash defines model for AnalyticsCash.
+type AnalyticsCash struct {
+	IgnoredFilters []string `json:"ignored_filters"`
+
+	// NetCents value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+	NetCents AnalyticsValue `json:"net_cents"`
+
+	// Receipts value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+	Receipts AnalyticsValue `json:"receipts"`
+
+	// ReceivedCents value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+	ReceivedCents AnalyticsValue `json:"received_cents"`
+
+	// RefundedCents value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+	RefundedCents AnalyticsValue `json:"refunded_cents"`
+
+	// Refunds value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+	Refunds AnalyticsValue `json:"refunds"`
+}
+
+// AnalyticsMeta defines model for AnalyticsMeta.
+type AnalyticsMeta struct {
+	// CollectionStartedAt RFC 3339 em UTC com sufixo Z.
+	CollectionStartedAt Timestamp        `json:"collection_started_at"`
+	ComparePeriod       *AnalyticsPeriod `json:"compare_period"`
+
+	// EstablishmentId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	EstablishmentId   Id     `json:"establishment_id"`
+	EstablishmentName string `json:"establishment_name"`
+	Filters           struct {
+		Method         *AnalyticsMetaFiltersMethod `json:"method"`
+		ProfessionalId *openapi_types.UUID         `json:"professional_id"`
+		ServiceId      *openapi_types.UUID         `json:"service_id"`
+	} `json:"filters"`
+
+	// GeneratedAt RFC 3339 em UTC com sufixo Z.
+	GeneratedAt Timestamp                 `json:"generated_at"`
+	Granularity *AnalyticsMetaGranularity `json:"granularity,omitempty"`
+
+	// IgnoredFilters Filtros ativos sem atribuição confiável nesta consulta (os valores afetados saem not_applicable).
+	IgnoredFilters []string        `json:"ignored_filters"`
+	Missing        string          `json:"missing"`
+	Period         AnalyticsPeriod `json:"period"`
+
+	// SnapshotAt RFC 3339 em UTC com sufixo Z.
+	SnapshotAt *Timestamp `json:"snapshot_at,omitempty"`
+	Timezone   string     `json:"timezone"`
+	Units      struct {
+		Currency AnalyticsMetaUnitsCurrency `json:"currency"`
+		Duration AnalyticsMetaUnitsDuration `json:"duration"`
+		Money    AnalyticsMetaUnitsMoney    `json:"money"`
+	} `json:"units"`
+}
+
+// AnalyticsMetaFiltersMethod defines model for AnalyticsMeta.Filters.Method.
+type AnalyticsMetaFiltersMethod string
+
+// AnalyticsMetaGranularity defines model for AnalyticsMeta.Granularity.
+type AnalyticsMetaGranularity string
+
+// AnalyticsMetaUnitsCurrency defines model for AnalyticsMeta.Units.Currency.
+type AnalyticsMetaUnitsCurrency string
+
+// AnalyticsMetaUnitsDuration defines model for AnalyticsMeta.Units.Duration.
+type AnalyticsMetaUnitsDuration string
+
+// AnalyticsMetaUnitsMoney defines model for AnalyticsMeta.Units.Money.
+type AnalyticsMetaUnitsMoney string
+
+// AnalyticsPeriod defines model for AnalyticsPeriod.
+type AnalyticsPeriod struct {
+	// EffectiveEnd RFC 3339 em UTC com sufixo Z.
+	EffectiveEnd Timestamp `json:"effective_end"`
+
+	// End RFC 3339 em UTC com sufixo Z.
+	End  Timestamp          `json:"end"`
+	From openapi_types.Date `json:"from"`
+
+	// Start RFC 3339 em UTC com sufixo Z.
+	Start Timestamp          `json:"start"`
+	To    openapi_types.Date `json:"to"`
+}
+
+// AnalyticsRecords defines model for AnalyticsRecords.
+type AnalyticsRecords struct {
+	Items      []map[string]interface{} `json:"items"`
+	Kind       string                   `json:"kind"`
+	NextCursor *string                  `json:"next_cursor"`
+
+	// Total Quantidade do recorte inteiro (todas as páginas).
+	Total      int  `json:"total"`
+	TotalCents *int `json:"total_cents"`
+	Window     struct {
+		// End RFC 3339 em UTC com sufixo Z.
+		End Timestamp `json:"end"`
+
+		// Start RFC 3339 em UTC com sufixo Z.
+		Start Timestamp `json:"start"`
+	} `json:"window"`
+}
+
+// AnalyticsSeries defines model for AnalyticsSeries.
+type AnalyticsSeries struct {
+	Buckets []struct {
+		Collected bool `json:"collected"`
+
+		// End RFC 3339 em UTC com sufixo Z.
+		End     Timestamp `json:"end"`
+		Label   string    `json:"label"`
+		Partial bool      `json:"partial"`
+
+		// Start RFC 3339 em UTC com sufixo Z.
+		Start  Timestamp                 `json:"start"`
+		Values map[string]AnalyticsValue `json:"values"`
+	} `json:"buckets"`
+	CompareTotals *map[string]AnalyticsValue `json:"compare_totals"`
+	Metric        string                     `json:"metric"`
+	Series        []struct {
+		Key   string                    `json:"key"`
+		Label string                    `json:"label"`
+		Unit  AnalyticsSeriesSeriesUnit `json:"unit"`
+	} `json:"series"`
+	Totals map[string]AnalyticsValue `json:"totals"`
+}
+
+// AnalyticsSeriesSeriesUnit defines model for AnalyticsSeries.Series.Unit.
+type AnalyticsSeriesSeriesUnit string
+
+// AnalyticsSummary defines model for AnalyticsSummary.
+type AnalyticsSummary struct {
+	Compare *AnalyticsSummaryPart `json:"compare"`
+	Current AnalyticsSummaryPart  `json:"current"`
+
+	// PendingNow Fotografia do instante snapshot_at (não depende do período).
+	PendingNow struct {
+		ChargesUnknown             int      `json:"charges_unknown"`
+		IgnoredFilters             []string `json:"ignored_filters"`
+		OpenFinancialIssues        int      `json:"open_financial_issues"`
+		OpenFinancialIssuesCents   int      `json:"open_financial_issues_cents"`
+		OrdersAwaitingConfirmation int      `json:"orders_awaiting_confirmation"`
+		OrdersAwaitingPayment      int      `json:"orders_awaiting_payment"`
+		OrdersAwaitingPaymentCents int      `json:"orders_awaiting_payment_cents"`
+		RefundsUnderReview         int      `json:"refunds_under_review"`
+
+		// SnapshotAt RFC 3339 em UTC com sufixo Z.
+		SnapshotAt Timestamp `json:"snapshot_at"`
+		Total      int       `json:"total"`
+	} `json:"pending_now"`
+}
+
+// AnalyticsSummaryPart defines model for AnalyticsSummaryPart.
+type AnalyticsSummaryPart struct {
+	Cash      AnalyticsCash `json:"cash"`
+	Completed struct {
+		// Count value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+		Count          AnalyticsValue `json:"count"`
+		IgnoredFilters []string       `json:"ignored_filters"`
+	} `json:"completed"`
+	Wait struct {
+		IgnoredFilters []string `json:"ignored_filters"`
+
+		// MedianSeconds value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+		MedianSeconds AnalyticsValue `json:"median_seconds"`
+
+		// P90Seconds value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+		P90Seconds AnalyticsValue `json:"p90_seconds"`
+	} `json:"wait"`
+}
+
+// AnalyticsValue value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+type AnalyticsValue struct {
+	Sample *int                 `json:"sample,omitempty"`
+	Status AnalyticsValueStatus `json:"status"`
+	Value  *float32             `json:"value"`
+}
+
+// AnalyticsValueStatus defines model for AnalyticsValue.Status.
+type AnalyticsValueStatus string
+
+// Appearance Preferência de aparência da pessoa (a cor principal é da loja).
+type Appearance string
 
 // AudienceKind Canal/audiência de eventos SSE.
 type AudienceKind string
@@ -1657,6 +2670,58 @@ type DeletionStatusRequest struct {
 	Protocol string `json:"protocol"`
 }
 
+// DesktopBinding defines model for DesktopBinding.
+type DesktopBinding struct {
+	AccessToken string `json:"access_token"`
+
+	// ExpiresAt RFC 3339 em UTC com sufixo Z.
+	ExpiresAt    Timestamp               `json:"expires_at"`
+	Installation DesktopInstallation     `json:"installation"`
+	TokenType    DesktopBindingTokenType `json:"token_type"`
+}
+
+// DesktopBindingTokenType defines model for DesktopBinding.TokenType.
+type DesktopBindingTokenType string
+
+// DesktopContext defines model for DesktopContext.
+type DesktopContext struct {
+	// AccessExpiresAt RFC 3339 em UTC com sufixo Z.
+	AccessExpiresAt Timestamp `json:"access_expires_at"`
+	Account         struct {
+		// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+		Id   Id     `json:"id"`
+		Name string `json:"name"`
+	} `json:"account"`
+	Establishments []struct {
+		// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+		Id       Id     `json:"id"`
+		Name     string `json:"name"`
+		Timezone string `json:"timezone"`
+	} `json:"establishments"`
+	Installation struct {
+		// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+		Id    Id     `json:"id"`
+		Label string `json:"label"`
+	} `json:"installation"`
+}
+
+// DesktopInstallation defines model for DesktopInstallation.
+type DesktopInstallation struct {
+	// CreatedAt RFC 3339 em UTC com sufixo Z.
+	CreatedAt Timestamp `json:"created_at"`
+
+	// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	Id    Id     `json:"id"`
+	Label string `json:"label"`
+}
+
+// DesktopLinkTicket defines model for DesktopLinkTicket.
+type DesktopLinkTicket struct {
+	// ExpiresAt RFC 3339 em UTC com sufixo Z.
+	ExpiresAt Timestamp `json:"expires_at"`
+	Ticket    string    `json:"ticket"`
+}
+
 // EmailRequest defines model for EmailRequest.
 type EmailRequest struct {
 	Email openapi_types.Email `json:"email"`
@@ -1671,10 +2736,20 @@ type ErrorCode string
 // Establishment defines model for Establishment.
 type Establishment struct {
 	// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
-	Id       Id     `json:"id"`
-	Name     string `json:"name"`
-	Slug     string `json:"slug"`
-	Timezone string `json:"timezone"`
+	Id   Id        `json:"id"`
+	Logo *ImageRef `json:"logo"`
+	Name string    `json:"name"`
+
+	// Palette Paleta do catálogo fechado (padrão purple).
+	Palette           Palette `json:"palette"`
+	PublicAddress     *string `json:"public_address"`
+	PublicDescription *string `json:"public_description"`
+	PublicPhone       *string `json:"public_phone"`
+
+	// PublicUrl Link canônico da loja (origem pública configurada + slug). Base do QR Code.
+	PublicUrl string `json:"public_url"`
+	Slug      string `json:"slug"`
+	Timezone  string `json:"timezone"`
 
 	// Version Versão do agregado; incrementa a cada mudança.
 	Version Version `json:"version"`
@@ -1769,6 +2844,18 @@ type FinancialIssueKind string
 // FinancialIssueStatus defines model for FinancialIssueStatus.
 type FinancialIssueStatus string
 
+// GoogleStartRequest defines model for GoogleStartRequest.
+type GoogleStartRequest struct {
+	EstablishmentSlug *string                  `json:"establishment_slug,omitempty"`
+	Intent            GoogleStartRequestIntent `json:"intent"`
+
+	// ReturnTo Rota interna: /conta, /loja/{slug}, /loja/{slug}/historico ou /loja/{slug}/pontos. Qualquer outra → 400.
+	ReturnTo *string `json:"return_to,omitempty"`
+}
+
+// GoogleStartRequestIntent defines model for GoogleStartRequest.Intent.
+type GoogleStartRequestIntent string
+
 // HistoryEntry defines model for HistoryEntry.
 type HistoryEntry struct {
 	Items []struct {
@@ -1793,6 +2880,20 @@ type HistoryEntry struct {
 
 // Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
 type Id = openapi_types.UUID
+
+// ImageRef Variantes prontas (dimensões reais declaradas). Nunca bytes nem chaves de armazenamento.
+type ImageRef struct {
+	Variants []ImageVariant `json:"variants"`
+}
+
+// ImageVariant defines model for ImageVariant.
+type ImageVariant struct {
+	Height int `json:"height"`
+
+	// Url Caminho relativo; muda quando a imagem muda.
+	Url   string `json:"url"`
+	Width int    `json:"width"`
+}
 
 // InterruptServiceRequest defines model for InterruptServiceRequest.
 type InterruptServiceRequest struct {
@@ -1882,6 +2983,25 @@ type LoyaltySummary struct {
 	ProgramEnabled bool `json:"program_enabled"`
 }
 
+// MediaPurpose defines model for MediaPurpose.
+type MediaPurpose string
+
+// MediaUpload defines model for MediaUpload.
+type MediaUpload struct {
+	FailureReason *MediaUploadFailureReason `json:"failure_reason"`
+
+	// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	Id      Id                `json:"id"`
+	Purpose MediaPurpose      `json:"purpose"`
+	Status  MediaUploadStatus `json:"status"`
+}
+
+// MediaUploadFailureReason defines model for MediaUpload.FailureReason.
+type MediaUploadFailureReason string
+
+// MediaUploadStatus defines model for MediaUpload.Status.
+type MediaUploadStatus string
+
 // MembershipView defines model for MembershipView.
 type MembershipView struct {
 	// EstablishmentId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
@@ -1900,6 +3020,48 @@ type Money struct {
 
 // MoneyCurrency defines model for Money.Currency.
 type MoneyCurrency string
+
+// MyProfessionalProfile defines model for MyProfessionalProfile.
+type MyProfessionalProfile struct {
+	DisplayName string `json:"display_name"`
+
+	// EstablishmentId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	EstablishmentId   Id        `json:"establishment_id"`
+	EstablishmentName string    `json:"establishment_name"`
+	Photo             *ImageRef `json:"photo"`
+
+	// ProfessionalId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	ProfessionalId Id `json:"professional_id"`
+
+	// Version Versão do agregado; incrementa a cada mudança.
+	Version Version `json:"version"`
+}
+
+// MyProfile defines model for MyProfile.
+type MyProfile struct {
+	// Appearance Preferência de aparência da pessoa (a cor principal é da loja).
+	Appearance Appearance `json:"appearance"`
+	Avatar     *ImageRef  `json:"avatar"`
+
+	// Email Só leitura (não há troca de e-mail por PATCH).
+	Email         openapi_types.Email `json:"email"`
+	EmailVerified bool                `json:"email_verified"`
+	Google        struct {
+		Email  *string `json:"email"`
+		Linked bool    `json:"linked"`
+	} `json:"google"`
+
+	// HasPassword Falso em conta só com Google (não há senha para trocar ou conferir).
+	HasPassword bool `json:"has_password"`
+
+	// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	Id     Id            `json:"id"`
+	Name   string        `json:"name"`
+	Status AccountStatus `json:"status"`
+
+	// Version Versão do agregado; incrementa a cada mudança.
+	Version Version `json:"version"`
+}
 
 // Nick Texto puro (normalizado NFC, sem caracteres de controle). Exibido sempre como texto, nunca HTML.
 type Nick = string
@@ -2023,11 +3185,39 @@ type OrderPayment struct {
 // OrderStatus Estado da comanda (financeiro), independente do estado da participação.
 type OrderStatus string
 
+// OwnerChallengeRequest defines model for OwnerChallengeRequest.
+type OwnerChallengeRequest struct {
+	Challenge string `json:"challenge"`
+}
+
+// OwnerSessionConflict Problem.current de `owner_session_active`. Só contexto confiável da outra sessão.
+type OwnerSessionConflict struct {
+	// Challenge Uso único, 2 min, preso à conta, à tentativa (cookie) e à geração da vaga. Nunca em URL ou log.
+	Challenge string `json:"challenge"`
+
+	// ExpiresAt RFC 3339 em UTC com sufixo Z.
+	ExpiresAt    Timestamp `json:"expires_at"`
+	OtherSession struct {
+		// Channel unknown = outro aparelho ou navegador.
+		Channel          OwnerSessionConflictOtherSessionChannel `json:"channel"`
+		InstallationName *string                                 `json:"installation_name"`
+
+		// LastUsedAt RFC 3339 em UTC com sufixo Z.
+		LastUsedAt Timestamp `json:"last_used_at"`
+	} `json:"other_session"`
+}
+
+// OwnerSessionConflictOtherSessionChannel unknown = outro aparelho ou navegador.
+type OwnerSessionConflictOtherSessionChannel string
+
 // PageInfo defines model for PageInfo.
 type PageInfo struct {
 	HasMore    bool    `json:"has_more"`
 	NextCursor *string `json:"next_cursor"`
 }
+
+// Palette Paleta do catálogo fechado (padrão purple).
+type Palette string
 
 // Participation defines model for Participation.
 type Participation struct {
@@ -2168,6 +3358,9 @@ type Professional struct {
 	Id            Id      `json:"id"`
 	PendingInvite *Invite `json:"pending_invite,omitempty"`
 
+	// Photo Foto pública publicada pelo profissional (o dono pode retirar a publicação).
+	Photo *ImageRef `json:"photo,omitempty"`
+
 	// QueueId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
 	QueueId     Id                 `json:"queue_id"`
 	QueueLetter string             `json:"queue_letter"`
@@ -2180,13 +3373,32 @@ type Professional struct {
 // ProfessionalStatus defines model for ProfessionalStatus.
 type ProfessionalStatus string
 
+// PublicConfig defines model for PublicConfig.
+type PublicConfig struct {
+	GoogleLogin  bool `json:"google_login"`
+	MediaUploads bool `json:"media_uploads"`
+
+	// PublicBaseUrl Origem pública canônica (FILA_PUBLIC_BASE_URL) usada em links e QR Codes.
+	PublicBaseUrl string `json:"public_base_url"`
+}
+
 // PublicEstablishment defines model for PublicEstablishment.
 type PublicEstablishment struct {
+	Address     *string `json:"address"`
+	Description *string `json:"description"`
+
 	// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
-	Id       Id     `json:"id"`
-	Name     string `json:"name"`
-	Slug     string `json:"slug"`
-	Timezone string `json:"timezone"`
+	Id   Id        `json:"id"`
+	Logo *ImageRef `json:"logo"`
+	Name string    `json:"name"`
+
+	// Palette Paleta do catálogo fechado (padrão purple).
+	Palette Palette `json:"palette"`
+
+	// Phone E.164 publicado pelo dono.
+	Phone    *string `json:"phone"`
+	Slug     string  `json:"slug"`
+	Timezone string  `json:"timezone"`
 }
 
 // PublicQueue Somente dados públicos. Sem nick, serviços, valores ou contatos.
@@ -2197,6 +3409,9 @@ type PublicQueue struct {
 
 		// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
 		Id Id `json:"id"`
+
+		// Photo Só a foto profissional publicada (nunca avatar pessoal nem foto de cliente).
+		Photo *ImageRef `json:"photo"`
 	} `json:"professional"`
 
 	// QueueId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
@@ -2237,9 +3452,10 @@ type ReasonRequest struct {
 	Reason Reason `json:"reason"`
 }
 
-// ReauthenticateRequest defines model for ReauthenticateRequest.
+// ReauthenticateRequest `password` (conta com senha) OU `email_code` (conta só com Google; ver `requestReauthCode`).
 type ReauthenticateRequest struct {
-	Password string `json:"password"`
+	EmailCode *string `json:"email_code,omitempty"`
+	Password  *string `json:"password,omitempty"`
 }
 
 // Receipt defines model for Receipt.
@@ -2461,17 +3677,51 @@ type SessionView struct {
 	Account   *AccountView `json:"account"`
 	CsrfToken *string      `json:"csrf_token"`
 
+	// EndedReason O cookie apresentado deixou de valer porque o dono entrou em outro aparelho (ou pela migração da sessão única).
+	EndedReason *SessionViewEndedReason `json:"ended_reason,omitempty"`
+
 	// Memberships Vínculos de equipe. Só concedem permissão com sessão de contexto staff.
 	Memberships []MembershipView `json:"memberships"`
 	Session     *struct {
+		// AuthMethod Como a sessão foi aberta. Google só abre sessão de cliente (nunca de equipe).
+		AuthMethod *SessionViewSessionAuthMethod `json:"auth_method,omitempty"`
+
 		// ExpiresAt RFC 3339 em UTC com sufixo Z.
-		ExpiresAt        Timestamp   `json:"expires_at"`
-		Kind             SessionKind `json:"kind"`
-		ReauthValidUntil *Timestamp  `json:"reauth_valid_until"`
+		ExpiresAt Timestamp   `json:"expires_at"`
+		Kind      SessionKind `json:"kind"`
+
+		// OwnerAuthority Esta sessão ocupa a vaga de dono da conta (ADR-0027). Só ela exerce privilégios de dono.
+		OwnerAuthority   *bool      `json:"owner_authority,omitempty"`
+		ReauthValidUntil *Timestamp `json:"reauth_valid_until"`
 	} `json:"session"`
 
 	// Visitors Credenciais de visitante ativas neste navegador (uma por loja).
 	Visitors []VisitorView `json:"visitors"`
+}
+
+// SessionViewEndedReason O cookie apresentado deixou de valer porque o dono entrou em outro aparelho (ou pela migração da sessão única).
+type SessionViewEndedReason string
+
+// SessionViewSessionAuthMethod Como a sessão foi aberta. Google só abre sessão de cliente (nunca de equipe).
+type SessionViewSessionAuthMethod string
+
+// SetAssetRequest defines model for SetAssetRequest.
+type SetAssetRequest struct {
+	// AssetId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	AssetId Id `json:"asset_id"`
+
+	// ExpectedVersion Versão do agregado; incrementa a cada mudança.
+	ExpectedVersion Version `json:"expected_version"`
+}
+
+// SetProfessionalPhotoRequest `asset_id` (envio próprio, finalidade professional_photo) OU `from_avatar: true`.
+type SetProfessionalPhotoRequest struct {
+	// AssetId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	AssetId *Id `json:"asset_id,omitempty"`
+
+	// ExpectedVersion Versão do agregado; incrementa a cada mudança.
+	ExpectedVersion Version `json:"expected_version"`
+	FromAvatar      *bool   `json:"from_avatar,omitempty"`
 }
 
 // SetServiceProfessionalsRequest defines model for SetServiceProfessionalsRequest.
@@ -2491,8 +3741,11 @@ type SnapshotCursor = StreamCursor
 type StaffQueue struct {
 	// Entries Aguardando (ordem FIFO), chamado e em atendimento.
 	Entries []struct {
-		CalledAt                *Timestamp `json:"called_at,omitempty"`
-		HasPendingChangeRequest *bool      `json:"has_pending_change_request,omitempty"`
+		CalledAt *Timestamp `json:"called_at,omitempty"`
+
+		// CustomerAvatar Foto pessoal do cliente com conta, só para a equipe e só com a participação ativa (URL reautorizada a cada pedido).
+		CustomerAvatar          *ImageRef `json:"customer_avatar,omitempty"`
+		HasPendingChangeRequest *bool     `json:"has_pending_change_request,omitempty"`
 
 		// Nick Texto puro (normalizado NFC, sem caracteres de controle). Exibido sempre como texto, nunca HTML.
 		Nick Nick `json:"nick"`
@@ -2587,7 +3840,19 @@ type UpdateEstablishmentRequest struct {
 	// ExpectedVersion Versão do agregado; incrementa a cada mudança.
 	ExpectedVersion Version `json:"expected_version"`
 	Name            *string `json:"name,omitempty"`
-	Slug            *string `json:"slug,omitempty"`
+
+	// Palette Paleta do catálogo fechado (padrão purple).
+	Palette *Palette `json:"palette,omitempty"`
+
+	// PublicAddress Texto simples; vazio remove.
+	PublicAddress *string `json:"public_address,omitempty"`
+
+	// PublicDescription Texto simples; vazio remove.
+	PublicDescription *string `json:"public_description,omitempty"`
+
+	// PublicPhone Telefone/WhatsApp público (será publicado); normalizado para E.164; vazio remove.
+	PublicPhone *string `json:"public_phone,omitempty"`
+	Slug        *string `json:"slug,omitempty"`
 
 	// Timezone Identificador IANA, ex. America/Sao_Paulo.
 	Timezone *string `json:"timezone,omitempty"`
@@ -2609,9 +3874,14 @@ type UpdateProfessionalRequest struct {
 	ExpectedVersion Version `json:"expected_version"`
 }
 
-// UpdateProfileRequest defines model for UpdateProfileRequest.
+// UpdateProfileRequest Pelo menos `name` ou `appearance`.
 type UpdateProfileRequest struct {
-	Name string `json:"name"`
+	// Appearance Preferência de aparência da pessoa (a cor principal é da loja).
+	Appearance *Appearance `json:"appearance,omitempty"`
+
+	// ExpectedVersion Versão do agregado; incrementa a cada mudança.
+	ExpectedVersion *Version `json:"expected_version,omitempty"`
+	Name            *string  `json:"name,omitempty"`
 }
 
 // UpdateRewardRequest defines model for UpdateRewardRequest.
@@ -2691,6 +3961,27 @@ type VisitorView struct {
 	Nick Nick `json:"nick"`
 }
 
+// AnalyticsCompare defines model for AnalyticsCompare.
+type AnalyticsCompare string
+
+// AnalyticsFrom defines model for AnalyticsFrom.
+type AnalyticsFrom = openapi_types.Date
+
+// AnalyticsMethod defines model for AnalyticsMethod.
+type AnalyticsMethod string
+
+// AnalyticsProfessional Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+type AnalyticsProfessional = Id
+
+// AnalyticsService Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+type AnalyticsService = Id
+
+// AnalyticsTo defines model for AnalyticsTo.
+type AnalyticsTo = openapi_types.Date
+
+// AssetId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+type AssetId = Id
+
 // ChangeRequestId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
 type ChangeRequestId = Id
 
@@ -2700,11 +3991,17 @@ type ChargeId = Id
 // Cursor defines model for Cursor.
 type Cursor = string
 
+// DPoPProof defines model for DPoPProof.
+type DPoPProof = string
+
 // EstablishmentId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
 type EstablishmentId = Id
 
 // IdempotencyKey defines model for IdempotencyKey.
 type IdempotencyKey = string
+
+// ImageSize defines model for ImageSize.
+type ImageSize = int
 
 // InviteId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
 type InviteId = Id
@@ -2785,6 +4082,16 @@ type LoyaltyProgramOk struct {
 	Data LoyaltyProgram `json:"data"`
 }
 
+// MyProfessionalProfileOk defines model for MyProfessionalProfileOk.
+type MyProfessionalProfileOk struct {
+	Data MyProfessionalProfile `json:"data"`
+}
+
+// MyProfileOk defines model for MyProfileOk.
+type MyProfileOk struct {
+	Data MyProfile `json:"data"`
+}
+
 // NotFound RFC 9457 (application/problem+json) com extensões.
 type NotFound = Problem
 
@@ -2838,6 +4145,9 @@ type Unauthorized = Problem
 // Unexpected RFC 9457 (application/problem+json) com extensões.
 type Unexpected = Problem
 
+// UnsupportedMediaType RFC 9457 (application/problem+json) com extensões.
+type UnsupportedMediaType = Problem
+
 // VisitOk defines model for VisitOk.
 type VisitOk struct {
 	Data Visit `json:"data"`
@@ -2848,6 +4158,187 @@ type GetLiveness200JSONResponseBodyStatus string
 
 // GetReadiness200JSONResponseBodyStatus defines parameters for GetReadiness.
 type GetReadiness200JSONResponseBodyStatus string
+
+// GoogleAuthCallbackParams defines parameters for GoogleAuthCallback.
+type GoogleAuthCallbackParams struct {
+	State *string `form:"state,omitempty" json:"state,omitempty"`
+	Code  *string `form:"code,omitempty" json:"code,omitempty"`
+	Error *string `form:"error,omitempty" json:"error,omitempty"`
+}
+
+// GetAnalyticsBreakdownParams defines parameters for GetAnalyticsBreakdown.
+type GetAnalyticsBreakdownParams struct {
+	// From Primeiro dia (data LOCAL da loja), inclusivo.
+	From AnalyticsFrom `form:"from" json:"from"`
+
+	// To Último dia (data LOCAL da loja), inclusivo. Intervalo consultado [from 00:00, to+1 00:00) no fuso da loja; no máximo 366 dias.
+	To AnalyticsTo `form:"to" json:"to"`
+
+	// Compare previous = período anterior equivalente, com o mesmo tempo transcorrido.
+	Compare        *GetAnalyticsBreakdownParamsCompare `form:"compare,omitempty" json:"compare,omitempty"`
+	ProfessionalId *AnalyticsProfessional              `form:"professional_id,omitempty" json:"professional_id,omitempty"`
+	ServiceId      *AnalyticsService                   `form:"service_id,omitempty" json:"service_id,omitempty"`
+	Method         *GetAnalyticsBreakdownParamsMethod  `form:"method,omitempty" json:"method,omitempty"`
+
+	// DPoP Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min.
+	DPoP DPoPProof `json:"DPoP"`
+}
+
+// GetAnalyticsBreakdownParamsCompare defines parameters for GetAnalyticsBreakdown.
+type GetAnalyticsBreakdownParamsCompare string
+
+// GetAnalyticsBreakdownParamsMethod defines parameters for GetAnalyticsBreakdown.
+type GetAnalyticsBreakdownParamsMethod string
+
+// GetAnalyticsBreakdownParamsDimension defines parameters for GetAnalyticsBreakdown.
+type GetAnalyticsBreakdownParamsDimension string
+
+// ListAnalyticsRecordsParams defines parameters for ListAnalyticsRecords.
+type ListAnalyticsRecordsParams struct {
+	BucketStart *Timestamp `form:"bucket_start,omitempty" json:"bucket_start,omitempty"`
+	BucketEnd   *Timestamp `form:"bucket_end,omitempty" json:"bucket_end,omitempty"`
+	Cursor      *string    `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// Ref participations: entered|called|finished; service_items: performed|added
+	Ref *string `form:"ref,omitempty" json:"ref,omitempty"`
+
+	// State financial_issues: open (agora) | opened | resolved (no período)
+	State *ListAnalyticsRecordsParamsState `form:"state,omitempty" json:"state,omitempty"`
+
+	// Kind financial_issues: tipo; loyalty_entries: credited|used|returned|adjusted
+	Kind   *string                         `form:"kind,omitempty" json:"kind,omitempty"`
+	Status *string                         `form:"status,omitempty" json:"status,omitempty"`
+	Dow    *int                            `form:"dow,omitempty" json:"dow,omitempty"`
+	Hour   *int                            `form:"hour,omitempty" json:"hour,omitempty"`
+	Band   *ListAnalyticsRecordsParamsBand `form:"band,omitempty" json:"band,omitempty"`
+
+	// From Primeiro dia (data LOCAL da loja), inclusivo.
+	From AnalyticsFrom `form:"from" json:"from"`
+
+	// To Último dia (data LOCAL da loja), inclusivo. Intervalo consultado [from 00:00, to+1 00:00) no fuso da loja; no máximo 366 dias.
+	To AnalyticsTo `form:"to" json:"to"`
+
+	// Compare previous = período anterior equivalente, com o mesmo tempo transcorrido.
+	Compare        *ListAnalyticsRecordsParamsCompare `form:"compare,omitempty" json:"compare,omitempty"`
+	ProfessionalId *AnalyticsProfessional             `form:"professional_id,omitempty" json:"professional_id,omitempty"`
+	ServiceId      *AnalyticsService                  `form:"service_id,omitempty" json:"service_id,omitempty"`
+	Method         *ListAnalyticsRecordsParamsMethod  `form:"method,omitempty" json:"method,omitempty"`
+
+	// DPoP Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min.
+	DPoP DPoPProof `json:"DPoP"`
+}
+
+// ListAnalyticsRecordsParamsState defines parameters for ListAnalyticsRecords.
+type ListAnalyticsRecordsParamsState string
+
+// ListAnalyticsRecordsParamsBand defines parameters for ListAnalyticsRecords.
+type ListAnalyticsRecordsParamsBand string
+
+// ListAnalyticsRecordsParamsCompare defines parameters for ListAnalyticsRecords.
+type ListAnalyticsRecordsParamsCompare string
+
+// ListAnalyticsRecordsParamsMethod defines parameters for ListAnalyticsRecords.
+type ListAnalyticsRecordsParamsMethod string
+
+// ListAnalyticsRecordsParamsKind defines parameters for ListAnalyticsRecords.
+type ListAnalyticsRecordsParamsKind string
+
+// GetAnalyticsSeriesParams defines parameters for GetAnalyticsSeries.
+type GetAnalyticsSeriesParams struct {
+	Granularity *GetAnalyticsSeriesParamsGranularity `form:"granularity,omitempty" json:"granularity,omitempty"`
+
+	// From Primeiro dia (data LOCAL da loja), inclusivo.
+	From AnalyticsFrom `form:"from" json:"from"`
+
+	// To Último dia (data LOCAL da loja), inclusivo. Intervalo consultado [from 00:00, to+1 00:00) no fuso da loja; no máximo 366 dias.
+	To AnalyticsTo `form:"to" json:"to"`
+
+	// Compare previous = período anterior equivalente, com o mesmo tempo transcorrido.
+	Compare        *GetAnalyticsSeriesParamsCompare `form:"compare,omitempty" json:"compare,omitempty"`
+	ProfessionalId *AnalyticsProfessional           `form:"professional_id,omitempty" json:"professional_id,omitempty"`
+	ServiceId      *AnalyticsService                `form:"service_id,omitempty" json:"service_id,omitempty"`
+	Method         *GetAnalyticsSeriesParamsMethod  `form:"method,omitempty" json:"method,omitempty"`
+
+	// DPoP Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min.
+	DPoP DPoPProof `json:"DPoP"`
+}
+
+// GetAnalyticsSeriesParamsGranularity defines parameters for GetAnalyticsSeries.
+type GetAnalyticsSeriesParamsGranularity string
+
+// GetAnalyticsSeriesParamsCompare defines parameters for GetAnalyticsSeries.
+type GetAnalyticsSeriesParamsCompare string
+
+// GetAnalyticsSeriesParamsMethod defines parameters for GetAnalyticsSeries.
+type GetAnalyticsSeriesParamsMethod string
+
+// GetAnalyticsSeriesParamsMetric defines parameters for GetAnalyticsSeries.
+type GetAnalyticsSeriesParamsMetric string
+
+// OpenAnalyticsStreamParams defines parameters for OpenAnalyticsStream.
+type OpenAnalyticsStreamParams struct {
+	// DPoP Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min.
+	DPoP DPoPProof `json:"DPoP"`
+}
+
+// GetAnalyticsSummaryParams defines parameters for GetAnalyticsSummary.
+type GetAnalyticsSummaryParams struct {
+	// From Primeiro dia (data LOCAL da loja), inclusivo.
+	From AnalyticsFrom `form:"from" json:"from"`
+
+	// To Último dia (data LOCAL da loja), inclusivo. Intervalo consultado [from 00:00, to+1 00:00) no fuso da loja; no máximo 366 dias.
+	To AnalyticsTo `form:"to" json:"to"`
+
+	// Compare previous = período anterior equivalente, com o mesmo tempo transcorrido.
+	Compare        *GetAnalyticsSummaryParamsCompare `form:"compare,omitempty" json:"compare,omitempty"`
+	ProfessionalId *AnalyticsProfessional            `form:"professional_id,omitempty" json:"professional_id,omitempty"`
+	ServiceId      *AnalyticsService                 `form:"service_id,omitempty" json:"service_id,omitempty"`
+	Method         *GetAnalyticsSummaryParamsMethod  `form:"method,omitempty" json:"method,omitempty"`
+
+	// DPoP Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min.
+	DPoP DPoPProof `json:"DPoP"`
+}
+
+// GetAnalyticsSummaryParamsCompare defines parameters for GetAnalyticsSummary.
+type GetAnalyticsSummaryParamsCompare string
+
+// GetAnalyticsSummaryParamsMethod defines parameters for GetAnalyticsSummary.
+type GetAnalyticsSummaryParamsMethod string
+
+// CreateDesktopBindingJSONBody defines parameters for CreateDesktopBinding.
+type CreateDesktopBindingJSONBody struct {
+	Ticket string `json:"ticket"`
+}
+
+// CreateDesktopBindingParams defines parameters for CreateDesktopBinding.
+type CreateDesktopBindingParams struct {
+	// DPoP Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min.
+	DPoP DPoPProof `json:"DPoP"`
+}
+
+// EndDesktopBindingParams defines parameters for EndDesktopBinding.
+type EndDesktopBindingParams struct {
+	// DPoP Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min.
+	DPoP DPoPProof `json:"DPoP"`
+}
+
+// GetDesktopContextParams defines parameters for GetDesktopContext.
+type GetDesktopContextParams struct {
+	// DPoP Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min.
+	DPoP DPoPProof `json:"DPoP"`
+}
+
+// ActivateDesktopInstallationJSONBody defines parameters for ActivateDesktopInstallation.
+type ActivateDesktopInstallationJSONBody struct {
+	// Code Formato XXXX-XXXX-XXXX-XXXX (Crockford).
+	Code string `json:"code"`
+}
+
+// ActivateDesktopInstallationParams defines parameters for ActivateDesktopInstallation.
+type ActivateDesktopInstallationParams struct {
+	// DPoP Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min.
+	DPoP DPoPProof `json:"DPoP"`
+}
 
 // UpdateEstablishmentParams defines parameters for UpdateEstablishment.
 type UpdateEstablishmentParams struct {
@@ -2892,8 +4383,32 @@ type RevokeInviteParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// SetEstablishmentLogoParams defines parameters for SetEstablishmentLogo.
+type SetEstablishmentLogoParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// RemoveEstablishmentLogoParams defines parameters for RemoveEstablishmentLogo.
+type RemoveEstablishmentLogoParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // UpdateLoyaltyProgramParams defines parameters for UpdateLoyaltyProgram.
 type UpdateLoyaltyProgramParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// SetMyProfessionalPhotoParams defines parameters for SetMyProfessionalPhoto.
+type SetMyProfessionalPhotoParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// RemoveMyProfessionalPhotoParams defines parameters for RemoveMyProfessionalPhoto.
+type RemoveMyProfessionalPhotoParams struct {
 	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
@@ -3063,6 +4578,12 @@ type CreateInviteParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// RemoveProfessionalPhotoParams defines parameters for RemoveProfessionalPhoto.
+type RemoveProfessionalPhotoParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // ReactivateProfessionalParams defines parameters for ReactivateProfessional.
 type ReactivateProfessionalParams struct {
 	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
@@ -3186,6 +4707,18 @@ type UpdateMyProfileParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// SetMyAvatarParams defines parameters for SetMyAvatar.
+type SetMyAvatarParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// RemoveMyAvatarParams defines parameters for RemoveMyAvatar.
+type RemoveMyAvatarParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // RequestAccountDeletionParams defines parameters for RequestAccountDeletion.
 type RequestAccountDeletionParams struct {
 	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
@@ -3209,6 +4742,22 @@ type ListMyLoyaltyLedgerParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// UploadMediaParams defines parameters for UploadMedia.
+type UploadMediaParams struct {
+	Purpose MediaPurpose `form:"purpose" json:"purpose"`
+
+	// EstablishmentId Obrigatório para logo e professional_photo.
+	EstablishmentId *Id      `form:"establishment_id,omitempty" json:"establishment_id,omitempty"`
+	CropX           *float32 `form:"crop_x,omitempty" json:"crop_x,omitempty"`
+	CropY           *float32 `form:"crop_y,omitempty" json:"crop_y,omitempty"`
+
+	// CropSize Recorte quadrado normalizado sobre a imagem orientada (x,y relativos a largura/altura; size ao menor lado). Os três juntos ou nenhum.
+	CropSize *float32 `form:"crop_size,omitempty" json:"crop_size,omitempty"`
+
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // OpenEventStreamParams defines parameters for OpenEventStream.
 type OpenEventStreamParams struct {
 	EstablishmentId Id `form:"establishment_id" json:"establishment_id"`
@@ -3228,11 +4777,20 @@ type VerifyEmailJSONRequestBody = TokenRequest
 // ResendVerificationJSONRequestBody defines body for ResendVerification for application/json ContentType.
 type ResendVerificationJSONRequestBody = EmailRequest
 
+// StartGoogleAuthJSONRequestBody defines body for StartGoogleAuth for application/json ContentType.
+type StartGoogleAuthJSONRequestBody = GoogleStartRequest
+
 // AcceptInviteJSONRequestBody defines body for AcceptInvite for application/json ContentType.
 type AcceptInviteJSONRequestBody = AcceptInviteRequest
 
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = LoginRequest
+
+// CancelOwnerTakeoverJSONRequestBody defines body for CancelOwnerTakeover for application/json ContentType.
+type CancelOwnerTakeoverJSONRequestBody = OwnerChallengeRequest
+
+// TakeoverOwnerSessionJSONRequestBody defines body for TakeoverOwnerSession for application/json ContentType.
+type TakeoverOwnerSessionJSONRequestBody = OwnerChallengeRequest
 
 // ConfirmPasswordResetJSONRequestBody defines body for ConfirmPasswordReset for application/json ContentType.
 type ConfirmPasswordResetJSONRequestBody = PasswordResetConfirmRequest
@@ -3252,6 +4810,12 @@ type RegisterAccountJSONRequestBody = RegisterAccountRequest
 // GetDeletionRequestStatusJSONRequestBody defines body for GetDeletionRequestStatus for application/json ContentType.
 type GetDeletionRequestStatusJSONRequestBody = DeletionStatusRequest
 
+// CreateDesktopBindingJSONRequestBody defines body for CreateDesktopBinding for application/json ContentType.
+type CreateDesktopBindingJSONRequestBody CreateDesktopBindingJSONBody
+
+// ActivateDesktopInstallationJSONRequestBody defines body for ActivateDesktopInstallation for application/json ContentType.
+type ActivateDesktopInstallationJSONRequestBody ActivateDesktopInstallationJSONBody
+
 // UpdateEstablishmentJSONRequestBody defines body for UpdateEstablishment for application/json ContentType.
 type UpdateEstablishmentJSONRequestBody = UpdateEstablishmentRequest
 
@@ -3261,8 +4825,20 @@ type ResolveFinancialIssueJSONRequestBody = ResolveIssueRequest
 // RevokeInviteJSONRequestBody defines body for RevokeInvite for application/json ContentType.
 type RevokeInviteJSONRequestBody = EmptyRequest
 
+// SetEstablishmentLogoJSONRequestBody defines body for SetEstablishmentLogo for application/json ContentType.
+type SetEstablishmentLogoJSONRequestBody = SetAssetRequest
+
+// RemoveEstablishmentLogoJSONRequestBody defines body for RemoveEstablishmentLogo for application/json ContentType.
+type RemoveEstablishmentLogoJSONRequestBody = VersionedRequest
+
 // UpdateLoyaltyProgramJSONRequestBody defines body for UpdateLoyaltyProgram for application/json ContentType.
 type UpdateLoyaltyProgramJSONRequestBody = UpdateLoyaltyProgramRequest
+
+// SetMyProfessionalPhotoJSONRequestBody defines body for SetMyProfessionalPhoto for application/json ContentType.
+type SetMyProfessionalPhotoJSONRequestBody = SetProfessionalPhotoRequest
+
+// RemoveMyProfessionalPhotoJSONRequestBody defines body for RemoveMyProfessionalPhoto for application/json ContentType.
+type RemoveMyProfessionalPhotoJSONRequestBody = VersionedRequest
 
 // AdjustClosedOrderJSONRequestBody defines body for AdjustClosedOrder for application/json ContentType.
 type AdjustClosedOrderJSONRequestBody = AdjustOrderRequest
@@ -3342,6 +4918,9 @@ type DeactivateProfessionalJSONRequestBody = VersionedReasonRequest
 // CreateInviteJSONRequestBody defines body for CreateInvite for application/json ContentType.
 type CreateInviteJSONRequestBody = CreateInviteRequest
 
+// RemoveProfessionalPhotoJSONRequestBody defines body for RemoveProfessionalPhoto for application/json ContentType.
+type RemoveProfessionalPhotoJSONRequestBody = VersionedReasonRequiredRequest
+
 // ReactivateProfessionalJSONRequestBody defines body for ReactivateProfessional for application/json ContentType.
 type ReactivateProfessionalJSONRequestBody = VersionedRequest
 
@@ -3404,6 +4983,12 @@ type RecoverVisitorSessionJSONRequestBody = RecoverVisitorSessionRequest
 
 // UpdateMyProfileJSONRequestBody defines body for UpdateMyProfile for application/json ContentType.
 type UpdateMyProfileJSONRequestBody = UpdateProfileRequest
+
+// SetMyAvatarJSONRequestBody defines body for SetMyAvatar for application/json ContentType.
+type SetMyAvatarJSONRequestBody = SetAssetRequest
+
+// RemoveMyAvatarJSONRequestBody defines body for RemoveMyAvatar for application/json ContentType.
+type RemoveMyAvatarJSONRequestBody = VersionedRequest
 
 // RequestAccountDeletionJSONRequestBody defines body for RequestAccountDeletion for application/json ContentType.
 type RequestAccountDeletionJSONRequestBody = RequestDeletionRequest

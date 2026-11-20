@@ -39,7 +39,15 @@ type Public struct {
 	Slug     string
 	Name     string
 	Timezone string
+	// Identidade pública (ADR-0028): paleta do catálogo e informações publicadas pelo dono.
+	Palette     string
+	Description *string
+	Address     *string
+	Phone       *string
+	LogoAssetID *uuid.UUID
 }
+
+const publicColumns = `id, slug, name, timezone, palette, public_description, public_address, public_phone, logo_asset_id`
 
 // ActiveMemberships lista os vínculos ativos da conta em lojas ativas.
 func ActiveMemberships(ctx context.Context, q database.Querier, accountID uuid.UUID) ([]Membership, error) {
@@ -78,19 +86,17 @@ func MembershipsIn(ctx context.Context, q database.Querier, accountID, establish
 
 // PublicBySlug devolve a loja ativa pelo endereço público (link/QR).
 func PublicBySlug(ctx context.Context, q database.Querier, slug string) (Public, error) {
-	return scanPublic(q.QueryRow(ctx, `
-		SELECT id, slug, name, timezone FROM establishment WHERE slug = $1 AND status = 'active'`, slug))
+	return scanPublic(q.QueryRow(ctx, `SELECT `+publicColumns+` FROM establishment WHERE slug = $1 AND status = 'active'`, slug))
 }
 
 // ActiveByID devolve a loja ativa pelo identificador.
 func ActiveByID(ctx context.Context, q database.Querier, id uuid.UUID) (Public, error) {
-	return scanPublic(q.QueryRow(ctx, `
-		SELECT id, slug, name, timezone FROM establishment WHERE id = $1 AND status = 'active'`, id))
+	return scanPublic(q.QueryRow(ctx, `SELECT `+publicColumns+` FROM establishment WHERE id = $1 AND status = 'active'`, id))
 }
 
 func scanPublic(row pgx.Row) (Public, error) {
 	var p Public
-	if err := row.Scan(&p.ID, &p.Slug, &p.Name, &p.Timezone); err != nil {
+	if err := row.Scan(&p.ID, &p.Slug, &p.Name, &p.Timezone, &p.Palette, &p.Description, &p.Address, &p.Phone, &p.LogoAssetID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return Public{}, ErrNotFound
 		}

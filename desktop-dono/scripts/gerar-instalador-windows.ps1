@@ -14,6 +14,9 @@ foreach ($cmd in "node", "npm", "cargo") {
 if ($PainelUrl) { $env:FILA_PAINEL_URL = $PainelUrl }
 Remove-Item Env:FILA_PAINEL_TESTE_LOCAL -ErrorAction SilentlyContinue
 
+# O Dashboard reaproveita estilos e componentes de frontend/src (e as dependências deles).
+npm ci --prefix ..\frontend
+if ($LASTEXITCODE -ne 0) { throw "npm ci do frontend falhou" }
 npm ci
 if ($LASTEXITCODE -ne 0) { throw "npm ci falhou" }
 npm run build:windows

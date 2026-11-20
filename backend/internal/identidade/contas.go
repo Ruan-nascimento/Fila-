@@ -26,6 +26,9 @@ var (
 	errConcurrentSignup   = errors.New("cadastro simultâneo do mesmo e-mail")
 	errInvalidCredentials = &httpserver.Error{Status: 401, Code: "invalid_credentials", Title: "E-mail ou senha incorretos",
 		Detail: "Confira os dados e tente de novo."}
+	// errNoPassword: a conta entra só com o Google (não existe senha para conferir).
+	errNoPassword = &httpserver.Error{Status: 409, Code: "no_password", Title: "Esta conta não tem senha",
+		Detail: "Você entra com o Google. Para confirmar sua identidade, peça um código por e-mail."}
 )
 
 type accountRow struct {
@@ -38,7 +41,8 @@ type accountRow struct {
 
 // findAccount busca a conta não excluída pelo e-mail normalizado (opcionalmente travando a linha).
 func findAccount(ctx context.Context, q database.Querier, emailNorm string, lock bool) (*accountRow, error) {
-	sql := `SELECT id, name, email, status, password_hash FROM account WHERE email_normalized = $1 AND status <> 'deleted'`
+	// Conta só com Google não tem senha: PasswordHash vazio nunca confere com senha nenhuma.
+	sql := `SELECT id, name, email, status, coalesce(password_hash, '') FROM account WHERE email_normalized = $1 AND status <> 'deleted'`
 	if lock {
 		sql += ` FOR UPDATE`
 	}
@@ -326,6 +330,11 @@ func (s *Service) requestPasswordReset(w http.ResponseWriter, r *http.Request) e
 		if err != nil || a == nil || (a.Status != "active" && a.Status != "pending_verification") {
 			return err
 		}
+		if a.PasswordHash == "" {
+			// Conta que entra com o Google: a recuperação de senha não cria uma senha em silêncio.
+			// A resposta continua genérica; o e-mail explica como entrar.
+			return s.mailGoogleOnly(ctx, tx, a.Email, now)
+		}
 		token, err := issueAccountToken(ctx, tx, a.ID, "password_reset", PasswordResetTTL, now)
 		if err != nil {
 			return err
@@ -498,8 +507,12 @@ func (s *Service) checkPassword(ctx context.Context, r *http.Request, accountID 
 		return err
 	}
 	var hash string
-	if err := s.pool.QueryRow(ctx, `SELECT password_hash FROM account WHERE id = $1`, accountID).Scan(&hash); err != nil {
+	if err := s.pool.QueryRow(ctx, `SELECT coalesce(password_hash, '') FROM account WHERE id = $1`, accountID).Scan(&hash); err != nil {
 		return fmt.Errorf("ler senha: %w", err)
+	}
+	if hash == "" {
+		s.hasher.Burn(ctx, password)
+		return errNoPassword
 	}
 	ok, _, err := s.hasher.Verify(ctx, password, hash)
 	if err != nil {

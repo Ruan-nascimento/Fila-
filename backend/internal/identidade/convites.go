@@ -327,6 +327,28 @@ func (s *Service) acceptInvite(w http.ResponseWriter, r *http.Request) error {
 					return err
 				}
 			}
+		case acct.Status == "active" && acct.PasswordHash == "":
+			// Conta existente só com Google: o acesso de equipe exige senha (o Google não serve para
+			// a gestão). O convite chegou ao e-mail da conta, o que prova o endereço; a senha
+			// informada passa a ser a primeira senha da conta. Nenhum privilégio vem do Google.
+			if fe := ValidateNewPassword("/password", *req.Password); fe != nil {
+				return httpserver.ErrValidation(*fe)
+			}
+			hash, err := s.hasher.Hash(ctx, *req.Password)
+			if err != nil {
+				return err
+			}
+			accountID = acct.ID
+			if _, err := tx.Exec(ctx, `UPDATE account SET password_hash = $2, password_changed_at = $3, updated_at = $3
+				WHERE id = $1 AND password_hash IS NULL`, accountID, hash, now); err != nil {
+				return err
+			}
+			if err := auditoria.Record(ctx, tx, auditoria.Event{OccurredAt: now, ActorKind: auditoria.ActorCustomer,
+				ActorID: auditoria.Ptr(accountID), Action: "T-AC-08", TargetType: "account", TargetID: accountID,
+				FromState: "active", ToState: "active", Reason: "primeira senha definida pelo convite (e-mail provado)",
+				RequestID: httpserver.RequestIDFrom(ctx)}); err != nil {
+				return err
+			}
 		case acct.Status == "active":
 			// Conta existente: precisa provar que é a dona dela (senha atual).
 			limits := []limitCheck{lim(rulePasswordAccount, emailNorm), lim(rulePasswordIP, s.clientIP(r))}

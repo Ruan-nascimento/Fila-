@@ -12,6 +12,11 @@ export function setCsrfToken(token: string | null) {
   csrfToken = token;
 }
 
+/** Token CSRF atual (só para o envio de imagens, que manda bytes crus fora do openapi-fetch). */
+export function getCsrfToken(): string | null {
+  return csrfToken;
+}
+
 const safeMethods = new Set(["GET", "HEAD", "OPTIONS"]);
 
 export const csrfMiddleware: Middleware = {

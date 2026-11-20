@@ -74,3 +74,12 @@ type Authorizer interface {
 	// RequireReauth exige confirmação de senha nos últimos 10 minutos (x-reauth).
 	RequireReauth(r *http.Request) error
 }
+
+// DesktopAuthorizer autoriza os pedidos do programa desktop do dono (ADR-0027). Exige, ao mesmo
+// tempo: sessão de dono ocupante da vaga, prova de posse (DPoP) da chave de uma instalação
+// autorizada e vínculo de dono com a loja pedida. Qualquer falha nega.
+type DesktopAuthorizer interface {
+	DesktopOwner(r *http.Request, establishmentID uuid.UUID) (Actor, error)
+	// DesktopRecheck reconfere, sem nova prova, um fluxo aberto com prova válida.
+	DesktopRecheck(r *http.Request, establishmentID uuid.UUID) error
+}

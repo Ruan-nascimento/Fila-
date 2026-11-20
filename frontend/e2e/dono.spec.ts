@@ -4,6 +4,7 @@ import { expect, test, type Page } from "@playwright/test";
 import {
   Api,
   clienteVerificado,
+  confirmarTrocaSeHouver,
   entrarNaFila,
   entrarNaTela,
   limparLimitesDoTeste,
@@ -60,7 +61,7 @@ async function emailNovo(antes: Set<string>, para: string): Promise<string> {
   throw new Error(`convite para ${para} não chegou`);
 }
 
-async function entrarComoDono(page: Page, email: string) {
+async function entrarComoDono(page: Page, email: string): Promise<boolean> {
   await page.goto("/dono");
   await expect(page.getByRole("heading", { name: "Fila Gestão" })).toBeVisible();
   // Login de equipe fixo: sem escolha de cliente nem cadastro de cliente.
@@ -69,12 +70,14 @@ async function entrarComoDono(page: Page, email: string) {
   await page.getByLabel("E-mail").fill(email);
   await page.getByLabel("Senha", { exact: true }).fill(senha);
   await page.getByRole("button", { name: "Entrar" }).click();
+  return confirmarTrocaSeHouver(page);
 }
 
 test("dona de A e profissional de B: só A, URL direta de B recusada, fila de A em tempo real", async ({
   page,
 }) => {
-  await entrarComoDono(page, a.donaEmail);
+  // A preparação deixou a sessão de dono da Ana aberta pela API: o login pede confirmação.
+  expect(await entrarComoDono(page, a.donaEmail)).toBe(true);
   await expect(page).toHaveURL(new RegExp(`/gestao/${a.estId}/filas`));
   await expect(page.getByText(`Barbearia ${a.run}`).first()).toBeVisible();
   // Uma só loja de dono: não há troca de loja, e B não aparece.
@@ -119,7 +122,7 @@ test("conta só profissional é recusada com mensagem clara e Trocar de conta", 
 });
 
 test("navegador comum continua igual: profissional entra por /entrar e opera a loja", async ({ page }) => {
-  await entrarNaTela(page, a.donaEmail, true);
+  await entrarNaTela(page, a.donaEmail, true, a.dona);
   // Fora do modo dono, a Ana tem as duas lojas (dona de A, profissional de B).
   await page.goto("/gestao");
   await expect(page.getByRole("heading", { name: "Gestão" })).toBeVisible();

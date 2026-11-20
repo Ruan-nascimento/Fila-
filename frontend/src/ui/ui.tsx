@@ -10,6 +10,7 @@ import {
   type TextareaHTMLAttributes,
 } from "react";
 import { Link, type LinkProps } from "react-router";
+import type { components } from "../api/schema.gen";
 import { buttonClass, cx, type ButtonVariant } from "./cx";
 import {
   Check,
@@ -702,7 +703,36 @@ export function AmountRow({
   );
 }
 
-export function Avatar({ name, className }: { name: string; className?: string }) {
+export type ImageRef = components["schemas"]["ImageRef"];
+
+/** srcset a partir das variantes prontas do servidor (largura real de cada uma). */
+function srcSetOf(img: ImageRef): string {
+  return img.variants.map((v) => `${v.url} ${v.width}w`).join(", ");
+}
+
+/**
+ * Foto de pessoa (ou iniciais). Tamanho fixo em px: o espaço é reservado antes de a imagem chegar
+ * (sem deslocar o layout). Decorativa por padrão (alt vazio: o nome já está ao lado); com
+ * `label`, a imagem ganha descrição. Falha ao carregar volta para as iniciais.
+ */
+export function Avatar({
+  name,
+  className,
+  image,
+  size = 40,
+  priority = false,
+  label,
+}: {
+  name: string;
+  className?: string;
+  image?: ImageRef | null | undefined;
+  size?: number;
+  /** Acima da dobra (ex.: cabeçalho da conta): carrega já, sem lazy. */
+  priority?: boolean;
+  label?: string | undefined;
+}) {
+  const [failed, setFailed] = useState(false);
+  const src = image?.variants.find((v) => v.width >= size) ?? image?.variants[image.variants.length - 1];
   const initials =
     name
       .trim()
@@ -710,9 +740,26 @@ export function Avatar({ name, className }: { name: string; className?: string }
       .slice(0, 2)
       .map((p) => p[0]?.toUpperCase() ?? "")
       .join("") || "?";
+  if (image && src && !failed)
+    return (
+      <img
+        src={src.url}
+        srcSet={srcSetOf(image)}
+        sizes={`${size}px`}
+        width={size}
+        height={size}
+        alt={label ?? ""}
+        loading={priority ? "eager" : "lazy"}
+        decoding="async"
+        onError={() => setFailed(true)}
+        className={cx("inline-block size-10 shrink-0 rounded-full bg-surface-2 object-cover", className)}
+      />
+    );
   return (
     <span
-      aria-hidden="true"
+      aria-hidden={label ? undefined : "true"}
+      role={label ? "img" : undefined}
+      aria-label={label}
       className={cx(
         "inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-select font-semibold text-accent",
         className,
