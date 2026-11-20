@@ -14,6 +14,7 @@ Regras, decisões e contrato do MVP (etapa 00), usados pelo backend (`backend/`,
 | [contrato/convencoes.md](contrato/convencoes.md) | Envelopes, erros (RFC 9457), paginação, IDs, dinheiro em centavos, datas UTC, idempotência, sessões e CSRF |
 | [contrato/eventos-sse.md](contrato/eventos-sse.md) | Eventos SSE: versão, audiência, cursor pós-commit, snapshot e recuperação |
 | [adr/](adr/README.md) | Decisões de arquitetura (ADR-0001…0028) |
+| [notificacoes.md](notificacoes.md) | Notificações do cliente e da equipe: o que avisa, onde aparece, permissão, aviso de atraso, limites (sem push) |
 | [configuracoes-e-identidade.md](configuracoes-e-identidade.md) | Minha conta, fotos (visibilidade, arquitetura, cache, medições), login com Google só para cliente (com passo a passo do Google Cloud), identidade da loja (16 paletas e contrastes), QR Code, matriz de sessão, ativação e volta atrás, checklist manual |
 | [evidencias.md](evidencias.md) | **Revisão final (etapa 13):** o que foi executado, onde, quando e com que resultado; o que não foi testado e o que depende de fora |
 | [rastreabilidade.md](rastreabilidade.md) | Cada regra → cenários → testes que os citam (gerado) |

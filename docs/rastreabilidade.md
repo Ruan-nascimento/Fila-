@@ -63,6 +63,7 @@ motivo. Teste citado aqui não quer dizer aprovado: o resultado de cada execuç�
 | R-FILA-16 | C-FILA-01, C-FILA-08 | automatizado |
 | R-FILA-17 | C-EST-04, C-FILA-10 | automatizado |
 | R-FILA-18 | C-FILA-03 | automatizado |
+| R-FILA-19 | C-FILA-15 | automatizado |
 | R-CMD-01 | C-EST-02 | automatizado |
 | R-CMD-02 | C-CMD-01, C-FILA-01 | automatizado |
 | R-CMD-03 | C-CMD-02, C-FILA-05 | automatizado |
@@ -129,6 +130,9 @@ motivo. Teste citado aqui não quer dizer aprovado: o resultado de cada execuç�
 | R-WEB-03 | C-SSE-04, C-WEB-03 | automatizado |
 | R-WEB-04 | C-WEB-04 (sem teste) | sem teste |
 | R-WEB-05 | C-WEB-01 | automatizado |
+| R-WEB-06 | C-WEB-05 | automatizado |
+| R-WEB-07 | C-CLI-02 | automatizado |
+| R-WEB-08 | C-CLI-01 | automatizado |
 | R-SEG-01 | C-SEG-07 | automatizado |
 | R-SEG-02 | C-SEG-09 | automatizado |
 | R-SEG-03 | C-SEG-08 | automatizado |
@@ -141,7 +145,7 @@ motivo. Teste citado aqui não quer dizer aprovado: o resultado de cada execuç�
 | R-SEG-10 | C-CMD-07, C-SEG-11 | automatizado |
 | R-SEG-11 | C-EXC-03, C-FID-08, C-OPS-02, C-OPS-03 | automatizado |
 
-Resumo: automatizado: 126 · parcial: 0 · sem teste: 1 · sem cenário: 0 · automatizado (estrutural): 4
+Resumo: automatizado: 130 · parcial: 0 · sem teste: 1 · sem cenário: 0 · automatizado (estrutural): 4
 
 ## 2. Cenários e testes
 
@@ -178,6 +182,10 @@ Resumo: automatizado: 126 · parcial: 0 · sem teste: 1 · sem cenário: 0 · au
 | C-FILA-05 — Serviço inválido ou fila fechada | `backend/internal/api/fila_test.go: TestEntryValidation` |
 | C-FILA-06 — Ordem de chegada determinística | `backend/internal/api/fila_test.go: TestFIFOAndDoubleCall` |
 | C-FILA-14 — Equipe troca a pessoa chamada com a próxima | `backend/internal/api/fila_test.go: TestMoveParticipation` |
+| C-FILA-15 — Cliente avisa que vai atrasar | `backend/internal/api/fila_test.go: TestNoticeLate`<br>`frontend/src/pages/fila/fila.test.tsx: cliente chamado avisa que vai atrasar; a tela confirma e não oferece de novo` |
+| C-WEB-05 — Notificações de cliente e equipe | `frontend/src/features/notificacoes/notificacoes.test.tsx: avisa quando a fila anda, a vez chega, o atendimento começa e termina, sem repetir`<br>`frontend/src/features/notificacoes/notificacoes.test.tsx: entrada, aviso de atraso, pedido de mudança e desistência; ações da equipe não notificam` |
+| C-CLI-01 — Encontrar barbearias por distância, busca e páginas | `backend/internal/api/painel_test.go: TestPublicDirectory`<br>`frontend/src/pages/cliente/painel.test.tsx: sem localização: abertas primeiro, busca e páginas; “Mais perto” pede a localização só no toque` |
+| C-CLI-02 — Painel com as filas em que estou | `backend/internal/api/painel_test.go: TestMyVisits`<br>`frontend/src/pages/cliente/painel.test.tsx: mostra as filas em que a pessoa está, a chamada em destaque e o link da loja` |
 | C-FILA-07 — Duas chamadas simultâneas não ocupam a cadeira duas vezes | `backend/internal/api/fila_test.go: TestFIFOAndDoubleCall` |
 | C-FILA-08 — Fila pública não vaza dados | `backend/internal/api/revisao_test.go: TestPublicQueueLeaksNothing` |
 | C-FILA-09 — Tolerância de 10 minutos e ausência | `backend/internal/api/fila_test.go: TestToleranceAndNoShow`<br>`frontend/e2e/piloto.spec.ts: roteiro do piloto: do primeiro cliente às pendências da dona` |

@@ -3,7 +3,7 @@ name = "fila-gestao"
 version = "0.2.0"
 description = "Fila Gestão: programa do dono da barbearia (abre a gestão do site)"
 edition = "2021"
-rust-version = "1.85"
+rust-version = "1.90"
 publish = false
 
 [lib]
@@ -17,6 +17,9 @@ url = "2"
 [dependencies]
 tauri = { version = "=2.12.5", features = [] }
 tauri-plugin-opener = "=2.7.2"
+# Notificações nativas do sistema para a gestão (troca window.Notification da página pela do
+# sistema). A página remota só recebe as 3 permissões de notificação (capability em lib.rs).
+tauri-plugin-notification = "=2.8.1"
 serde = { version = "1", features = ["derive"] }
 # Só para conferir se o painel responde antes de abri-lo (TLS com raízes embutidas, sem OpenSSL).
 ureq = "=3.5.1"

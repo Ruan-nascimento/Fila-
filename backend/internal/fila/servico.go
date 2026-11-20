@@ -84,18 +84,19 @@ type row struct {
 	EndReason       *string
 	Version         int64
 	CreatedAt       time.Time
+	LateNoticeAt    *time.Time
 }
 
 const rowSelect = `
 	SELECT id, establishment_id, queue_id, order_id, account_id, visitor_id, nick, loyalty_eligible, status, position,
-	       ticket_code, called_at, tolerance_ends_at, started_at, finished_at, end_reason, version, created_at
+	       ticket_code, called_at, tolerance_ends_at, started_at, finished_at, end_reason, version, created_at, late_notice_at
 	FROM participation`
 
 func scanRow(r pgx.Row) (row, error) {
 	var p row
 	err := r.Scan(&p.ID, &p.EstablishmentID, &p.QueueID, &p.OrderID, &p.AccountID, &p.VisitorID, &p.Nick, &p.LoyaltyEligible,
 		&p.Status, &p.Position, &p.TicketCode, &p.CalledAt, &p.ToleranceEndsAt, &p.StartedAt, &p.FinishedAt, &p.EndReason,
-		&p.Version, &p.CreatedAt)
+		&p.Version, &p.CreatedAt, &p.LateNoticeAt)
 	return p, err
 }
 

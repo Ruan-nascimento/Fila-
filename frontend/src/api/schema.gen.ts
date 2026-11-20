@@ -572,6 +572,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/public/establishments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Diretório de barbearias (busca, ordem por distância ou abertas agora, paginado).
+         * @description Só dados públicos da loja e o resumo das filas abertas. `sort`: `distance` (mais perto primeiro,
+         *     lojas sem localização no fim; exige `lat` e `lng`), `open` (com fila aberta primeiro, depois nome;
+         *     padrão sem localização) ou `name` (A–Z). Sem `sort`, usa `distance` quando há `lat`/`lng`.
+         *     A localização do cliente vai só nesta consulta: não é gravada nem registrada em log.
+         *     Distância em linha reta (não é rota). Busca sem diferenciar acentos/maiúsculas no nome e no endereço.
+         *     O cursor vale só para a mesma busca (outra busca/ordem → 400).
+         */
+        get: operations["listPublicEstablishments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/my-visits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Painel do cliente — visitas em andamento em todas as lojas (conta e visitantes deste navegador).
+         * @description Mesmo critério de `getCurrentVisit`, loja por loja: participação ativa, comanda ainda não encerrada
+         *     ou (visitante) encerrada há menos de 24 h. Ordem: chamado, em atendimento, aguardando, depois o resto.
+         *     Conta: até as 20 lojas mais recentes. Sem conta e sem visitante → 401.
+         */
+        get: operations["listMyVisits"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/public/slugs/{slug}": {
         parameters: {
             query?: never;
@@ -747,6 +794,28 @@ export interface paths {
         put?: never;
         /** Chamado → ausente, somente após 10 minutos da chamada (relógio do servidor). */
         post: operations["markNoShow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/establishments/{establishmentId}/participations/{participationId}/late-notice": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * O cliente avisa que vai se atrasar (aguardando ou chamado). Não muda estado nem posição.
+         * @description Grava `late_notice_at`; a equipe vê o aviso na fila e recebe uma notificação. A pessoa continua no
+         *     mesmo lugar até a equipe decidir (por exemplo, `moveParticipation`). Uma nova chamada limpa o aviso.
+         *     Avisar de novo enquanto o aviso está ativo devolve `409 invalid_transition`.
+         */
+        post: operations["noticeLate"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2523,6 +2592,40 @@ export interface components {
             public_address?: string;
             /** @description Telefone/WhatsApp público (será publicado); normalizado para E.164; vazio remove. */
             public_phone?: string;
+            /** @description Localização da barbearia (para o cliente achar as mais próximas). `null` remove. */
+            location?: components["schemas"]["Location"] | null;
+        };
+        /** @description Posição da barbearia em graus decimais (WGS 84). Pública, como o endereço. */
+        Location: {
+            latitude: number;
+            longitude: number;
+        };
+        DirectoryEstablishment: {
+            id: components["schemas"]["Id"];
+            slug: string;
+            name: string;
+            palette: components["schemas"]["Palette"];
+            public_address: string | null;
+            logo: components["schemas"]["ImageRef"] | null;
+            /** @description Em linha reta; nulo sem localização do cliente ou da loja. */
+            distance_meters: number | null;
+            /** @description Filas abertas agora (profissional ativo). */
+            open_queues: number;
+            /** @description Pessoas aguardando nas filas abertas. */
+            waiting_count: number;
+            /** @description Menor espera estimada entre as filas abertas; nulo sem fila aberta. */
+            shortest_wait_minutes: number | null;
+        };
+        MyVisit: {
+            establishment: {
+                id: components["schemas"]["Id"];
+                slug: string;
+                name: string;
+                palette: components["schemas"]["Palette"];
+                logo: components["schemas"]["ImageRef"] | null;
+            };
+            professional_name: string;
+            visit: components["schemas"]["Visit"];
         };
         /**
          * @description Paleta do catálogo fechado (padrão purple).
@@ -2781,6 +2884,8 @@ export interface components {
             version: components["schemas"]["Version"];
             order_id: components["schemas"]["Id"];
             created_at: components["schemas"]["Timestamp"];
+            /** @description O cliente avisou pelo app que vai se atrasar (T-P-12). Nova chamada limpa. */
+            late_notice_at?: components["schemas"]["Timestamp"] | null;
         };
         Order: {
             id: components["schemas"]["Id"];
@@ -2950,6 +3055,8 @@ export interface components {
                 called_at?: components["schemas"]["Timestamp"] | null;
                 tolerance_ends_at?: components["schemas"]["Timestamp"] | null;
                 has_pending_change_request?: boolean;
+                /** @description O cliente avisou pelo app que vai se atrasar (T-P-12). */
+                late_notice_at?: components["schemas"]["Timestamp"] | null;
                 version: components["schemas"]["Version"];
                 /** @description Foto pessoal do cliente com conta, só para a equipe e só com a participação ativa (URL reautorizada a cada pedido). */
                 customer_avatar?: components["schemas"]["ImageRef"] | null;
@@ -2968,6 +3075,7 @@ export interface components {
             logo: components["schemas"]["ImageRef"] | null;
             /** @description Link canônico da loja (origem pública configurada + slug). Base do QR Code. */
             public_url: string;
+            location?: components["schemas"]["Location"] | null;
         };
         Professional: {
             id: components["schemas"]["Id"];
@@ -4475,6 +4583,64 @@ export interface operations {
             default: components["responses"]["Unexpected"];
         };
     };
+    listPublicEstablishments: {
+        parameters: {
+            query?: {
+                /** @description Nome ou endereço. */
+                q?: string;
+                lat?: number;
+                lng?: number;
+                sort?: "distance" | "open" | "name";
+                limit?: components["parameters"]["Limit"];
+                /** @description Cursor opaco de paginação devolvido em page.next_cursor. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Uma página de barbearias. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DirectoryEstablishment"][];
+                        page: components["schemas"]["PageInfo"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    listMyVisits: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Visitas em andamento (pode ser vazia). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["MyVisit"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
     getPublicEstablishmentBySlug: {
         parameters: {
             query?: never;
@@ -4741,6 +4907,35 @@ export interface operations {
         };
     };
     markNoShow: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+                participationId: components["parameters"]["ParticipationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VersionedRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["VisitOk"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyMismatch"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    noticeLate: {
         parameters: {
             query?: never;
             header: {

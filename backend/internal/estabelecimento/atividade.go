@@ -99,6 +99,8 @@ type StaffEntry struct {
 	// CustomerAvatar: foto pessoal do cliente com conta, só para a equipe desta fila e só enquanto
 	// a participação está ativa (a URL é autorizada de novo a cada pedido). Visitante não tem.
 	CustomerAvatar *midia.ImageRef `json:"customer_avatar"`
+	// LateNoticeAt: o cliente avisou pelo app que vai se atrasar (só a equipe vê).
+	LateNoticeAt *time.Time `json:"late_notice_at"`
 }
 
 // PublicSnapshot é o que o público vê de uma fila: só senhas, situação, quantidade e estimativa.

@@ -6,6 +6,7 @@ import {
   Ban,
   ChevronDown,
   Clock,
+  Hourglass,
   Play,
   Scissors,
   UserX,
@@ -242,6 +243,7 @@ function Atual({
             Pedido de alteração aguardando
           </Badge>
         )}
+        {e.late_notice_at && <AvisoAtraso at={e.late_notice_at} />}
         {called && tolerance && (
           <p className="m-0 mt-1 text-sm">
             Tolerância até <strong className="tabular-nums">{time.format(tolerance)}</strong>
@@ -333,6 +335,7 @@ function Aguardando({
           </p>
           <p className="m-0 text-sm text-fg-muted">{e.service_names.join(" + ")}</p>
           {e.has_pending_change_request && <Badge tone="warning">Pedido de alteração aguardando</Badge>}
+          {e.late_notice_at && <AvisoAtraso at={e.late_notice_at} />}
         </div>
         {canOperate && (
           <div className="flex shrink-0 gap-1">
@@ -358,6 +361,15 @@ function Aguardando({
       {canOperate && <ComandaEntrada ctx={ctx} entry={e} onDone={onDone} />}
       {ctx.isOwner && <DonoAcoes ctx={ctx} entry={e} queue={queue} queues={queues} onDone={onDone} />}
     </li>
+  );
+}
+
+/** O cliente avisou pelo app que vai se atrasar (a equipe decide se desce a pessoa). */
+function AvisoAtraso({ at }: { at: string }) {
+  return (
+    <Badge tone="warning" icon={Hourglass} className="mt-1 w-fit">
+      Avisou que vai atrasar · {time.format(new Date(at))}
+    </Badge>
   );
 }
 

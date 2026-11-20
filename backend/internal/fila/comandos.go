@@ -83,7 +83,8 @@ func (s *Service) callNext(w http.ResponseWriter, r *http.Request) error {
 		}
 		now := s.Clock.Now()
 		if _, err := tx.Exec(ctx, `
-			UPDATE participation SET status = 'called', called_at = $2, tolerance_ends_at = $3, version = version + 1, updated_at = $2
+			UPDATE participation SET status = 'called', called_at = $2, tolerance_ends_at = $3, late_notice_at = NULL,
+			       version = version + 1, updated_at = $2
 			WHERE id = $1`, next.ID, now, now.Add(Tolerance)); err != nil {
 			if database.IsUniqueViolation(err, "participation_chair_uq") {
 				return idempotency.Result{}, conflict("professional_busy", "Cadeira ocupada", "Já há um cliente chamado nesta fila.", nil)
@@ -533,8 +534,8 @@ func (s *Service) moveParticipation(w http.ResponseWriter, r *http.Request) erro
 					WHERE id = $1`, first.ID); err != nil {
 					return idempotency.Result{}, err
 				}
-				if _, err := tx.Exec(ctx, `UPDATE participation SET status = 'called', called_at = $2, tolerance_ends_at = $3
-					WHERE id = $1`, second.ID, now, now.Add(Tolerance)); err != nil {
+				if _, err := tx.Exec(ctx, `UPDATE participation SET status = 'called', called_at = $2, tolerance_ends_at = $3,
+					late_notice_at = NULL WHERE id = $1`, second.ID, now, now.Add(Tolerance)); err != nil {
 					return idempotency.Result{}, err
 				}
 			}
@@ -590,4 +591,29 @@ func (s *Service) neighbor(ctx context.Context, tx pgx.Tx, p row, up bool) (row,
 		return scanRow(tx.QueryRow(ctx, rowSelect+` WHERE queue_id = $1 AND status = 'waiting' AND position > $2
 			ORDER BY position LIMIT 1 FOR UPDATE`, p.QueueID, p.Position))
 	}
+}
+
+// ---------------------------------------------------------------------------------------------
+// noticeLate (T-P-12): o próprio cliente (visitante ou conta dono da visita) avisa pelo app que vai
+// se atrasar. Não muda estado nem posição: a equipe vê o aviso, recebe uma notificação e decide
+// (por exemplo, descer a pessoa uma posição com moveParticipation). Uma nova chamada limpa o aviso.
+
+func (s *Service) noticeLate(w http.ResponseWriter, r *http.Request) error {
+	var body versionOnly
+	return s.participationCommand(w, r, "noticeLate", allow{customer: true}, &body,
+		func(tx pgx.Tx, p row, who role, _ map[uuid.UUID]estabelecimento.QueueInfo) (idempotency.Result, error) {
+			ctx := r.Context()
+			if p.Status != Waiting && p.Status != Called {
+				return s.invalid(ctx, tx, p, who, "Só é possível avisar atraso enquanto aguarda ou depois de chamado.")
+			}
+			if p.LateNoticeAt != nil {
+				return s.invalid(ctx, tx, p, who, "A barbearia já foi avisada do seu atraso.")
+			}
+			now := s.Clock.Now()
+			if _, err := tx.Exec(ctx, `UPDATE participation SET late_notice_at = $2, version = version + 1, updated_at = $2 WHERE id = $1`,
+				p.ID, now); err != nil {
+				return idempotency.Result{}, err
+			}
+			return s.finish(ctx, tx, p.EstablishmentID, p.ID, who, "T-P-12", p.Status, p.Status, "", http.StatusOK, p.QueueID)
+		}, func() int64 { return deref(body.ExpectedVersion) }, nil)
 }

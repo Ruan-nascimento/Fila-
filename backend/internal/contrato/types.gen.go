@@ -2243,6 +2243,27 @@ func (e GetAnalyticsSummaryParamsMethod) Valid() bool {
 	}
 }
 
+// Defines values for ListPublicEstablishmentsParamsSort.
+const (
+	ListPublicEstablishmentsParamsSortDistance ListPublicEstablishmentsParamsSort = "distance"
+	ListPublicEstablishmentsParamsSortName     ListPublicEstablishmentsParamsSort = "name"
+	ListPublicEstablishmentsParamsSortOpen     ListPublicEstablishmentsParamsSort = "open"
+)
+
+// Valid indicates whether the value is a known member of the ListPublicEstablishmentsParamsSort enum.
+func (e ListPublicEstablishmentsParamsSort) Valid() bool {
+	switch e {
+	case ListPublicEstablishmentsParamsSortDistance:
+		return true
+	case ListPublicEstablishmentsParamsSortName:
+		return true
+	case ListPublicEstablishmentsParamsSortOpen:
+		return true
+	default:
+		return false
+	}
+}
+
 // AcceptInviteRequest defines model for AcceptInviteRequest.
 type AcceptInviteRequest struct {
 	// Name Obrigatório quando cria conta nova.
@@ -2740,6 +2761,31 @@ type DesktopLinkTicket struct {
 	Ticket    string    `json:"ticket"`
 }
 
+// DirectoryEstablishment defines model for DirectoryEstablishment.
+type DirectoryEstablishment struct {
+	// DistanceMeters Em linha reta; nulo sem localização do cliente ou da loja.
+	DistanceMeters *int `json:"distance_meters"`
+
+	// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	Id   Id        `json:"id"`
+	Logo *ImageRef `json:"logo"`
+	Name string    `json:"name"`
+
+	// OpenQueues Filas abertas agora (profissional ativo).
+	OpenQueues int `json:"open_queues"`
+
+	// Palette Paleta do catálogo fechado (padrão purple).
+	Palette       Palette `json:"palette"`
+	PublicAddress *string `json:"public_address"`
+
+	// ShortestWaitMinutes Menor espera estimada entre as filas abertas; nulo sem fila aberta.
+	ShortestWaitMinutes *int   `json:"shortest_wait_minutes"`
+	Slug                string `json:"slug"`
+
+	// WaitingCount Pessoas aguardando nas filas abertas.
+	WaitingCount int `json:"waiting_count"`
+}
+
 // EmailRequest defines model for EmailRequest.
 type EmailRequest struct {
 	Email openapi_types.Email `json:"email"`
@@ -2754,9 +2800,10 @@ type ErrorCode string
 // Establishment defines model for Establishment.
 type Establishment struct {
 	// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
-	Id   Id        `json:"id"`
-	Logo *ImageRef `json:"logo"`
-	Name string    `json:"name"`
+	Id       Id        `json:"id"`
+	Location *Location `json:"location,omitempty"`
+	Logo     *ImageRef `json:"logo"`
+	Name     string    `json:"name"`
 
 	// Palette Paleta do catálogo fechado (padrão purple).
 	Palette           Palette `json:"palette"`
@@ -2972,6 +3019,12 @@ type LedgerEntrySourceType string
 // LedgerEntryKind defines model for LedgerEntryKind.
 type LedgerEntryKind string
 
+// Location Posição da barbearia em graus decimais (WGS 84). Pública, como o endereço.
+type Location struct {
+	Latitude  float32 `json:"latitude"`
+	Longitude float32 `json:"longitude"`
+}
+
 // LoginRequest defines model for LoginRequest.
 type LoginRequest struct {
 	Context  SessionKind         `json:"context"`
@@ -3091,6 +3144,22 @@ type MyProfile struct {
 
 	// Version Versão do agregado; incrementa a cada mudança.
 	Version Version `json:"version"`
+}
+
+// MyVisit defines model for MyVisit.
+type MyVisit struct {
+	Establishment struct {
+		// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+		Id   Id        `json:"id"`
+		Logo *ImageRef `json:"logo"`
+		Name string    `json:"name"`
+
+		// Palette Paleta do catálogo fechado (padrão purple).
+		Palette Palette `json:"palette"`
+		Slug    string  `json:"slug"`
+	} `json:"establishment"`
+	ProfessionalName string `json:"professional_name"`
+	Visit            Visit  `json:"visit"`
 }
 
 // Nick Texto puro (normalizado NFC, sem caracteres de controle). Exibido sempre como texto, nunca HTML.
@@ -3267,6 +3336,9 @@ type Participation struct {
 
 	// IdentityKind Só para equipe.
 	IdentityKind *ParticipationIdentityKind `json:"identity_kind,omitempty"`
+
+	// LateNoticeAt O cliente avisou pelo app que vai se atrasar (T-P-12). Nova chamada limpa.
+	LateNoticeAt *Timestamp `json:"late_notice_at,omitempty"`
 
 	// LoyaltyEligible Snapshot registrado na entrada.
 	LoyaltyEligible *bool `json:"loyalty_eligible,omitempty"`
@@ -3777,6 +3849,9 @@ type StaffQueue struct {
 		CustomerAvatar          *ImageRef `json:"customer_avatar,omitempty"`
 		HasPendingChangeRequest *bool     `json:"has_pending_change_request,omitempty"`
 
+		// LateNoticeAt O cliente avisou pelo app que vai se atrasar (T-P-12).
+		LateNoticeAt *Timestamp `json:"late_notice_at,omitempty"`
+
 		// Nick Texto puro (normalizado NFC, sem caracteres de controle). Exibido sempre como texto, nunca HTML.
 		Nick Nick `json:"nick"`
 
@@ -3869,7 +3944,10 @@ type TransferRequestCustomerConsentMethod string
 type UpdateEstablishmentRequest struct {
 	// ExpectedVersion Versão do agregado; incrementa a cada mudança.
 	ExpectedVersion Version `json:"expected_version"`
-	Name            *string `json:"name,omitempty"`
+
+	// Location Localização da barbearia (para o cliente achar as mais próximas). `null` remove.
+	Location *Location `json:"location,omitempty"`
+	Name     *string   `json:"name,omitempty"`
 
 	// Palette Paleta do catálogo fechado (padrão purple).
 	Palette *Palette `json:"palette,omitempty"`
@@ -4566,6 +4644,12 @@ type InterruptServiceParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// NoticeLateParams defines parameters for NoticeLate.
+type NoticeLateParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // MoveParticipationParams defines parameters for MoveParticipation.
 type MoveParticipationParams struct {
 	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
@@ -4794,6 +4878,22 @@ type UploadMediaParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// ListPublicEstablishmentsParams defines parameters for ListPublicEstablishments.
+type ListPublicEstablishmentsParams struct {
+	// Q Nome ou endereço.
+	Q     *string                             `form:"q,omitempty" json:"q,omitempty"`
+	Lat   *float32                            `form:"lat,omitempty" json:"lat,omitempty"`
+	Lng   *float32                            `form:"lng,omitempty" json:"lng,omitempty"`
+	Sort  *ListPublicEstablishmentsParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
+	Limit *Limit                              `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor Cursor opaco de paginação devolvido em page.next_cursor.
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// ListPublicEstablishmentsParamsSort defines parameters for ListPublicEstablishments.
+type ListPublicEstablishmentsParamsSort string
+
 // OpenEventStreamParams defines parameters for OpenEventStream.
 type OpenEventStreamParams struct {
 	EstablishmentId Id `form:"establishment_id" json:"establishment_id"`
@@ -4932,6 +5032,9 @@ type CompleteServiceJSONRequestBody = CompleteServiceRequest
 
 // InterruptServiceJSONRequestBody defines body for InterruptService for application/json ContentType.
 type InterruptServiceJSONRequestBody = InterruptServiceRequest
+
+// NoticeLateJSONRequestBody defines body for NoticeLate for application/json ContentType.
+type NoticeLateJSONRequestBody = VersionedRequest
 
 // MoveParticipationJSONRequestBody defines body for MoveParticipation for application/json ContentType.
 type MoveParticipationJSONRequestBody = MoveParticipationRequest

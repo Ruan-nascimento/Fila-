@@ -15,7 +15,9 @@ use std::{sync::Arc, sync::OnceLock, time::Duration};
 
 use serde::Serialize;
 use serde_json::Value;
-use tauri::{webview::PageLoadEvent, AppHandle, Manager, State, Url, WebviewUrl, WebviewWindowBuilder};
+use tauri::{
+    ipc::CapabilityBuilder, webview::PageLoadEvent, AppHandle, Manager, State, Url, WebviewUrl, WebviewWindowBuilder,
+};
 use tauri_plugin_opener::OpenerExt;
 
 use api::{Consulta, ErroApi, Estado, Instalacao};
@@ -275,6 +277,9 @@ fn esquecer_instalacao(app: AppHandle, estado: State<'_, Arc<Estado>>) -> Result
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        // Notificações da gestão (entrou na fila, saiu, avisou atraso, pediu mudança). O plugin
+        // troca `window.Notification` da página pela notificação nativa do sistema.
+        .plugin(tauri_plugin_notification::init())
         .manage(Arc::new(Estado::new(PAINEL_URL)))
         .invoke_handler(tauri::generate_handler![
             painel,
@@ -291,6 +296,18 @@ pub fn run() {
             esquecer_instalacao
         ])
         .setup(|app| {
+            // A gestão é uma página REMOTA (origem do painel). Ela não tem acesso a nenhum comando
+            // do programa (capability "carregador" é só local); a única exceção são as três
+            // permissões de notificação, e só para a origem do painel nesta janela.
+            app.add_capability(
+                CapabilityBuilder::new("painel-notificacoes")
+                    .remote(format!("{}/*", origem().origin().ascii_serialization()))
+                    .local(false)
+                    .window("principal")
+                    .permission("notification:allow-is-permission-granted")
+                    .permission("notification:allow-request-permission")
+                    .permission("notification:allow-notify"),
+            )?;
             let handle = app.handle().clone();
             let handle_atalho = app.handle().clone();
             if cfg!(debug_assertions) {

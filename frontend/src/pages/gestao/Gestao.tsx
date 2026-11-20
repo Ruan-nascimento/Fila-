@@ -21,6 +21,7 @@ import { useBrandChanged, useStoreBrand } from "../../features/theme/tema";
 import { useSession } from "../../session/context";
 import { StreamProvider, StreamStatusNotice } from "../../stream/StreamProvider";
 import { AvisosGerais } from "../../ui/estados";
+import { ConviteNotificacoes, NotificacoesProvider, Sino } from "../../features/notificacoes/Notificacoes";
 import { Brand, SkipLink, type StoreMark } from "../../ui/layout";
 import { EmptyState, Loading, Notice, PageHeader, type IconType } from "../../ui/ui";
 import { cx } from "../../ui/cx";
@@ -177,7 +178,13 @@ export function GestaoLoja() {
     // Uma conexão de atualizações para toda a área da equipe desta loja. O layout muda só por CSS
     // (a mesma árvore em qualquer largura): trocar de tamanho não abre outra conexão.
     <StreamProvider estId={estId} channels={ctx.isOwner ? ["owner"] : ["professional"]}>
-      <StaffShell ctx={ctx} base={base} userName={account?.name ?? ""} multipleStores={stores > 1}>
+      <StaffShell
+        ctx={ctx}
+        base={base}
+        userName={account?.name ?? ""}
+        accountId={account?.id ?? ""}
+        multipleStores={stores > 1}
+      >
         <Routes>
           <Route path="filas/:queueId?" element={<Filas ctx={ctx} />} />
           <Route path="comandas/:orderId?" element={<Comandas ctx={ctx} />} />
@@ -206,12 +213,14 @@ function StaffShell({
   ctx,
   base,
   userName,
+  accountId,
   multipleStores,
   children,
 }: {
   ctx: StaffContext;
   base: string;
   userName: string;
+  accountId: string;
   multipleStores: boolean;
   children: ReactNode;
 }) {
@@ -221,89 +230,100 @@ function StaffShell({
   const marca = useMarcaDaLoja(ctx.estId);
   const store = { name: marca?.name ?? ctx.estName, logo: marca?.logo };
   return (
-    <div className="min-h-dvh bg-bg lg:grid lg:grid-cols-[16rem_minmax(0,1fr)]">
-      <SkipLink />
-      {/* Computador: navegação lateral agrupada por atividade */}
-      <aside className="sticky top-0 hidden h-dvh flex-col border-r border-line bg-surface lg:flex">
-        <div className="px-4 pt-4 pb-2">
-          <Brand to={`${base}/filas`} store={store} sub="Gestão" />
-        </div>
-        <nav aria-label="Gestão da loja" className="flex-1 overflow-y-auto px-3 py-2">
-          {ctx.isOwner && (
-            <div className="mb-3">
-              <BotaoDashboard estId={ctx.estId} />
-            </div>
-          )}
-          {gs.map((g) => (
-            <div key={g.title} className="mb-4">
-              <p className="m-0 mb-1 px-3 text-xs font-semibold tracking-wide text-fg-muted uppercase">
-                {g.title}
-              </p>
-              <ul className="m-0 grid list-none gap-0.5 p-0">
-                {g.items.map((d) => (
-                  <li key={d.path}>
-                    <NavLink to={`${base}/${d.path}`} className={navItemClass}>
-                      <d.icon aria-hidden="true" className="size-5" />
-                      {d.label}
-                    </NavLink>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </nav>
-        <div className="grid gap-1 border-t border-line p-3">
-          {multipleStores && (
-            <Link
-              to="/gestao"
-              className="flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm text-fg no-underline hover:bg-surface-2"
-            >
-              <ArrowLeftRight aria-hidden="true" className="size-5" />
-              Trocar de loja
-            </Link>
-          )}
-          <Link
-            to="/conta"
-            className="flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm text-fg no-underline hover:bg-surface-2"
-          >
-            <UserRound aria-hidden="true" className="size-5" />
-            <span className="grid min-w-0 leading-tight">
-              <span className="font-medium">Minha conta</span>
-              <span className="truncate text-xs text-fg-muted">
-                {userName ? `${userName} · ${role}` : role}
-              </span>
-            </span>
-          </Link>
-        </div>
-      </aside>
-
-      <div className="flex min-h-dvh min-w-0 flex-col">
-        {/* Celular e tablet: barra superior com a loja em operação */}
-        <header className="sticky top-0 z-30 border-b border-line bg-surface/95 backdrop-blur lg:hidden">
-          <div className="flex items-center justify-between gap-3 px-4 py-1.5">
+    // Barbeiro e dono recebem as mesmas notificações (cada um das filas que pode ver).
+    <NotificacoesProvider
+      papel="equipe"
+      escopo={`equipe:${ctx.estId}:${accountId}`}
+      destino={(n) => (n.queueId ? `${base}/filas/${n.queueId}` : `${base}/filas`)}
+      icon={marca?.logo?.variants[0]?.url}
+    >
+      <div className="min-h-dvh bg-bg lg:grid lg:grid-cols-[16rem_minmax(0,1fr)]">
+        <SkipLink />
+        {/* Computador: navegação lateral agrupada por atividade */}
+        <aside className="sticky top-0 z-30 hidden h-dvh flex-col border-r border-line bg-surface lg:flex">
+          <div className="flex items-center justify-between gap-1 px-4 pt-4 pb-2">
             <Brand to={`${base}/filas`} store={store} sub="Gestão" />
-            {ctx.isOwner && <BotaoDashboard estId={ctx.estId} compact />}
+            <Sino abrirPara="direita" />
+          </div>
+          <nav aria-label="Gestão da loja" className="flex-1 overflow-y-auto px-3 py-2">
+            {ctx.isOwner && (
+              <div className="mb-3">
+                <BotaoDashboard estId={ctx.estId} />
+              </div>
+            )}
+            {gs.map((g) => (
+              <div key={g.title} className="mb-4">
+                <p className="m-0 mb-1 px-3 text-xs font-semibold tracking-wide text-fg-muted uppercase">
+                  {g.title}
+                </p>
+                <ul className="m-0 grid list-none gap-0.5 p-0">
+                  {g.items.map((d) => (
+                    <li key={d.path}>
+                      <NavLink to={`${base}/${d.path}`} className={navItemClass}>
+                        <d.icon aria-hidden="true" className="size-5" />
+                        {d.label}
+                      </NavLink>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </nav>
+          <div className="grid gap-1 border-t border-line p-3">
+            {multipleStores && (
+              <Link
+                to="/gestao"
+                className="flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm text-fg no-underline hover:bg-surface-2"
+              >
+                <ArrowLeftRight aria-hidden="true" className="size-5" />
+                Trocar de loja
+              </Link>
+            )}
             <Link
               to="/conta"
-              aria-label={`Minha conta (${role})`}
-              className="inline-flex size-11 items-center justify-center rounded-lg text-fg hover:bg-surface-2"
+              className="flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm text-fg no-underline hover:bg-surface-2"
             >
               <UserRound aria-hidden="true" className="size-5" />
+              <span className="grid min-w-0 leading-tight">
+                <span className="font-medium">Minha conta</span>
+                <span className="truncate text-xs text-fg-muted">
+                  {userName ? `${userName} · ${role}` : role}
+                </span>
+              </span>
             </Link>
           </div>
-        </header>
-        <main
-          id="conteudo"
-          tabIndex={-1}
-          className="mx-auto grid w-full max-w-6xl flex-1 content-start gap-4 px-4 pt-5 pb-28 outline-none sm:px-6 lg:px-8 lg:pt-8 lg:pb-12"
-        >
-          <AvisosGerais />
-          <StreamStatusNotice />
-          {children}
-        </main>
-        <BottomNav base={base} groups={gs} multipleStores={multipleStores} />
+        </aside>
+
+        <div className="flex min-h-dvh min-w-0 flex-col">
+          {/* Celular e tablet: barra superior com a loja em operação */}
+          <header className="sticky top-0 z-30 border-b border-line bg-surface/95 backdrop-blur lg:hidden">
+            <div className="flex items-center justify-between gap-3 px-4 py-1.5">
+              <Brand to={`${base}/filas`} store={store} sub="Gestão" />
+              <Sino className="ml-auto" />
+              {ctx.isOwner && <BotaoDashboard estId={ctx.estId} compact />}
+              <Link
+                to="/conta"
+                aria-label={`Minha conta (${role})`}
+                className="inline-flex size-11 items-center justify-center rounded-lg text-fg hover:bg-surface-2"
+              >
+                <UserRound aria-hidden="true" className="size-5" />
+              </Link>
+            </div>
+          </header>
+          <main
+            id="conteudo"
+            tabIndex={-1}
+            className="mx-auto grid w-full max-w-6xl flex-1 content-start gap-4 px-4 pt-5 pb-28 outline-none sm:px-6 lg:px-8 lg:pt-8 lg:pb-12"
+          >
+            <AvisosGerais />
+            <StreamStatusNotice />
+            <ConviteNotificacoes texto="Quer ser avisado quando alguém entrar na fila, sair, avisar que vai atrasar ou pedir mudança na comanda? Ative as notificações neste aparelho." />
+            {children}
+          </main>
+          <BottomNav base={base} groups={gs} multipleStores={multipleStores} />
+        </div>
       </div>
-    </div>
+    </NotificacoesProvider>
   );
 }
 

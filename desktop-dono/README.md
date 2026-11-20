@@ -32,7 +32,9 @@ O que decide a permissão continua sendo **o servidor**: cada pedido é autoriza
 **Segurança da janela.**
 - Em produção, o programa só abre a origem HTTPS fixada na compilação. Qualquer navegação para outra origem é bloqueada: links `https`, `mailto` e `tel` vão para o navegador padrão, e o resto é ignorado.
 - Se a janela parar fora da origem (por exemplo, numa página de erro do WebView), ela volta à tela local.
-- As páginas do painel **não** têm acesso a nenhum comando do programa: só a tela local tem, conforme `src-tauri/capabilities/carregador.json`.
+- As páginas do painel **não** têm acesso a nenhum comando do programa: só a tela local tem, conforme `src-tauri/capabilities/carregador.json`. Única exceção: as notificações (abaixo).
+
+**Notificações.** A gestão avisa quando alguém entra na fila, sai, avisa que vai atrasar ou pede mudança na comanda ([docs/notificacoes.md](../docs/notificacoes.md)). No programa, o `tauri-plugin-notification` troca a notificação do navegador pela nativa do Windows/Linux. A página remota recebe, por uma capability criada em `src/lib.rs` (`painel-notificacoes`), **só** as permissões `notification:allow-is-permission-granted`, `allow-request-permission` e `allow-notify`, **só** para a origem do painel e **só** na janela principal. Com o programa em primeiro plano, o aviso aparece dentro da tela; minimizado ou atrás de outra janela, vira notificação do sistema.
 
 ## Dashboard: como a mesma sessão chega aos gráficos
 
@@ -175,3 +177,4 @@ O cenário `dashboard` usa o cofre de chaves real da sessão e, na primeira exec
 - Sem assinatura de código: há aviso do SmartScreen no Windows.
 - O cofre de chaves no Linux exige o chaveiro da sessão (Secret Service). Sem ele, o Dashboard explica o erro e a gestão continua funcionando.
 - O Dashboard é recarregado com o programa: mudanças na interface dos gráficos exigem um instalador novo.
+- Notificações só chegam com o programa aberto (pode estar minimizado). Para receber as notificações, gere um instalador novo (versão com o plugin).

@@ -25,6 +25,19 @@ func (s *Service) CustomerIdentities(r *http.Request, estID uuid.UUID) (account,
 	return account, visitor
 }
 
+// AllCustomerIdentities implementa acesso.Customers: a conta e os visitantes de todas as lojas.
+func (s *Service) AllCustomerIdentities(r *http.Request) (account *acesso.Identity, visitors map[uuid.UUID]*acesso.Identity) {
+	p := PrincipalFrom(r.Context())
+	if p.Session != nil {
+		account = &acesso.Identity{Kind: acesso.IdentityAccount, AccountID: p.Session.AccountID, Name: shortName(p.Session.AccountName)}
+	}
+	visitors = map[uuid.UUID]*acesso.Identity{}
+	for _, v := range p.Visitors {
+		visitors[v.EstablishmentID] = &acesso.Identity{Kind: acesso.IdentityVisitor, VisitorID: v.VisitorID, Name: v.Nick}
+	}
+	return account, visitors
+}
+
 var _ acesso.Customers = (*Service)(nil)
 
 // shortName cabe no limite de nick (30 caracteres) usado na fila.

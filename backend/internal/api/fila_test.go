@@ -773,3 +773,57 @@ func TestMoveParticipation(t *testing.T) {
 		t.Fatalf("subir acima de quem está em atendimento: %s", r.raw)
 	}
 }
+
+// C-FILA-15 — o cliente avisa que vai atrasar; a equipe vê; nova chamada limpa (T-P-12).
+func TestNoticeLate(t *testing.T) {
+	e := newEnv(t)
+	b := e.barbearia(t)
+	maria := e.visitorIn(b.id, "Maria")
+	pm, _ := visitOf(maria.mustStatus(maria.enter(b.id, b.filaBeto, b.corte), 201))
+	joao := e.visitorIn(b.id, "João")
+	joao.mustStatus(joao.enter(b.id, b.filaBeto, b.corte), 201)
+	id := pm["id"].(string)
+	version := func() int64 {
+		var v int64
+		if err := e.pool.QueryRow(context.Background(), `SELECT version FROM participation WHERE id = $1`, id).Scan(&v); err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	cl, _ := visitOf(b.betoB.mustStatus(b.betoB.callNext(b.id, b.filaBeto), 200))
+	tolerance := cl["tolerance_ends_at"]
+
+	// Equipe não usa o aviso do cliente; outro cliente não enxerga a visita.
+	if r := b.betoB.partCmd(b.id, id, "late-notice", map[string]any{"expected_version": version()}); r.status != 403 {
+		t.Fatalf("equipe avisando atraso: %d %s", r.status, r.raw)
+	}
+	if r := joao.partCmd(b.id, id, "late-notice", map[string]any{"expected_version": version()}); r.status != 404 {
+		t.Fatalf("outro cliente avisando atraso: %d %s", r.status, r.raw)
+	}
+	e.clock.Advance(2 * time.Minute)
+	r := maria.mustStatus(maria.partCmd(b.id, id, "late-notice", map[string]any{"expected_version": version()}), 200)
+	p, _ := visitOf(r)
+	if p["status"] != "called" || p["late_notice_at"] == nil || p["tolerance_ends_at"] != tolerance {
+		t.Fatalf("aviso não deveria mudar estado nem tolerância: %s", r.raw)
+	}
+	if r := maria.partCmd(b.id, id, "late-notice", map[string]any{"expected_version": version()}); r.code() != "invalid_transition" {
+		t.Fatalf("aviso repetido: %s", r.raw)
+	}
+	// A fila da equipe mostra o aviso.
+	q := b.betoB.mustStatus(b.betoB.do("GET", estPath(b.id, "/queues"), nil), 200)
+	if !strings.Contains(string(q.raw), `"late_notice_at":"`) {
+		t.Fatalf("fila da equipe sem o aviso: %s", q.raw)
+	}
+	// Beto desce Maria (João é chamado); João é cancelado e Maria é chamada de novo: aviso limpo.
+	b.betoB.mustStatus(b.betoB.partCmd(b.id, id, "move", map[string]any{"expected_version": version(), "direction": "down"}), 200)
+	var joaoID string
+	var jv int64
+	if err := e.pool.QueryRow(context.Background(), `SELECT id::text, version FROM participation WHERE nick = 'João'`).Scan(&joaoID, &jv); err != nil {
+		t.Fatal(err)
+	}
+	b.owner.mustStatus(b.owner.partCmd(b.id, joaoID, "cancel", map[string]any{"expected_version": jv, "reason": "teste"}), 200)
+	r = b.betoB.mustStatus(b.betoB.callNext(b.id, b.filaBeto), 200)
+	if p, _ := visitOf(r); p["id"] != id || p["late_notice_at"] != nil {
+		t.Fatalf("nova chamada deveria limpar o aviso: %s", r.raw)
+	}
+}
