@@ -177,6 +177,96 @@ describe("Filas", () => {
   });
 });
 
+describe("Mudar de lugar na fila", () => {
+  const entry = (id: string, code: string, nick: string, status: string, version: number) => ({
+    participation_id: `0190a000-0000-7000-8000-00000000${id}`,
+    order_id: `0190a000-0000-7000-8000-00000001${id}`,
+    ticket_code: code,
+    nick,
+    status,
+    service_names: ["Corte"],
+    called_at: status === "called" ? "2026-11-12T12:00:00Z" : null,
+    tolerance_ends_at: status === "called" ? "2026-11-12T12:10:00Z" : null,
+    has_pending_change_request: false,
+    version,
+  });
+  const fila = {
+    queue_id: QUEUE,
+    professional: { id: PRO, display_name: "Beto", status: "active" },
+    status: "open",
+    version: 2,
+    unavailable_signal: { active: false, note: null, since: null },
+    entries: [
+      entry("0a01", "A001", "Maria", "called", 2),
+      entry("0a02", "A002", "João", "waiting", 1),
+      entry("0a03", "A003", "Lia", "waiting", 1),
+    ],
+  };
+
+  it("barbeiro desce quem foi chamado e sobe quem aguarda, com versão e direção", async () => {
+    const moves: { path: string; body: unknown }[] = [];
+    fakeApi({
+      "GET /v1/session": () => Response.json(staffSession("professional")),
+      [`GET /v1/establishments/${EST}/queues`]: () => Response.json({ data: [fila], cursor: null }),
+      [`POST /v1/establishments/${EST}/participations/0190a000-0000-7000-8000-000000000a01/move`]: (
+        r,
+        body,
+      ) => {
+        moves.push({ path: r.url, body });
+        return Response.json({ data: {} });
+      },
+      [`POST /v1/establishments/${EST}/participations/0190a000-0000-7000-8000-000000000a03/move`]: (
+        r,
+        body,
+      ) => {
+        moves.push({ path: r.url, body });
+        return Response.json({ data: {} });
+      },
+    });
+    renderGestao(`/gestao/${EST}/filas`);
+    fireEvent.click(await screen.findByRole("button", { name: "Vai atrasar: chamar o próximo" }));
+    await waitFor(() => expect(moves).toHaveLength(1));
+    expect(moves[0]?.body).toEqual({ expected_version: 2, direction: "down" });
+    // Último da fila não desce; o primeiro que aguarda pode subir (troca com a chamada).
+    expect(await screen.findByRole("button", { name: "Descer A003 · Lia uma posição" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Subir A002 · João e chamar agora" })).toBeEnabled();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Subir A003 · Lia uma posição" })).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Subir A003 · Lia uma posição" }));
+    await waitFor(() => expect(moves).toHaveLength(2));
+    expect(moves[1]?.body).toEqual({ expected_version: 1, direction: "up" });
+  });
+});
+
+describe("Identidade da loja na gestão", () => {
+  it("canto superior esquerdo mostra o nome e a logo atuais da loja", async () => {
+    fakeApi({
+      "GET /v1/session": () => Response.json(staffSession("owner")),
+      [`GET /v1/establishments/${EST}/queues`]: () => Response.json({ data: [], cursor: null }),
+      [`GET /v1/establishments/${EST}`]: () =>
+        Response.json({
+          data: {
+            id: EST,
+            name: "Barbearia Nova",
+            slug: "barbearia-nova",
+            timezone: "America/Sao_Paulo",
+            version: 3,
+            palette: "blue",
+            public_description: null,
+            public_address: null,
+            public_phone: null,
+            logo: { variants: [{ size: 128, width: 128, height: 128, url: "/v1/public/media/x/128" }] },
+            public_url: "https://exemplo.com/loja/barbearia-nova",
+          },
+        }),
+    });
+    const { container } = renderGestao(`/gestao/${EST}/filas`);
+    expect((await screen.findAllByText("Barbearia Nova")).length).toBeGreaterThan(0);
+    expect(container.querySelector('img[src="/v1/public/media/x/128"]')).not.toBeNull();
+  });
+});
+
 describe("Profissionais", () => {
   it("pede a senha quando o servidor exige reautenticação e repete com a mesma chave", async () => {
     const pro = {

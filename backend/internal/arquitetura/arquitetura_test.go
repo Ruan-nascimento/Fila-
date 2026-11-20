@@ -79,7 +79,7 @@ var tableOwners = map[string][]string{
 		"owner_session_slot", "owner_session_challenge", "desktop_activation_code", "desktop_installation", "desktop_link_ticket",
 		"desktop_binding", "desktop_proof_seen", "external_identity", "oidc_transaction"},
 	"midia":                {"media_asset"},
-	"estabelecimento":      {"establishment", "professional", "staff_membership", "queue"},
+	"estabelecimento":      {"establishment", "establishment_slug_alias", "professional", "staff_membership", "queue"},
 	"catalogo":             {"service", "service_professional", "service_revision"},
 	"fila":                 {"participation", "participation_transfer", "queue_counter"},
 	"atendimento":          {"service_order", "order_item", "change_request", "change_request_addition", "order_adjustment"},

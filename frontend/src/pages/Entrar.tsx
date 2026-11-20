@@ -49,7 +49,14 @@ export function Entrar({
     // Volta para a loja de onde veio (contexto mantido); equipe vai para a gestão.
     navigate(voltar ?? (shop ? `/loja/${shop.slug}` : context === "staff" ? "/gestao" : "/conta"));
   }
-  const lojaVolta = voltar?.startsWith("/loja/") ? voltar : shop ? `/loja/${shop.slug}` : undefined;
+  // Volta para a loja sempre pelo endereço ATUAL (o link pode ter vindo de um QR com o nome antigo).
+  const lojaVolta = voltar?.startsWith("/loja/")
+    ? shop
+      ? voltar.replace(/^\/loja\/[^/?#]+/, `/loja/${shop.slug}`)
+      : voltar
+    : shop
+      ? `/loja/${shop.slug}`
+      : undefined;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();

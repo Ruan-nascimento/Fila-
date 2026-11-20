@@ -69,7 +69,8 @@ Estados: `waiting` (aguardando), `called` (chamado), `in_service` (em atendiment
 ```mermaid
 stateDiagram-v2
   [*] --> waiting: T-P-01
-  waiting --> waiting: T-P-07 transferência
+  waiting --> waiting: T-P-07 transferência / T-P-11 mudar de lugar
+  called --> waiting: T-P-11 descer (troca com o próximo)
   waiting --> called: T-P-02
   called --> in_service: T-P-03
   waiting --> cancelled: T-P-04/05/10
@@ -91,6 +92,7 @@ stateDiagram-v2
 | T-P-08 | in_service → completed | profissional (own_queue) / dono | Sem solicitação `pending`; cada item aceito com resultado (`performed`/`not_performed`+motivo); ≥1 `performed` | Libera cadeira; comanda fecha valor (T-O-04) | IK + VE (participação e comanda) | A | `change_request_pending`, `performed_item_required`, `version_conflict` | `completeService` |
 | T-P-09 | in_service → interrupted | profissional (own_queue) / dono | Motivo; resultado de cada item (`fully_performed`/`partially_performed`/`not_started`) | Libera cadeira; comanda → `pending_review` (T-O-06); solicitação pendente → `voided`; **sem pontos** | IK + VE (ambas) | A+M | `validation_failed`, `version_conflict` | `interruptService` |
 | T-P-10 | waiting/called → cancelled | sistema (exclusão de conta) | Exclusão solicitada pelo titular (T-AC-03) | Igual a T-P-04 com `closure_reason = cancelled_by_account_deletion` | ÚNICA-VEZ(exclusão, participação) | A | — | `requestAccountDeletion` |
+| T-P-11 | waiting ↔ waiting; called ↔ waiting (mesma fila) | profissional (own_queue) / dono | Participação `waiting` ou `called`; existe vizinha na direção pedida (`up`: a que aguarda logo à frente ou, para a primeira que aguarda, a `called`; `down`: a que aguarda logo atrás); troca com a `called` exige fila `open`; `in_service` nunca se move | As duas trocam de posição; se uma estava `called`, ela volta a `waiting` (sem `called_at`) e a outra passa a `called` com nova tolerância de 10 min | IK + VE (da pessoa movida; a vizinha é travada pelo bloqueio da fila) | A (as duas) | `invalid_transition`, `queue_not_open`, `version_conflict` | `moveParticipation` |
 
 Invariantes no banco:
 - Índice único parcial: `(establishment_id, identity_id) WHERE status IN ('waiting','called','in_service')`.

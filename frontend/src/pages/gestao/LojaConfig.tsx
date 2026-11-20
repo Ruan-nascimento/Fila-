@@ -47,6 +47,7 @@ const brTimezones = [
 
 type Form = {
   name: string;
+  slug: string;
   timezone: string;
   palette: PaletteId;
   public_description: string;
@@ -57,6 +58,7 @@ type Form = {
 function formOf(e: Establishment): Form {
   return {
     name: e.name,
+    slug: e.slug,
     timezone: e.timezone,
     palette: paletteOf(e.palette).id,
     public_description: e.public_description ?? "",
@@ -66,10 +68,26 @@ function formOf(e: Establishment): Form {
 }
 
 /**
- * Configurações da barbearia (só o dono desta loja): identidade (nome, logo e paleta),
+ * Endereço do link a partir do nome: minúsculas sem acento, palavras separadas por hífen, de 3 a
+ * 50 caracteres (o mesmo formato que o servidor confere). Nome curto demais devolve "".
+ */
+function slugDoNome(nome: string): string {
+  const s = nome
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 50)
+    .replace(/-+$/, "");
+  return s.length >= 3 ? s : "";
+}
+
+/**
+ * Configurações da barbearia (só o dono desta loja): identidade (nome, link, logo e paleta),
  * informações públicas, acesso e divulgação (link e QR Code) e atalhos para a operação. Cada
- * pedido leva a loja do contexto e o servidor confere o vínculo. O slug não muda aqui: mudar o
- * endereço invalidaria QR Codes já impressos.
+ * pedido leva a loja do contexto e o servidor confere o vínculo. Trocar o nome troca também o
+ * link e o QR Code; o endereço antigo continua abrindo a loja (QR Codes já impressos valem).
  */
 export function LojaConfig({ ctx }: { ctx: StaffContext }) {
   const [est, setEst] = useState<Establishment | null>(null);
@@ -80,6 +98,8 @@ export function LojaConfig({ ctx }: { ctx: StaffContext }) {
   const [form, setForm] = useState<Form | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const [conflict, setConflict] = useState(false);
+  // O link acompanha o nome até o dono editar o link à mão.
+  const [slugManual, setSlugManual] = useState(false);
   const listId = useId();
   const cfg = usePublicConfig();
 
@@ -122,8 +142,15 @@ export function LojaConfig({ ctx }: { ctx: StaffContext }) {
       }),
     );
     if (out.ok) {
-      accepted(out.data.data, "Configurações salvas. A página da loja já mostra a nova identidade.");
+      const linkMudou = out.data.data.slug !== est.slug;
+      accepted(
+        out.data.data,
+        linkMudou
+          ? "Configurações salvas. O link e o QR Code agora usam o novo endereço; o link antigo continua levando à loja."
+          : "Configurações salvas. A página da loja já mostra a nova identidade.",
+      );
       setForm(formOf(out.data.data));
+      setSlugManual(false);
     } else if (out.problem?.code === "version_conflict" && out.problem.current) {
       // Outra aba salvou antes: mantém o que foi digitado e mostra o aviso para revisar.
       setEst(out.problem.current as unknown as Establishment);
@@ -224,9 +251,9 @@ export function LojaConfig({ ctx }: { ctx: StaffContext }) {
       )}
 
       <form onSubmit={onSubmit} noValidate className="grid gap-8" aria-label="Configurações da barbearia">
-        {!cmd.problem?.errors?.length && cmd.problem?.code !== "version_conflict" && (
-          <CommandError problem={cmd.problem} offline={cmd.offline} />
-        )}
+        {!cmd.problem?.errors?.length &&
+          cmd.problem?.code !== "version_conflict" &&
+          cmd.problem?.code !== "slug_taken" && <CommandError problem={cmd.problem} offline={cmd.offline} />}
         <Section title="Identidade">
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_16rem] xl:items-start">
             <div className="grid max-w-xl gap-4">
@@ -236,7 +263,25 @@ export function LojaConfig({ ctx }: { ctx: StaffContext }) {
                 maxLength={80}
                 value={form.name}
                 error={errors.name}
-                onChange={(e) => set({ name: e.target.value })}
+                onChange={(e) => {
+                  const name = e.target.value;
+                  const auto = slugDoNome(name);
+                  set(slugManual || !auto ? { name } : { name, slug: auto });
+                }}
+              />
+              <Field
+                label="Endereço do link"
+                required
+                maxLength={50}
+                autoComplete="off"
+                spellCheck={false}
+                value={form.slug}
+                error={errors.slug ?? (cmd.problem?.code === "slug_taken" ? cmd.problem.detail : undefined)}
+                hint={`${origin}/loja/${form.slug || "…"} — acompanha o nome automaticamente. Letras minúsculas, números e hífens. O link antigo e QR Codes já impressos continuam levando à loja.`}
+                onChange={(e) => {
+                  setSlugManual(true);
+                  set({ slug: e.target.value.toLowerCase().replace(/\s+/g, "-") });
+                }}
               />
               <ThemePalettePicker value={form.palette} onChange={(palette) => set({ palette })} />
             </div>
@@ -333,8 +378,8 @@ export function LojaConfig({ ctx }: { ctx: StaffContext }) {
 
       <Section title="Acesso e divulgação" description="Use em cartazes, no balcão e nas redes sociais.">
         <p className="m-0 text-sm">
-          Endereço da loja: <span className="font-mono">/loja/{est.slug}</span>. Ele não muda por aqui, para
-          não invalidar QR Codes já impressos.
+          Endereço da loja: <span className="font-mono">/loja/{est.slug}</span>. Ele muda junto com o nome (em
+          Identidade); links e QR Codes antigos continuam levando à loja.
         </p>
         <StoreQrPanel origin={origin} slug={est.slug} storeName={est.name} logo={est.logo} />
       </Section>

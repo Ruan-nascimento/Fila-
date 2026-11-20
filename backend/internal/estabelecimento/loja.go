@@ -197,6 +197,28 @@ func (s *Service) updateEstablishment(w http.ResponseWriter, r *http.Request) er
 			changed = append(changed, "public_phone")
 		}
 		now := s.Clock.Now()
+		if next.Slug != cur.Slug {
+			used, err := slugUsedByOther(ctx, tx, next.Slug, estID)
+			if err != nil {
+				return idempotency.Result{}, err
+			}
+			if used {
+				return idempotency.Result{}, &httpserver.Error{Status: 409, Code: "slug_taken", Title: "Endereço já usado",
+					Detail: "Outra loja já usa (ou já usou) esse endereço. Escolha outro.", Current: cur}
+			}
+			// O endereço antigo continua abrindo esta loja (links e QR Codes já impressos); o novo
+			// deixa de ser "antigo" se a loja estiver voltando a ele.
+			if _, err := tx.Exec(ctx, `
+				INSERT INTO establishment_slug_alias (slug, establishment_id, retired_at) VALUES ($1, $2, $3)
+				ON CONFLICT (slug) DO UPDATE SET retired_at = EXCLUDED.retired_at
+				WHERE establishment_slug_alias.establishment_id = EXCLUDED.establishment_id`, cur.Slug, estID, now); err != nil {
+				return idempotency.Result{}, err
+			}
+			if _, err := tx.Exec(ctx, `DELETE FROM establishment_slug_alias WHERE slug = $1 AND establishment_id = $2`,
+				next.Slug, estID); err != nil {
+				return idempotency.Result{}, err
+			}
+		}
 		err = tx.QueryRow(ctx, `
 			UPDATE establishment SET name = $2, slug = $3, timezone = $4, palette = $5, public_description = $6,
 			       public_address = $7, public_phone = $8, version = version + 1, updated_at = $9

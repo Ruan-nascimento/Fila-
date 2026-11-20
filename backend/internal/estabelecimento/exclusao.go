@@ -121,7 +121,9 @@ func CloseEstablishment(ctx context.Context, tx pgx.Tx, estID uuid.UUID, now tim
 func BySlug(ctx context.Context, q database.Querier, slug string) (uuid.UUID, string, error) {
 	var id uuid.UUID
 	var status string
-	err := q.QueryRow(ctx, `SELECT id, status FROM establishment WHERE slug = $1`, slug).Scan(&id, &status)
+	err := q.QueryRow(ctx, `SELECT id, status FROM establishment
+		WHERE slug = $1 OR id = (SELECT establishment_id FROM establishment_slug_alias WHERE slug = $1)
+		ORDER BY slug = $1 DESC LIMIT 1`, slug).Scan(&id, &status)
 	if err == pgx.ErrNoRows {
 		return uuid.Nil, "", ErrNotFound
 	}

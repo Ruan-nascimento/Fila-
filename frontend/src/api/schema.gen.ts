@@ -579,7 +579,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Dados públicos da loja a partir do link/QR. */
+        /**
+         * Dados públicos da loja a partir do link/QR.
+         * @description Aceita também endereços antigos da loja (trocados junto com o nome). A resposta traz sempre o
+         *     `slug` atual; quando difere do pedido, a tela leva o navegador ao endereço atual.
+         */
         get: operations["getPublicEstablishmentBySlug"];
         put?: never;
         post?: never;
@@ -743,6 +747,29 @@ export interface paths {
         put?: never;
         /** Chamado → ausente, somente após 10 minutos da chamada (relógio do servidor). */
         post: operations["markNoShow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/establishments/{establishmentId}/participations/{participationId}/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Troca a pessoa de lugar com a vizinha de cima ou de baixo na mesma fila (aguardando ou chamada).
+         * @description Para baixo, a pessoa chamada volta a ser a primeira a aguardar e a primeira que aguardava passa a
+         *     ser chamada (nova tolerância de 10 minutos). Para cima, a primeira que aguarda troca com a chamada.
+         *     Entre duas pessoas aguardando, só as posições mudam. Troca que envolve a pessoa chamada exige fila
+         *     aberta. Em atendimento nunca se move.
+         */
+        post: operations["moveParticipation"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1460,7 +1487,9 @@ export interface paths {
         head?: never;
         /**
          * Altera nome, slug, fuso, paleta e informações públicas da loja.
-         * @description `palette` é um identificador do catálogo de 16 paletas (nunca CSS ou hexadecimal). Textos
+         * @description Ao trocar o `slug`, o endereço antigo continua abrindo a mesma loja (links e QR Codes impressos)
+         *     e fica reservado para ela; `slug_taken` vale também para endereços antigos de outra loja.
+         *     `palette` é um identificador do catálogo de 16 paletas (nunca CSS ou hexadecimal). Textos
          *     públicos são texto simples; string vazia remove. O telefone é normalizado para E.164 e será
          *     publicado. A auditoria guarda os nomes dos campos alterados, nunca os valores.
          */
@@ -2362,6 +2391,14 @@ export interface components {
         };
         VersionedRequest: {
             expected_version: components["schemas"]["Version"];
+        };
+        MoveParticipationRequest: {
+            expected_version: components["schemas"]["Version"];
+            /**
+             * @description `up` = uma posição para frente; `down` = uma posição para trás.
+             * @enum {string}
+             */
+            direction: "up" | "down";
         };
         /** @description `reason` obrigatório quando o ator é equipe (validado no servidor). */
         VersionedReasonRequest: {
@@ -4719,6 +4756,35 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["VersionedRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["VisitOk"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyMismatch"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    moveParticipation: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+                participationId: components["parameters"]["ParticipationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoveParticipationRequest"];
             };
         };
         responses: {

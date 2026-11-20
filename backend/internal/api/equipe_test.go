@@ -296,9 +296,21 @@ func TestEstablishmentConfiguration(t *testing.T) {
 		t.Fatalf("versão antiga: %s", r.raw)
 	}
 	e.browser().mustStatus(e.browser().do("GET", "/v1/public/slugs/barbearia-nova", nil), 200)
-	if r := e.browser().do("GET", "/v1/public/slugs/barbearia-teste", nil); r.status != 404 {
-		t.Fatalf("slug antigo: %d", r.status)
+	// Endereço antigo (QR Code já impresso) continua abrindo a mesma loja, com o endereço atual.
+	if r := e.browser().mustStatus(e.browser().do("GET", "/v1/public/slugs/barbearia-teste", nil), 200); r.data()["slug"] != "barbearia-nova" {
+		t.Fatalf("slug antigo deveria levar ao atual: %s", r.raw)
 	}
+	// O endereço antigo fica reservado para esta loja: outra loja não pode usá-lo.
+	outra := e.shop("outra-loja-2", "dani@exemplo.com")
+	if r := outra.owner.cmd("PATCH", estPath(outra.id, ""), map[string]any{"expected_version": 1, "slug": "barbearia-teste"}); r.code() != "slug_taken" {
+		t.Fatalf("outra loja usando endereço antigo: %d %s", r.status, r.raw)
+	}
+	// A própria loja pode voltar ao endereço antigo; o intermediário passa a ser o antigo.
+	loja.owner.mustStatus(loja.owner.cmd("PATCH", estPath(loja.id, ""), map[string]any{"expected_version": 2, "slug": "barbearia-teste"}), 200)
+	if r := e.browser().mustStatus(e.browser().do("GET", "/v1/public/slugs/barbearia-nova", nil), 200); r.data()["slug"] != "barbearia-teste" {
+		t.Fatalf("voltar ao endereço antigo: %s", r.raw)
+	}
+	loja.owner.mustStatus(loja.owner.cmd("PATCH", estPath(loja.id, ""), map[string]any{"expected_version": 3, "slug": "barbearia-nova"}), 200)
 
 	// Novo nome do profissional aparece na fila pública.
 	loja.owner.mustStatus(loja.owner.cmd("PATCH", estPath(loja.id, "/professionals/"+beto.String()), map[string]any{"expected_version": 1, "display_name": "Betão"}), 200)

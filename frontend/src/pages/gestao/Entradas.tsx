@@ -1,5 +1,15 @@
 import { useState, type FormEvent } from "react";
-import { ArrowLeftRight, Ban, ChevronDown, Clock, Play, Scissors, UserX } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowLeftRight,
+  ArrowUp,
+  Ban,
+  ChevronDown,
+  Clock,
+  Play,
+  Scissors,
+  UserX,
+} from "lucide-react";
 import { api } from "../../api/client";
 import type { components } from "../../api/schema.gen";
 import { Avatar, Badge, Button, Card, Choice, SelectField, Submit, TextArea } from "../../ui/ui";
@@ -11,6 +21,7 @@ import { CommandError, type StaffContext } from "./comum";
 
 type StaffQueue = components["schemas"]["StaffQueue"];
 type Entry = StaffQueue["entries"][number];
+type Direcao = "up" | "down";
 
 const time = new Intl.DateTimeFormat("pt-BR", { timeStyle: "short" });
 
@@ -70,6 +81,23 @@ export function Entradas({
     if (out.ok || out.problem?.status === 409) await onDone();
   }
 
+  // Troca a pessoa de lugar com a vizinha (o servidor confere papel, estado, versão e a fila).
+  async function mover(e: Entry, direction: Direcao) {
+    const out = await cmd.run(`mover:${e.participation_id}:${e.version}:${direction}`, (key) =>
+      api.POST("/v1/establishments/{establishmentId}/participations/{participationId}/move", {
+        params: {
+          path: { establishmentId: ctx.estId, participationId: e.participation_id },
+          header: { "Idempotency-Key": key },
+        },
+        body: { expected_version: e.version, direction },
+      }),
+    );
+    if (out.ok || out.problem?.status === 409) await onDone();
+  }
+  const calledNow = current?.status === "called";
+  // Trocar com a pessoa chamada é uma nova chamada: só com a fila aberta.
+  const canSwapCall = queue.status === "open";
+
   // Por que não dá para chamar agora (sempre explicado em texto).
   const callBlocked = busy
     ? "A cadeira está ocupada: conclua ou resolva o atendimento atual antes de chamar."
@@ -101,6 +129,7 @@ export function Entradas({
               busyCmd={cmd.busy !== null}
               onAction={acao}
               onDone={onDone}
+              onMove={canSwapCall && waiting.length > 0 ? (d) => void mover(current, d) : undefined}
             />
           ) : (
             <Card className="grid justify-items-start gap-2 p-5">
@@ -153,6 +182,10 @@ export function Entradas({
                   queues={queues}
                   canOperate={canOperate}
                   onDone={onDone}
+                  busyCmd={cmd.busy !== null}
+                  canUp={i > 0 || (calledNow && canSwapCall)}
+                  canDown={i < waiting.length - 1}
+                  onMove={(d) => void mover(e, d)}
                 />
               ))}
             </ol>
@@ -173,6 +206,7 @@ function Atual({
   busyCmd,
   onAction,
   onDone,
+  onMove,
 }: {
   ctx: StaffContext;
   entry: Entry;
@@ -183,6 +217,7 @@ function Atual({
   busyCmd: boolean;
   onAction: (e: Entry, op: "start" | "no-show") => Promise<void>;
   onDone: () => Promise<void>;
+  onMove?: ((d: Direcao) => void) | undefined;
 }) {
   const called = e.status === "called";
   const tolerance = e.tolerance_ends_at ? new Date(e.tolerance_ends_at) : null;
@@ -233,6 +268,17 @@ function Atual({
               Disponível a partir de {time.format(tolerance)}.
             </p>
           )}
+          {onMove && (
+            <Button
+              variant="secondary"
+              icon={ArrowDown}
+              block
+              disabled={busyCmd}
+              onClick={() => onMove("down")}
+            >
+              Vai atrasar: chamar o próximo
+            </Button>
+          )}
         </div>
       )}
       {canOperate && (e.status === "in_service" || called) && (
@@ -253,6 +299,10 @@ function Aguardando({
   queues,
   canOperate,
   onDone,
+  busyCmd,
+  canUp,
+  canDown,
+  onMove,
 }: {
   ctx: StaffContext;
   entry: Entry;
@@ -261,6 +311,10 @@ function Aguardando({
   queues: StaffQueue[];
   canOperate: boolean;
   onDone: () => Promise<void>;
+  busyCmd: boolean;
+  canUp: boolean;
+  canDown: boolean;
+  onMove: (d: Direcao) => void;
 }) {
   return (
     <li className="grid gap-2 rounded-xl border border-line bg-surface p-3">
@@ -280,10 +334,56 @@ function Aguardando({
           <p className="m-0 text-sm text-fg-muted">{e.service_names.join(" + ")}</p>
           {e.has_pending_change_request && <Badge tone="warning">Pedido de alteração aguardando</Badge>}
         </div>
+        {canOperate && (
+          <div className="flex shrink-0 gap-1">
+            <MoveButton
+              icon={ArrowUp}
+              label={
+                position === 1
+                  ? `Subir ${e.ticket_code} · ${e.nick} e chamar agora`
+                  : `Subir ${e.ticket_code} · ${e.nick} uma posição`
+              }
+              disabled={busyCmd || !canUp}
+              onClick={() => onMove("up")}
+            />
+            <MoveButton
+              icon={ArrowDown}
+              label={`Descer ${e.ticket_code} · ${e.nick} uma posição`}
+              disabled={busyCmd || !canDown}
+              onClick={() => onMove("down")}
+            />
+          </div>
+        )}
       </div>
       {canOperate && <ComandaEntrada ctx={ctx} entry={e} onDone={onDone} />}
       {ctx.isOwner && <DonoAcoes ctx={ctx} entry={e} queue={queue} queues={queues} onDone={onDone} />}
     </li>
+  );
+}
+
+/** Seta de subir/descer na fila (alvo de toque de 44 px; o nome completo vai no rótulo acessível). */
+function MoveButton({
+  icon: Icon,
+  label,
+  disabled,
+  onClick,
+}: {
+  icon: typeof ArrowUp;
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={onClick}
+      className="inline-flex size-11 items-center justify-center rounded-lg border border-line text-fg hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-40"
+    >
+      <Icon aria-hidden="true" className="size-5" />
+    </button>
   );
 }
 

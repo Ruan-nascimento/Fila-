@@ -202,6 +202,12 @@ func validateBody(body any, who role) error {
 		}
 	case *versionOnly:
 		v.Version("/expected_version", b.ExpectedVersion)
+	case *moveRequest:
+		v.Version("/expected_version", b.ExpectedVersion)
+		v.Required("/direction", b.Direction == nil)
+		if b.Direction != nil && *b.Direction != "up" && *b.Direction != "down" {
+			v.Add(&hs.FieldError{Field: "/direction", Code: hs.FieldNotAllowed, Message: "use up ou down"})
+		}
 	case *completeRequest, *interruptRequest:
 		validateClosing(&v, b)
 	case *transferRequest:
@@ -336,7 +342,8 @@ type transferRequest struct {
 
 // transferParticipation (T-P-07): só o dono; consentimento do cliente registrado; só quem está
 // aguardando; destino aberto, profissional ativo e habilitado para TODOS os serviços aceitos;
-// entra no FIM do destino com nova senha; preços aceitos mantidos. Não existe reordenação.
+// entra no FIM do destino com nova senha; preços aceitos mantidos. Mudar de lugar na mesma fila é
+// moveParticipation (T-P-11).
 func (s *Service) transferParticipation(w http.ResponseWriter, r *http.Request) error {
 	var body transferRequest
 	return s.participationCommand(w, r, "transferParticipation", allow{owner: true}, &body,
@@ -460,4 +467,127 @@ func deref(v *int64) int64 {
 		return 0
 	}
 	return *v
+}
+
+// ---------------------------------------------------------------------------------------------
+// moveParticipation (T-P-11): a equipe (profissional da fila ou dono) troca a pessoa de lugar com
+// a vizinha de cima ou de baixo. Caso típico: a pessoa chamada avisa que vai se atrasar; o
+// barbeiro clica em "descer" e ela volta a ser a primeira a aguardar, enquanto quem estava logo
+// atrás passa a ser a chamada (com nova tolerância de 10 minutos). Só se move quem aguarda ou foi
+// chamado; quem está em atendimento não sai da cadeira.
+
+type moveRequest struct {
+	ExpectedVersion *int64  `json:"expected_version"`
+	Direction       *string `json:"direction"`
+}
+
+func (s *Service) moveParticipation(w http.ResponseWriter, r *http.Request) error {
+	var body moveRequest
+	return s.participationCommand(w, r, "moveParticipation", allow{professional: true, owner: true}, &body,
+		func(tx pgx.Tx, p row, who role, queues map[uuid.UUID]estabelecimento.QueueInfo) (idempotency.Result, error) {
+			ctx := r.Context()
+			up := *body.Direction == "up"
+			if p.Status != Waiting && p.Status != Called {
+				return s.invalid(ctx, tx, p, who, "Só é possível mudar de lugar quem está aguardando ou foi chamado.")
+			}
+			other, err := s.neighbor(ctx, tx, p, up)
+			if errors.Is(err, pgx.ErrNoRows) {
+				detail := "Não há ninguém aguardando atrás desta pessoa."
+				if up {
+					detail = "Esta pessoa já é a próxima da fila."
+				}
+				return s.invalid(ctx, tx, p, who, detail)
+			}
+			if err != nil {
+				return idempotency.Result{}, err
+			}
+			// Trocar com a pessoa chamada é uma nova chamada: exige a fila aberta, como "Chamar próximo".
+			swapsCall := p.Status == Called || other.Status == Called
+			if swapsCall && queues[p.QueueID].Status != estabelecimento.QueueOpen {
+				return idempotency.Result{}, conflict("queue_not_open", "Fila não está aberta",
+					"Com a fila pausada ou fechada não é possível trocar a pessoa chamada.", nil)
+			}
+			now := s.Clock.Now()
+			// Posições: troca usando uma posição livre como passo intermediário (posição é única por fila).
+			var tmp int64
+			if err := tx.QueryRow(ctx, `UPDATE queue_counter SET last_position = last_position + 1 WHERE queue_id = $1
+				RETURNING last_position`, p.QueueID).Scan(&tmp); err != nil {
+				return idempotency.Result{}, err
+			}
+			for _, step := range [][2]int64{{0, tmp}, {1, p.Position}, {0, other.Position}} {
+				id := p.ID
+				if step[0] == 1 {
+					id = other.ID
+				}
+				if _, err := tx.Exec(ctx, `UPDATE participation SET position = $2 WHERE id = $1`, id, step[1]); err != nil {
+					return idempotency.Result{}, err
+				}
+			}
+			// Estados: quem estava chamado volta a aguardar ANTES de o outro ser chamado (uma cadeira por fila).
+			first, second := p, other
+			if other.Status == Called {
+				first, second = other, p
+			}
+			if swapsCall {
+				if _, err := tx.Exec(ctx, `UPDATE participation SET status = 'waiting', called_at = NULL, tolerance_ends_at = NULL
+					WHERE id = $1`, first.ID); err != nil {
+					return idempotency.Result{}, err
+				}
+				if _, err := tx.Exec(ctx, `UPDATE participation SET status = 'called', called_at = $2, tolerance_ends_at = $3
+					WHERE id = $1`, second.ID, now, now.Add(Tolerance)); err != nil {
+					return idempotency.Result{}, err
+				}
+			}
+			if _, err := tx.Exec(ctx, `UPDATE participation SET version = version + 1, updated_at = $3 WHERE id IN ($1, $2)`,
+				p.ID, other.ID, now); err != nil {
+				return idempotency.Result{}, err
+			}
+			// A outra pessoa também mudou: auditoria e evento próprios (o celular dela atualiza a posição).
+			after, err := load(ctx, tx, other.EstablishmentID, other.ID, false)
+			if err != nil {
+				return idempotency.Result{}, err
+			}
+			e := s.auditBase(ctx, other, who)
+			e.EstablishmentID, e.OccurredAt, e.Action = &other.EstablishmentID, now, "T-P-11"
+			e.TargetType, e.TargetID, e.FromState, e.ToState = "participation", other.ID, other.Status, after.Status
+			e.Reason = "trocou de lugar com " + p.TicketCode
+			if err := auditoria.Record(ctx, tx, e); err != nil {
+				return idempotency.Result{}, err
+			}
+			if err := s.recordParticipation(ctx, tx, after); err != nil {
+				return idempotency.Result{}, err
+			}
+			to := p.Status
+			if swapsCall {
+				to = other.Status
+			}
+			reason := "subiu na fila"
+			if !up {
+				reason = "desceu na fila"
+			}
+			return s.finish(ctx, tx, p.EstablishmentID, p.ID, who, "T-P-11", p.Status, to, reason, http.StatusOK, p.QueueID)
+		}, func() int64 { return deref(body.ExpectedVersion) }, nil)
+}
+
+// neighbor devolve, travada, a pessoa com quem p troca de lugar: para cima, a que aguarda logo à
+// frente ou, se p já é a primeira a aguardar, a chamada; para baixo, a que aguarda logo atrás
+// (de quem foi chamado, a primeira que aguarda). Em atendimento nunca é vizinha.
+func (s *Service) neighbor(ctx context.Context, tx pgx.Tx, p row, up bool) (row, error) {
+	switch {
+	case up && p.Status == Called:
+		return row{}, pgx.ErrNoRows
+	case up:
+		n, err := scanRow(tx.QueryRow(ctx, rowSelect+` WHERE queue_id = $1 AND status = 'waiting' AND position < $2
+			ORDER BY position DESC LIMIT 1 FOR UPDATE`, p.QueueID, p.Position))
+		if errors.Is(err, pgx.ErrNoRows) {
+			return scanRow(tx.QueryRow(ctx, rowSelect+` WHERE queue_id = $1 AND status = 'called' FOR UPDATE`, p.QueueID))
+		}
+		return n, err
+	case p.Status == Called:
+		return scanRow(tx.QueryRow(ctx, rowSelect+` WHERE queue_id = $1 AND status = 'waiting'
+			ORDER BY position LIMIT 1 FOR UPDATE`, p.QueueID))
+	default:
+		return scanRow(tx.QueryRow(ctx, rowSelect+` WHERE queue_id = $1 AND status = 'waiting' AND position > $2
+			ORDER BY position LIMIT 1 FOR UPDATE`, p.QueueID, p.Position))
+	}
 }
