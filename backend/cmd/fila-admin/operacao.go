@@ -24,6 +24,7 @@ import (
 	"fila/internal/painel"
 	"fila/internal/platform/app"
 	"fila/internal/platform/clock"
+	"fila/internal/platform/config"
 	"fila/internal/platform/keys"
 )
 
@@ -265,6 +266,22 @@ func restore(ctx context.Context, args, environ []string, stdout, stderr io.Writ
 	if journalDir == "" {
 		journalDir = rt.Config.Ops.DeletionJournalDir
 	}
+	if journalDir == "" && !*semDiario && rt.Config.Ops.DeletionJournalBucket != "" {
+		// Diário no bucket: baixa para uma pasta temporária e reconcilia a partir dela.
+		tmp, err := os.MkdirTemp("", "fila-diario-")
+		if err != nil {
+			rt.Log.Error("pasta temporária do diário", "error", err.Error())
+			return app.ExitFailure
+		}
+		defer os.RemoveAll(tmp)
+		n, err := downloadJournal(ctx, rt.Config, tmp)
+		if err != nil {
+			fmt.Fprintln(stderr, "erro ao baixar o diário de exclusões do bucket:", err.Error())
+			return app.ExitFailure
+		}
+		fmt.Fprintf(stdout, "· diário de exclusões baixado do bucket: %d pedido(s)\n", n)
+		journalDir = tmp
+	}
 	ring, err := keys.NewRotating(rt.Config.Security.KeyMaterial())
 	if err != nil {
 		rt.Log.Error("chave do servidor inválida", "error", err.Error())
@@ -327,4 +344,45 @@ func printState(w io.Writer, st operacao.State) {
 	if st.WorkerSeenAt != nil {
 		fmt.Fprintf(w, "último sinal de vida do worker gravado neste banco: %s UTC\n", st.WorkerSeenAt.Format("2006-01-02 15:04:05"))
 	}
+}
+
+// downloadJournal copia o diário de exclusões do bucket para dir/exclusoes.jsonl.
+func downloadJournal(ctx context.Context, cfg *config.Config, dir string) (int, error) {
+	st := api.ObjectClient(cfg.Media.S3, cfg.Ops.DeletionJournalBucket)
+	entries, err := exclusao.ReadRemoteJournal(ctx, st, cfg.Media.S3.Prefix)
+	if err != nil {
+		return 0, err
+	}
+	return len(entries), exclusao.WriteJournalFile(dir, entries)
+}
+
+// journalCmd: diario baixar -destino <pasta> (cópia externa / ensaio de restauração).
+func journalCmd(ctx context.Context, args, environ []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 || args[0] != "baixar" {
+		fmt.Fprintln(stderr, usage)
+		return app.ExitConfigError
+	}
+	fs := flag.NewFlagSet("diario", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	dest := fs.String("destino", "", "pasta onde gravar exclusoes.jsonl")
+	if err := fs.Parse(args[1:]); err != nil || fs.NArg() != 0 || *dest == "" {
+		fmt.Fprintln(stderr, usage)
+		return app.ExitConfigError
+	}
+	rt, code := app.Start("fila-admin", environ, stderr, stderr)
+	if rt == nil {
+		return code
+	}
+	defer rt.Close()
+	if rt.Config.Ops.DeletionJournalBucket == "" {
+		fmt.Fprintln(stderr, "erro: FILA_DELETION_JOURNAL_BUCKET não configurada")
+		return app.ExitConfigError
+	}
+	n, err := downloadJournal(ctx, rt.Config, *dest)
+	if err != nil {
+		fmt.Fprintln(stderr, "erro:", err.Error())
+		return app.ExitFailure
+	}
+	fmt.Fprintf(stdout, "%d pedido(s) de exclusão gravados em %s\n", n, *dest)
+	return app.ExitOK
 }

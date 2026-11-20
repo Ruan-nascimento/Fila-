@@ -18,6 +18,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -86,12 +87,21 @@ func run(ctx context.Context, environ []string, stdout, stderr io.Writer, starte
 		}()
 	}
 	var wg sync.WaitGroup
-	wg.Go(func() { collectIndicators(ctx, rt, gauges, log) })
-
-	if cfg.Mail.Mode != config.MailFile {
-		log.Warn("envio de e-mail desativado: verificação, redefinição de senha e convites não chegarão às pessoas")
+	hb := &operacao.Heartbeat{URL: cfg.Ops.HeartbeatURL.Reveal(), Every: time.Minute}
+	if hb.URL != "" {
+		log.Info("sinal de vida para monitor externo ligado")
+	} else if cfg.Env.Hardened() {
+		log.Warn("sem monitor externo do worker (FILA_HEARTBEAT_URL): uma parada do worker não avisará ninguém")
 	}
-	if cfg.Ops.DeletionJournalDir == "" && cfg.Env.Hardened() {
+	wg.Go(func() { collectIndicators(ctx, rt, gauges, hb, log) })
+
+	switch cfg.Mail.Mode {
+	case config.MailDisabled:
+		log.Warn("envio de e-mail desativado: verificação, redefinição de senha e convites não chegarão às pessoas")
+	case config.MailResend:
+		log.Info("e-mails serão entregues pelo Resend")
+	}
+	if cfg.Ops.DeletionJournalDir == "" && cfg.Ops.DeletionJournalBucket == "" && cfg.Env.Hardened() {
 		log.Warn("diário de exclusões desligado (FILA_DELETION_JOURNAL_DIR): exclusões pedidas depois do último backup não poderão ser reaplicadas após uma restauração")
 	}
 	prov := api.PixProvider(cfg.Payments, nil)
@@ -121,11 +131,13 @@ func run(ctx context.Context, environ []string, stdout, stderr io.Writer, starte
 func runJobs(ctx context.Context, rt *app.Runtime, ring *keys.Ring, clk clock.Clock, prov pagamento.Provider) {
 	log, cfg := rt.Log, rt.Config
 	var wg sync.WaitGroup
-	if cfg.Mail.Mode == config.MailFile {
-		d := &mail.Dispatcher{Pool: rt.Pool, Ring: ring, Sender: mail.FileSender{Dir: cfg.Mail.Dir},
-			Clock: clk, Log: log.With("tarefa", "email"), MaxAttempts: 8, BatchSize: 20}
+	if sender := mailSender(cfg.Mail); sender != nil {
+		d := &mail.Dispatcher{Pool: rt.Pool, Ring: ring, Sender: sender, Clock: clk, Log: log.With("tarefa", "email"),
+			MaxAttempts: 8, BatchSize: 20, Lease: 2 * time.Minute, SendTimeout: cfg.Mail.Timeout, MaxAge: mail.DefaultMaxAge}
 		wg.Go(func() { d.Run(ctx, 2*time.Second) })
-		log.Info("e-mails serão gravados como arquivos (somente desenvolvimento)", "pasta", cfg.Mail.Dir)
+		if cfg.Mail.Mode == config.MailFile {
+			log.Info("e-mails serão gravados como arquivos (somente desenvolvimento)", "pasta", cfg.Mail.Dir)
+		}
 	}
 	cleaner := &maintenance.Cleaner{Pool: rt.Pool, Clock: clk, Log: log.With("tarefa", "limpeza")}
 	wg.Go(func() { cleaner.Run(ctx, 10*time.Minute) })
@@ -159,8 +171,7 @@ func runJobs(ctx context.Context, rt *app.Runtime, ring *keys.Ring, clk clock.Cl
 		Identity: ident, Queue: fila.New(fila.Deps{Pool: rt.Pool, Clock: clk, Log: log.With("tarefa", "exclusao")}), Benefits: loyalty})
 	wg.Go(func() { deletion.Run(ctx, time.Minute) })
 	// Diário de exclusões fora do banco (reaplicado depois de restaurar um backup).
-	if dir := cfg.Ops.DeletionJournalDir; dir != "" {
-		j := &exclusao.Journal{Dir: dir}
+	if j := journal(cfg); j != nil {
 		wg.Go(func() { deletion.RunJournal(ctx, j, 5*time.Second) })
 	}
 
@@ -199,9 +210,33 @@ func runJobs(ctx context.Context, rt *app.Runtime, ring *keys.Ring, clk clock.Cl
 	wg.Wait()
 }
 
+// journal monta o diário de exclusões (pasta e/ou bucket); nil = desligado.
+func journal(cfg *config.Config) *exclusao.Journal {
+	if cfg.Ops.DeletionJournalDir == "" && cfg.Ops.DeletionJournalBucket == "" {
+		return nil
+	}
+	j := &exclusao.Journal{Dir: cfg.Ops.DeletionJournalDir}
+	if b := cfg.Ops.DeletionJournalBucket; b != "" {
+		j.Remote, j.RemotePrefix = api.ObjectClient(cfg.Media.S3, b), cfg.Media.S3.Prefix
+	}
+	return j
+}
+
+// mailSender escolhe a entrega de e-mail pela configuração (nil = desligada).
+func mailSender(c config.MailConfig) mail.Sender {
+	switch c.Mode {
+	case config.MailFile:
+		return mail.FileSender{Dir: c.Dir}
+	case config.MailResend:
+		return mail.ResendSender{APIKey: c.ResendAPIKey.Reveal(), From: c.From, ReplyTo: c.ReplyTo,
+			Client: &http.Client{Timeout: c.Timeout}}
+	}
+	return nil
+}
+
 // collectIndicators lê os indicadores a cada 15 s para as métricas e registra os alertas no log
 // quando mudam (para quem não tem Prometheus, o log já mostra o problema).
-func collectIndicators(ctx context.Context, rt *app.Runtime, g *operacao.Gauges, log *slog.Logger) {
+func collectIndicators(ctx context.Context, rt *app.Runtime, g *operacao.Gauges, hb *operacao.Heartbeat, log *slog.Logger) {
 	// Primeira leitura depois da primeira passagem do supervisor (que grava o sinal de vida):
 	// sem isso, toda partida mostraria um falso "worker sem sinal".
 	select {
@@ -216,6 +251,7 @@ func collectIndicators(ctx context.Context, rt *app.Runtime, g *operacao.Gauges,
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		ind, err := operacao.Collect(cctx, rt.Pool, time.Now())
 		cancel()
+		var alerts []operacao.Alert
 		if err != nil {
 			if ctx.Err() == nil {
 				g.Failed()
@@ -223,8 +259,9 @@ func collectIndicators(ctx context.Context, rt *app.Runtime, g *operacao.Gauges,
 			}
 		} else {
 			g.Update(ind)
+			alerts = operacao.Evaluate(ind)
 			var names []string
-			for _, a := range operacao.Evaluate(ind) {
+			for _, a := range alerts {
 				names = append(names, a.Name)
 			}
 			if cur := strings.Join(names, ","); cur != last {
@@ -234,6 +271,11 @@ func collectIndicators(ctx context.Context, rt *app.Runtime, g *operacao.Gauges,
 				} else {
 					log.Warn("alertas internos ativos (detalhes: fila-admin verificar)", "alertas", cur)
 				}
+			}
+		}
+		if ctx.Err() == nil {
+			if _, herr := hb.Report(ctx, alerts, err != nil, time.Now()); herr != nil {
+				log.Warn("monitor externo: sinal de vida não enviado", "error", herr.Error())
 			}
 		}
 		select {

@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -73,6 +74,7 @@ func run(ctx context.Context, environ []string, stdout, stderr io.Writer, listen
 		httpserver.Check{Name: "database", Fn: func(ctx context.Context) error { return database.Ping(ctx, rt.Pool) }},
 		httpserver.Check{Name: "migrations", Fn: rt.Migrator.CheckCurrent},
 	)
+	health.Revision = revision(environ)
 	a, err := api.New(api.Deps{Config: cfg, Pool: rt.Pool, Log: log, Clock: clock.System{}},
 		func(mux *http.ServeMux) { health.Register(mux) })
 	if err != nil {
@@ -97,6 +99,7 @@ func run(ctx context.Context, environ []string, stdout, stderr io.Writer, listen
 	handler := httpserver.ChainWith(a.Handler(), log, httpserver.Options{
 		Limiter:           httpserver.NewIPLimiter(cfg.Ops.RequestsPerMinute),
 		TrustForwardedFor: cfg.Security.TrustForwardedFor,
+		ProxySecret:       []byte(cfg.Security.ProxySharedSecret.Reveal()),
 		Observe:           hm.Observe,
 		Limited:           hm.Limited,
 	})
@@ -125,4 +128,20 @@ func run(ctx context.Context, environ []string, stdout, stderr io.Writer, listen
 	}
 	log.Info("API encerrada")
 	return app.ExitOK
+}
+
+// revision lê a revisão do código informada pela hospedagem (Render: RENDER_GIT_COMMIT), curta.
+func revision(environ []string) string {
+	for _, kv := range environ {
+		if v, ok := strings.CutPrefix(kv, "RENDER_GIT_COMMIT="); ok {
+			v = strings.TrimSpace(v)
+			for _, c := range v {
+				if !strings.ContainsRune("0123456789abcdef", c) {
+					return ""
+				}
+			}
+			return v[:min(len(v), 12)]
+		}
+	}
+	return ""
 }

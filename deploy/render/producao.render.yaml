@@ -1,0 +1,117 @@
+# Blueprint do Render — ambiente: producao (API + worker do Fila).
+#
+# Como usar (passo a passo em docs/operacao/publicacao-v1.md):
+#   Render → New → Blueprint → repositório Fila- → "Blueprint path": deploy/render/producao.render.yaml
+#
+# Decisões:
+#   - Runtime Go nativo (não a imagem distroless de deploy/Dockerfile.backend, cujo ENTRYPOINT é a
+#     API): cada serviço tem o próprio startCommand, então o worker nunca sobe como API.
+#   - API e worker na MESMA região, com o MESMO grupo de variáveis e a MESMA revisão.
+#   - Deploy automático DESLIGADO: as migrations rodam antes, pelo workflow "Publicar"
+#     (.github/workflows/publicar.yml), que depois aciona os deploy hooks com o mesmo commit.
+#   - Credencial de MIGRADOR nunca fica aqui: API e worker usam o papel restrito (fila_app).
+#   - Valores marcados "sync: false" são preenchidos no painel (segredos ou dados do seu domínio).
+#   - Planos pagos sempre ativos (o gratuito suspende por inatividade). Confira o preço no painel.
+
+envVarGroups:
+  - name: fila-prod-comum
+    envVars:
+      - key: FILA_ENV
+        value: production
+      - key: FILA_LOG_FORMAT
+        value: json
+      - key: FILA_LOG_LEVEL
+        value: info
+      - key: FILA_COOKIE_SECURE
+        value: "true"
+      - key: FILA_DB_MAX_CONNS
+        value: "8"
+      - key: FILA_DB_CONNECT_TIMEOUT
+        value: 10s
+      # Toolchain exigida pelo backend/go.mod (o go do Render baixa a versão certa).
+      - key: GOTOOLCHAIN
+        value: auto
+      # Origem pública do site (Vercel), ex.: https://app.seudominio.com.br
+      - key: FILA_PUBLIC_BASE_URL
+        sync: false
+      - key: FILA_ALLOWED_ORIGINS
+        sync: false
+      # SEGREDOS (preencher no painel; nunca no Git):
+      - key: FILA_DATABASE_URL # URL DIRETA do Neon (sem -pooler) com o papel fila_app e sslmode=require
+        sync: false
+      - key: FILA_SECRET_KEY # gerada UMA vez por ambiente: fila-admin gerar-chave
+        sync: false
+      # Fotos/logos e diário de exclusões no Cloudflare R2 (bucket privado do ambiente)
+      - key: FILA_MEDIA_STORAGE
+        value: s3
+      - key: FILA_S3_ENDPOINT # https://<id-da-conta>.r2.cloudflarestorage.com
+        sync: false
+      - key: FILA_S3_BUCKET
+        value: fila-prod-midia
+      - key: FILA_S3_REGION
+        value: auto
+      - key: FILA_S3_ACCESS_KEY_ID
+        sync: false
+      - key: FILA_S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: FILA_DELETION_JOURNAL_BUCKET
+        value: fila-prod-diario
+      # Pix (AbacatePay). Começa desligado; ligar só depois dos testes (docs/pagamentos-abacatepay.md).
+      - key: FILA_PIX_PROVIDER
+        value: disabled
+      - key: FILA_ABACATEPAY_API_KEY
+        sync: false
+
+services:
+  - type: web
+    name: fila-api-prod
+    runtime: go
+    region: virginia
+    plan: starter
+    rootDir: backend
+    buildCommand: go build -trimpath -o bin/ ./cmd/api ./cmd/worker ./cmd/migrate ./cmd/fila-admin
+    startCommand: ./bin/api
+    healthCheckPath: /healthz/ready
+    autoDeployTrigger: "off"
+    maxShutdownDelaySeconds: 30
+    envVars:
+      - fromGroup: fila-prod-comum
+      - key: FILA_HTTP_ADDR
+        value: ":10000"
+      # O balanceador do Render acrescenta o IP de quem conectou ao fim do X-Forwarded-For.
+      - key: FILA_TRUST_X_FORWARDED_FOR
+        value: "true"
+      # Mesmo valor configurado na Vercel (FILA_PROXY_SHARED_SECRET do projeto do site).
+      - key: FILA_PROXY_SHARED_SECRET
+        sync: false
+      - key: FILA_ABACATEPAY_WEBHOOK_SECRET
+        sync: false
+      - key: FILA_GOOGLE_CLIENT_ID
+        sync: false
+      - key: FILA_GOOGLE_CLIENT_SECRET
+        sync: false
+
+  - type: worker
+    name: fila-worker-prod
+    runtime: go
+    region: virginia
+    plan: starter
+    rootDir: backend
+    buildCommand: go build -trimpath -o bin/ ./cmd/api ./cmd/worker ./cmd/migrate ./cmd/fila-admin
+    startCommand: ./bin/worker
+    autoDeployTrigger: "off"
+    maxShutdownDelaySeconds: 60
+    envVars:
+      - fromGroup: fila-prod-comum
+      # E-mail só no worker (a API apenas grava na caixa de saída).
+      - key: FILA_MAIL_MODE
+        value: resend
+      - key: FILA_RESEND_API_KEY
+        sync: false
+      - key: FILA_MAIL_FROM # ex.: Fila <nao-responda@mail.seudominio.com.br>
+        sync: false
+      - key: FILA_MAIL_REPLY_TO
+        sync: false
+      # Monitor externo do worker (sinal de vida a cada minuto; /fail com alerta interno).
+      - key: FILA_HEARTBEAT_URL
+        sync: false

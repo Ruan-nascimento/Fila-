@@ -26,6 +26,9 @@ type Health struct {
 	checks   []Check
 	timeout  time.Duration
 	draining atomic.Bool
+	// Revision: revisão do código em execução (cabeçalho X-Fila-Revision do /healthz/live), para o
+	// deploy conferir que a versão nova entrou no ar. Vazio = cabeçalho omitido.
+	Revision string
 }
 
 // NewHealth cria o verificador. timeout limita cada rodada de verificações.
@@ -48,6 +51,9 @@ type healthBody struct {
 
 func (h *Health) live(w http.ResponseWriter, r *http.Request) {
 	RecordRoute(r)
+	if h.Revision != "" {
+		w.Header().Set("X-Fila-Revision", h.Revision)
+	}
 	WriteJSON(w, http.StatusOK, healthBody{Status: "ok"})
 }
 

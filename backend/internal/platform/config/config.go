@@ -13,7 +13,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	netmail "net/mail"
 	"net/url"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -73,6 +75,8 @@ func (g GoogleConfig) Enabled() bool { return g.ClientID != "" && g.ClientSecret
 const (
 	MediaDisabled   = "disabled"
 	MediaFilesystem = "filesystem"
+	// MediaS3: bucket PRIVADO compatível com S3 (Cloudflare R2), compartilhado por API e worker.
+	MediaS3 = "s3"
 )
 
 // MediaConfig configura fotos e logos (ADR-0028). Desligado por padrão: sem armazenamento
@@ -85,10 +89,24 @@ type MediaConfig struct {
 	UploadsPerMin int
 	UploadsPerDay int
 	Workers       int
+	S3            S3Config
+}
+
+// S3Config é o bucket compatível com S3 (FILA_MEDIA_STORAGE=s3). No R2: endpoint
+// https://<id-da-conta>.r2.cloudflarestorage.com, região "auto", token com permissão
+// "Object Read & Write" restrito ao bucket do ambiente.
+type S3Config struct {
+	Endpoint  string
+	Bucket    string
+	Region    string
+	AccessKey string
+	SecretKey Secret
+	// Prefix (opcional) separa ambientes num mesmo bucket; o recomendado é um bucket por ambiente.
+	Prefix string
 }
 
 // Enabled informa se o envio de imagens está ligado.
-func (m MediaConfig) Enabled() bool { return m.Storage == MediaFilesystem }
+func (m MediaConfig) Enabled() bool { return m.Storage == MediaFilesystem || m.Storage == MediaS3 }
 
 // OpsConfig reúne opções de operação (etapa 12, ADR-0026).
 type OpsConfig struct {
@@ -104,6 +122,12 @@ type OpsConfig struct {
 	// DeletionJournalDir: pasta do diário de exclusões (fora do banco), usado para reaplicar
 	// exclusões depois de restaurar um backup. Vazio = diário desligado.
 	DeletionJournalDir string
+	// DeletionJournalBucket: bucket (mesmas credenciais FILA_S3_*) onde cada pedido de exclusão é
+	// copiado como objeto. Recomendado quando o disco do worker não é acessível para exportação.
+	DeletionJournalBucket string
+	// HeartbeatURL: monitor externo que recebe o sinal de vida do worker (e /fail com alerta).
+	// Contém identificador secreto do monitor. Vazio = desligado.
+	HeartbeatURL Secret
 }
 
 // OfficialAbacatePayHost é o único endereço aceito para o Pix em produção (nunca um simulador).
@@ -150,20 +174,29 @@ type SecurityConfig struct {
 	// TrustForwardedFor: usar o último endereço de X-Forwarded-For como IP do cliente
 	// (somente atrás de proxy reverso próprio que sobrescreve o cabeçalho).
 	TrustForwardedFor bool
+	// ProxySharedSecret: segredo do proxy de borda (Vercel, frontend/middleware.ts). Com ele, o
+	// pedido que prova vir do proxy informa o IP do cliente em X-Fila-Client-Ip. Vazio = desligado.
+	ProxySharedSecret Secret
 }
 
 // MailConfig define como os e-mails são entregues.
 type MailConfig struct {
 	// Mode: "file" grava cada mensagem em arquivo (só desenvolvimento/teste);
-	// "disabled" não envia nada (padrão em produção até haver provedor — limitação externa).
+	// "resend" entrega pelo Resend (homologação/produção); "disabled" não envia nada.
 	Mode string
 	Dir  string
+	// Resend (só com Mode=resend). A chave fica só no worker (a API apenas grava na caixa de saída).
+	ResendAPIKey Secret
+	From         string // "Nome <endereco@dominio-verificado>"
+	ReplyTo      string // opcional
+	Timeout      time.Duration
 }
 
 // Modos de entrega de e-mail.
 const (
 	MailFile     = "file"
 	MailDisabled = "disabled"
+	MailResend   = "resend"
 )
 
 // HTTPConfig reúne endereço e limites de tempo do servidor HTTP.
@@ -237,8 +270,13 @@ const (
 	VarPublicBaseURL     = "FILA_PUBLIC_BASE_URL"
 	VarCookieSecure      = "FILA_COOKIE_SECURE"
 	VarTrustForwardedFor = "FILA_TRUST_X_FORWARDED_FOR"
+	VarProxySecret       = "FILA_PROXY_SHARED_SECRET"
 	VarMailMode          = "FILA_MAIL_MODE"
 	VarMailDir           = "FILA_MAIL_DIR"
+	VarResendKey         = "FILA_RESEND_API_KEY"
+	VarMailFrom          = "FILA_MAIL_FROM"
+	VarMailReplyTo       = "FILA_MAIL_REPLY_TO"
+	VarMailTimeout       = "FILA_MAIL_TIMEOUT"
 	VarPixProvider       = "FILA_PIX_PROVIDER"
 	VarAbacateKey        = "FILA_ABACATEPAY_API_KEY"
 	VarAbacateBaseURL    = "FILA_ABACATEPAY_BASE_URL"
@@ -252,6 +290,8 @@ const (
 	VarSSEMax            = "FILA_SSE_MAX_CONNECTIONS"
 	VarSSEPerIP          = "FILA_SSE_MAX_PER_IP"
 	VarDeletionJournal   = "FILA_DELETION_JOURNAL_DIR"
+	VarJournalBucket     = "FILA_DELETION_JOURNAL_BUCKET"
+	VarHeartbeatURL      = "FILA_HEARTBEAT_URL"
 	VarGoogleClientID    = "FILA_GOOGLE_CLIENT_ID"
 	VarGoogleSecret      = "FILA_GOOGLE_CLIENT_SECRET"
 	VarGoogleRedirect    = "FILA_GOOGLE_REDIRECT_URL"
@@ -261,11 +301,23 @@ const (
 	VarMediaPerMinute    = "FILA_MEDIA_UPLOADS_PER_MINUTE"
 	VarMediaPerDay       = "FILA_MEDIA_UPLOADS_PER_DAY"
 	VarMediaWorkers      = "FILA_MEDIA_WORKERS"
+	VarS3Endpoint        = "FILA_S3_ENDPOINT"
+	VarS3Bucket          = "FILA_S3_BUCKET"
+	VarS3Region          = "FILA_S3_REGION"
+	VarS3AccessKey       = "FILA_S3_ACCESS_KEY_ID"
+	VarS3SecretKey       = "FILA_S3_SECRET_ACCESS_KEY"
+	VarS3Prefix          = "FILA_S3_PREFIX"
 	// VarTestDatabaseURL é lida só pelos testes de integração; aceita aqui para não ser "desconhecida".
 	VarTestDatabaseURL = "FILA_TEST_DATABASE_URL"
 	VarRequireDBTests  = "FILA_REQUIRE_DB_TESTS"
 	VarTestAppRole     = "FILA_TEST_APP_ROLE"
 	VarTestAppPassword = "FILA_TEST_APP_PASSWORD"
+	// Servidor S3 descartável dos testes de integração do armazenamento (internal/midia).
+	VarTestS3Endpoint  = "FILA_TEST_S3_ENDPOINT"
+	VarTestS3AccessKey = "FILA_TEST_S3_ACCESS_KEY"
+	VarTestS3SecretKey = "FILA_TEST_S3_SECRET_KEY"
+	VarTestS3Bucket    = "FILA_TEST_S3_BUCKET"
+	VarRequireS3Tests  = "FILA_REQUIRE_S3_TESTS"
 	// VarAPIProxyTarget é lida pelo Vite (frontend/vite.config.ts), não pelo backend.
 	VarAPIProxyTarget = "FILA_API_PROXY_TARGET"
 )
@@ -277,12 +329,15 @@ var knownVars = map[string]bool{
 	VarTestDatabaseURL: true, VarRequireDBTests: true, VarAPIProxyTarget: true, VarTestAppRole: true, VarTestAppPassword: true,
 	VarSecretKey: true, VarAllowedOrigins: true, VarPublicBaseURL: true, VarCookieSecure: true,
 	VarTrustForwardedFor: true, VarMailMode: true, VarMailDir: true,
+	VarProxySecret: true, VarResendKey: true, VarMailFrom: true, VarMailReplyTo: true, VarMailTimeout: true,
 	VarPixProvider: true, VarAbacateKey: true, VarAbacateBaseURL: true, VarAbacateValidated: true,
 	VarPixExpiresIn: true, VarAbacateTimeout: true, VarAbacateWebhook: true,
 	VarSecretKeyPrevious: true, VarMetricsAddr: true, VarRatePerMinute: true, VarSSEMax: true, VarSSEPerIP: true,
-	VarDeletionJournal: true,
-	VarGoogleClientID:  true, VarGoogleSecret: true, VarGoogleRedirect: true, VarGoogleIssuer: true,
+	VarDeletionJournal: true, VarJournalBucket: true, VarHeartbeatURL: true,
+	VarGoogleClientID: true, VarGoogleSecret: true, VarGoogleRedirect: true, VarGoogleIssuer: true,
 	VarMediaStorage: true, VarMediaDir: true, VarMediaPerMinute: true, VarMediaPerDay: true, VarMediaWorkers: true,
+	VarS3Endpoint: true, VarS3Bucket: true, VarS3Region: true, VarS3AccessKey: true, VarS3SecretKey: true, VarS3Prefix: true,
+	VarTestS3Endpoint: true, VarTestS3AccessKey: true, VarTestS3SecretKey: true, VarTestS3Bucket: true, VarRequireS3Tests: true,
 }
 
 // DeployVars são variáveis da IMPLANTAÇÃO (deploy/compose.yaml, deploy/*.sh), não da aplicação:
@@ -295,7 +350,8 @@ var DeployVars = []string{"FILA_AMBIENTE", "FILA_BACKUPS_DIR", "FILA_BACKUP_RETE
 
 // FileVars são os segredos que também podem vir de arquivo: NOME_FILE=/caminho (segredos da
 // plataforma montados como arquivo, ex.: Docker secrets). Nunca as duas formas juntas.
-var FileVars = []string{VarDatabaseURL, VarSecretKey, VarSecretKeyPrevious, VarAbacateKey, VarAbacateWebhook, VarGoogleSecret}
+var FileVars = []string{VarDatabaseURL, VarSecretKey, VarSecretKeyPrevious, VarAbacateKey, VarAbacateWebhook, VarGoogleSecret,
+	VarResendKey, VarS3SecretKey, VarProxySecret, VarHeartbeatURL}
 
 // Origens padrão fora de produção: o servidor de desenvolvimento do Vite.
 var devOrigins = []string{"http://127.0.0.1:5173", "http://localhost:5173"}
@@ -333,6 +389,7 @@ func Load(environ []string) (*Config, error) {
 		PublicBaseURL:      l.publicBaseURL(prod),
 		CookieSecure:       l.boolean(VarCookieSecure, prod),
 		TrustForwardedFor:  l.boolean(VarTrustForwardedFor, false),
+		ProxySharedSecret:  l.proxySecret(),
 	}
 	if prod && !cfg.Security.CookieSecure {
 		l.fail(VarCookieSecure, "em produção os cookies precisam ser Secure (use true ou remova a variável)")
@@ -341,12 +398,9 @@ func Load(environ []string) (*Config, error) {
 	if prod {
 		mailDefault = MailDisabled
 	}
-	cfg.Mail = MailConfig{
-		Mode: l.oneOf(VarMailMode, mailDefault, MailFile, MailDisabled),
-		Dir:  l.text(VarMailDir, ".correio"),
-	}
+	cfg.Mail = l.mail(mailDefault)
 	if cfg.Env == EnvProduction && cfg.Mail.Mode == MailFile {
-		l.fail(VarMailMode, "o modo file (arquivos locais) é só para desenvolvimento; em produção use disabled até configurar um provedor")
+		l.fail(VarMailMode, "o modo file (arquivos locais) é só para desenvolvimento; em produção use resend")
 	}
 	cfg.Payments = l.payments(cfg.Env)
 	cfg.Ops = OpsConfig{
@@ -360,6 +414,25 @@ func Load(environ []string) (*Config, error) {
 	}
 	cfg.Google = l.google(cfg.Env, cfg.Security.PublicBaseURL)
 	cfg.Media = l.media(cfg.Env)
+	if hb, ok := l.get(VarHeartbeatURL); ok {
+		u, err := url.Parse(hb)
+		if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || (u.Scheme != "https" && (prod || u.Scheme != "http")) {
+			l.fail(VarHeartbeatURL, "use a URL https do monitor de sinal de vida (ex.: https://hc-ping.com/<id>)")
+		} else {
+			cfg.Ops.HeartbeatURL = Secret(hb)
+		}
+	}
+	if b, ok := l.get(VarJournalBucket); ok {
+		if !bucketPattern.MatchString(b) {
+			l.fail(VarJournalBucket, "nome de bucket inválido (minúsculas, números e hífen)")
+		} else {
+			cfg.Ops.DeletionJournalBucket = b
+			if cfg.Media.Storage != MediaS3 {
+				// O diário usa as mesmas credenciais do armazenamento S3.
+				cfg.Media.S3 = l.s3(cfg.Env)
+			}
+		}
+	}
 	l.unknownVars()
 
 	if len(l.problems) > 0 {
@@ -786,7 +859,7 @@ func (l *loader) google(env Environment, publicBase string) GoogleConfig {
 // pasta precisa ser informada explicitamente (volume persistente, fora da raiz pública).
 func (l *loader) media(env Environment) MediaConfig {
 	c := MediaConfig{
-		Storage:       l.oneOf(VarMediaStorage, MediaDisabled, MediaDisabled, MediaFilesystem),
+		Storage:       l.oneOf(VarMediaStorage, MediaDisabled, MediaDisabled, MediaFilesystem, MediaS3),
 		UploadsPerMin: l.intRange(VarMediaPerMinute, 5, 1, 100),
 		UploadsPerDay: l.intRange(VarMediaPerDay, 20, 1, 1000),
 		Workers:       l.intRange(VarMediaWorkers, 2, 1, 8),
@@ -802,5 +875,113 @@ func (l *loader) media(env Environment) MediaConfig {
 			c.Dir = ".midia"
 		}
 	}
+	if c.Storage == MediaS3 {
+		c.S3 = l.s3(env)
+	}
 	return c
+}
+
+// bucketPattern: nomes de bucket S3/R2 (3 a 63 caracteres, minúsculas, números e hífen).
+var bucketPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$`)
+
+// prefixPattern: prefixo opcional, segmentos simples terminados em "/".
+var prefixPattern = regexp.MustCompile(`^([a-z0-9][a-z0-9-]{0,40}/){1,3}$`)
+
+func (l *loader) s3(env Environment) S3Config {
+	c := S3Config{Region: l.text(VarS3Region, "auto")}
+	ep, _ := l.get(VarS3Endpoint)
+	u, err := url.Parse(ep)
+	switch {
+	case ep == "":
+		l.fail(VarS3Endpoint, "obrigatória com FILA_MEDIA_STORAGE=s3 (R2: https://<id-da-conta>.r2.cloudflarestorage.com)")
+	case err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") || (u.Path != "" && u.Path != "/") ||
+		u.RawQuery != "" || u.User != nil:
+		l.fail(VarS3Endpoint, "use só o endereço do serviço, sem o bucket no caminho (ex.: https://<id>.r2.cloudflarestorage.com)")
+	case env.Hardened() && u.Scheme != "https":
+		l.fail(VarS3Endpoint, "em produção use https")
+	default:
+		c.Endpoint = strings.TrimRight(ep, "/")
+	}
+	if b, _ := l.get(VarS3Bucket); !bucketPattern.MatchString(b) {
+		l.fail(VarS3Bucket, "obrigatória; nome do bucket privado (minúsculas, números e hífen)")
+	} else {
+		c.Bucket = b
+	}
+	if strings.ContainsAny(c.Region, " /") || len(c.Region) > 40 {
+		l.fail(VarS3Region, `região inválida (R2: "auto")`)
+	}
+	c.AccessKey, _ = l.get(VarS3AccessKey)
+	if c.AccessKey == "" || len(c.AccessKey) > 128 || strings.ContainsAny(c.AccessKey, " /") {
+		l.fail(VarS3AccessKey, "obrigatória com FILA_MEDIA_STORAGE=s3 (Access Key ID do token do bucket)")
+	}
+	sk, _ := l.get(VarS3SecretKey)
+	if sk == "" {
+		l.fail(VarS3SecretKey, "obrigatória com FILA_MEDIA_STORAGE=s3 (Secret Access Key do token do bucket)")
+	}
+	c.SecretKey = Secret(sk)
+	if p, ok := l.get(VarS3Prefix); ok {
+		if !prefixPattern.MatchString(p) {
+			l.fail(VarS3Prefix, `formato esperado: segmento(s) em minúsculas terminados em "/" (ex.: producao/)`)
+		} else {
+			c.Prefix = p
+		}
+	}
+	return c
+}
+
+// mail lê a entrega de e-mail. Com resend: chave (re_...), remetente de domínio verificado no
+// Resend e, opcionalmente, endereço de resposta.
+func (l *loader) mail(def string) MailConfig {
+	c := MailConfig{
+		Mode:    l.oneOf(VarMailMode, def, MailFile, MailDisabled, MailResend),
+		Dir:     l.text(VarMailDir, ".correio"),
+		Timeout: l.duration(VarMailTimeout, 15*time.Second, 2*time.Second, time.Minute),
+	}
+	key, _ := l.get(VarResendKey)
+	from, _ := l.get(VarMailFrom)
+	reply, _ := l.get(VarMailReplyTo)
+	if c.Mode != MailResend {
+		return c
+	}
+	switch {
+	case key == "":
+		l.fail(VarResendKey, "obrigatória com FILA_MAIL_MODE=resend (crie no painel do Resend com permissão só de envio)")
+	case !strings.HasPrefix(key, "re_") || len(key) > 200 || strings.ContainsAny(key, " \t\r\n"):
+		l.fail(VarResendKey, "formato não reconhecido (a chave do Resend começa com re_)")
+	}
+	c.ResendAPIKey = Secret(key)
+	if from == "" {
+		l.fail(VarMailFrom, `obrigatória com FILA_MAIL_MODE=resend (ex.: Fila <nao-responda@mail.seudominio.com.br>)`)
+	} else if a, err := netmail.ParseAddress(from); err != nil || !strings.Contains(a.Address, "@") {
+		l.fail(VarMailFrom, `formato esperado: Nome <endereco@dominio-verificado-no-resend>`)
+	} else {
+		c.From = from
+	}
+	if reply != "" {
+		if _, err := netmail.ParseAddress(reply); err != nil {
+			l.fail(VarMailReplyTo, "endereço de e-mail inválido")
+		} else {
+			c.ReplyTo = reply
+		}
+	}
+	return c
+}
+
+// proxySecret lê o segredo do proxy de borda: 32 a 256 caracteres seguros para cabeçalho HTTP.
+func (l *loader) proxySecret() Secret {
+	v, ok := l.get(VarProxySecret)
+	if !ok {
+		return ""
+	}
+	for _, c := range v {
+		if c <= ' ' || c > '~' {
+			l.fail(VarProxySecret, "use só caracteres visíveis (ex.: saída de fila-admin gerar-chave)")
+			return ""
+		}
+	}
+	if len(v) < 32 || len(v) > 256 {
+		l.fail(VarProxySecret, "use de 32 a 256 caracteres (gere com: fila-admin gerar-chave)")
+		return ""
+	}
+	return Secret(v)
 }

@@ -31,6 +31,7 @@ import (
 	"fila/internal/platform/database"
 	hs "fila/internal/platform/httpserver"
 	"fila/internal/platform/keys"
+	"fila/internal/platform/objstore"
 	"fila/internal/platform/outbox"
 	"fila/internal/platform/ratelimit"
 )
@@ -74,10 +75,18 @@ func MediaStore(c config.MediaConfig, override midia.Storage) midia.Storage {
 	switch {
 	case override != nil:
 		return override
+	case c.Storage == config.MediaS3:
+		return midia.NewS3Store(ObjectClient(c.S3, c.S3.Bucket), c.S3.Prefix)
 	case c.Enabled():
 		return midia.FileStore{Root: c.Dir}
 	}
 	return nil
+}
+
+// ObjectClient cria o cliente do armazenamento de objetos (R2) para um bucket.
+func ObjectClient(c config.S3Config, bucket string) *objstore.Client {
+	return &objstore.Client{Endpoint: c.Endpoint, Bucket: bucket, Region: c.Region,
+		AccessKey: c.AccessKey, SecretKey: c.SecretKey.Reveal()}
 }
 
 // API é a aplicação montada.

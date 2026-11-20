@@ -116,3 +116,29 @@ Também nesta medição: quem só olha a página da loja (sem credencial) era li
 - **Banco gerenciado** (sem o perfil `banco-local`) e **restauração física / PITR**: documentadas, não exercitadas.
 - **Duas instâncias da API:** não configuradas. Com uma, a troca segura as requisições por alguns segundos.
 - Os blocos `Down` das migrações (reversão usada é aplicação anterior + backup).
+
+## Preparação da V1 (20/11/2026, branch `publicacao-v1`, a partir de `a902365`)
+
+Executado **localmente** (Linux, Go 1.27.4, Node 26, PostgreSQL 18.6 descartável em Docker, SeaweedFS como servidor S3 com autenticação). Nenhum provedor real foi usado.
+
+| O que | Resultado |
+|---|---|
+| Linha de base antes das mudanças: `go test ./...` | todos os pacotes ok |
+| `gofmt`, `go mod verify`/`tidy -diff`, contrato gerado em dia, `go vet`, `staticcheck`, `govulncheck` | ok; nenhuma vulnerabilidade |
+| `go test -race ./...` com banco real e S3 local (`FILA_REQUIRE_DB_TESTS=1`, `FILA_REQUIRE_S3_TESTS=1`) | 24 pacotes ok; 1 falha de **tempo** (`TestProcessAtLimitMeasured`: 38 s > 30 s) com a CPU disputada pela compilação Rust; isolado com `-race`: **passou (16,6 s)**. Código de imagens não alterado |
+| Dispatcher de e-mail: 4 workers simultâneos, 30 mensagens | cada mensagem enviada exatamente 1 vez |
+| Queda depois do aceite e antes da confirmação | reenvio com a mesma chave de idempotência; a confirmação atrasada não sobrescreve |
+| Link vencido / erro permanente do provedor | descartado sem envio / desistência na 1ª tentativa |
+| Resend (servidor HTTP simulado): cabeçalhos, 429, 5xx, 401/403, 409, 400/422, tempo esgotado | classificação correta; nenhum erro contém destinatário, conteúdo ou chave |
+| Assinatura S3 SigV4 contra os vetores oficiais da AWS (GET Object, ListObjects) | idênticos |
+| Adaptador S3 contra SeaweedFS autenticado (anônimo recusado com 403) | gravar/ler/apagar, listagem paginada, isolamento por prefixo, credencial errada sem vazamento |
+| Testes ponta a ponta de fotos da API gravando no S3 (8 testes) | ok; objetos confirmados no bucket |
+| Restauração ponta a ponta com diário de exclusões **baixado do bucket** | ok |
+| IP do cliente: proxy autenticado, cabeçalhos forjados sem segredo, IP inválido, clientes distintos | ok |
+| Frontend: build, tipos, lint, prettier, 149 testes + 4 do proxy de borda; bundle sem vestígio do proxy | ok |
+| Ciclo backup: `pg_dump` → `age` → `scripts/ensaio-restauracao.sh` (restaura, migra, trava, reconcilia, libera, indicadores) | ok, em segundos; contêiner e arquivo decifrado apagados ao fim |
+| Workflows (`actionlint`) e Blueprints (YAML) | sem erros |
+| Desktop: `npm run test:ui` | 4/4 |
+| Desktop: `.deb` 1.0.0 (origem de teste `https://fila-v1-build.test`, **não distribuir**) | gerado: `fila-gestao` 1.0.0, 3,76 MiB |
+
+**Não executado:** nada com Neon, Render, Vercel, R2, Resend, Google ou AbacatePay; SSE pelo percurso Vercel → Render; instalação do `.deb` com `apt`; Windows (nem build nem instalação).

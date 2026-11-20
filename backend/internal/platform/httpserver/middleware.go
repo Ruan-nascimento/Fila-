@@ -49,7 +49,8 @@ func Chain(h http.Handler, log *slog.Logger) http.Handler { return ChainWith(h, 
 
 // ChainWith é Chain com as proteções e a observação de Options (limite geral por IP, métricas).
 func ChainWith(h http.Handler, log *slog.Logger, o Options) http.Handler {
-	return requestID(accessLog(log, o.Observe, recoverer(log, limitByIP(o, securityHeaders(h)))))
+	return ResolveClientIP(ClientIPPolicy{TrustForwardedFor: o.TrustForwardedFor, ProxySecret: o.ProxySecret},
+		requestID(accessLog(log, o.Observe, recoverer(log, limitByIP(o, securityHeaders(h))))))
 }
 
 func requestID(next http.Handler) http.Handler {

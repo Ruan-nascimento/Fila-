@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,6 +20,7 @@ import (
 	"fila/internal/estabelecimento"
 	"fila/internal/identidade"
 	"fila/internal/platform/database"
+	"fila/internal/platform/objstore"
 )
 
 // Diário de exclusões (etapa 12, ADR-0026). Um backup anterior a um pedido de exclusão traria a
@@ -43,11 +46,118 @@ type JournalEntry struct {
 	RequestedAt     time.Time   `json:"requested_at"`
 }
 
-// Journal copia os pedidos de exclusão para o arquivo do diário.
+// Journal copia os pedidos de exclusão para o arquivo do diário (Dir) e/ou para um bucket de
+// objetos (Remote). O bucket resolve o caso de plataformas em que o disco do worker não é
+// acessível por outro processo nem copiado para fora: cada pedido vira um objeto imutável
+// <RemotePrefix>diario-exclusoes/<id>.json. Basta um dos dois; com ambos, cada um tem seu progresso.
 type Journal struct {
-	Dir  string
-	seen map[uuid.UUID]bool
-	last time.Time
+	Dir          string
+	Remote       JournalStore
+	RemotePrefix string
+
+	ready      bool
+	seenLocal  map[uuid.UUID]bool
+	seenRemote map[uuid.UUID]bool
+	lastLocal  time.Time
+	lastRemote time.Time
+}
+
+// JournalStore é o bucket do diário (objstore.Client).
+type JournalStore interface {
+	Put(ctx context.Context, key string, data []byte, contentType string) error
+	Get(ctx context.Context, key string) ([]byte, error)
+	List(ctx context.Context, prefix string, fn func(objstore.Object) error) error
+}
+
+// RemoteJournalDir é a "pasta" dos objetos do diário no bucket.
+const RemoteJournalDir = "diario-exclusoes/"
+
+func remoteKey(prefix string, id uuid.UUID) string {
+	return prefix + RemoteJournalDir + id.String() + ".json"
+}
+
+// ReadRemoteJournal lê todas as entradas do diário no bucket (ordenadas pela data do pedido).
+func ReadRemoteJournal(ctx context.Context, st JournalStore, prefix string) ([]JournalEntry, error) {
+	var keys []string
+	err := st.List(ctx, prefix+RemoteJournalDir, func(o objstore.Object) error {
+		if strings.HasSuffix(o.Key, ".json") {
+			keys = append(keys, o.Key)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]JournalEntry, 0, len(keys))
+	for _, k := range keys {
+		b, err := st.Get(ctx, k)
+		if err != nil {
+			return nil, err
+		}
+		var e JournalEntry
+		if err := json.Unmarshal(b, &e); err != nil || e.RequestID == uuid.Nil {
+			return nil, fmt.Errorf("diário de exclusões no bucket: objeto ilegível")
+		}
+		out = append(out, e)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].RequestedAt.Equal(out[j].RequestedAt) {
+			return out[i].RequestedAt.Before(out[j].RequestedAt)
+		}
+		return out[i].RequestID.String() < out[j].RequestID.String()
+	})
+	return out, nil
+}
+
+// WriteJournalFile grava as entradas como um arquivo de diário na pasta (para
+// "restauracao reconciliar -diario <pasta>" e para cópias externas).
+func WriteJournalFile(dir string, entries []JournalEntry) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	var b []byte
+	for _, e := range entries {
+		line, _ := json.Marshal(e)
+		b = append(append(b, line...), '\n')
+	}
+	tmp := filepath.Join(dir, JournalFile+".tmp")
+	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, filepath.Join(dir, JournalFile))
+}
+
+func (j *Journal) load(ctx context.Context) error {
+	j.seenLocal, j.seenRemote = map[uuid.UUID]bool{}, map[uuid.UUID]bool{}
+	if j.Dir != "" {
+		if err := os.MkdirAll(j.Dir, 0o700); err != nil {
+			return err
+		}
+		entries, err := ReadJournal(j.Dir)
+		if err != nil {
+			return err
+		}
+		for _, e := range entries {
+			j.seenLocal[e.RequestID] = true
+			if e.RequestedAt.After(j.lastLocal) {
+				j.lastLocal = e.RequestedAt
+			}
+		}
+	}
+	if j.Remote != nil {
+		entries, err := ReadRemoteJournal(ctx, j.Remote, j.RemotePrefix)
+		if err != nil {
+			return err
+		}
+		for _, e := range entries {
+			j.seenRemote[e.RequestID] = true
+			if e.RequestedAt.After(j.lastRemote) {
+				j.lastRemote = e.RequestedAt
+			}
+		}
+	}
+	j.ready = true
+	return nil
 }
 
 // ReadJournal lê todas as linhas do diário (pasta inexistente = diário vazio).
@@ -86,33 +196,27 @@ func ReadJournal(dir string) ([]JournalEntry, error) {
 	return out, nil
 }
 
-// Export grava no diário os pedidos que ainda não estão lá. Repetível; cada linha é escrita e
-// sincronizada com o disco (fsync) antes de contar como gravada.
+// Export grava no diário os pedidos que ainda não estão lá. Repetível; no arquivo, cada linha é
+// escrita e sincronizada com o disco (fsync) antes de contar como gravada; no bucket, cada pedido
+// é um PUT idempotente.
 func (j *Journal) Export(ctx context.Context, q database.Querier) (int, error) {
-	if j.seen == nil {
-		if err := os.MkdirAll(j.Dir, 0o700); err != nil {
+	if !j.ready {
+		if err := j.load(ctx); err != nil {
 			return 0, err
 		}
-		entries, err := ReadJournal(j.Dir)
-		if err != nil {
-			return 0, err
-		}
-		j.seen = map[uuid.UUID]bool{}
-		for _, e := range entries {
-			j.seen[e.RequestID] = true
-			if e.RequestedAt.After(j.last) {
-				j.last = e.RequestedAt
-			}
-		}
+	}
+	since := j.lastLocal
+	if j.Dir == "" || (j.Remote != nil && j.lastRemote.Before(since)) {
+		since = j.lastRemote
 	}
 	// Margem de 1 h: um pedido confirmado com relógio um pouco atrás ainda é visto.
 	rows, err := q.Query(ctx, `
 		SELECT id, account_id, protocol_hmac, protocol_suffix, professional_ids, requested_at
-		FROM deletion_request WHERE requested_at >= $1 ORDER BY requested_at, id`, j.last.Add(-time.Hour))
+		FROM deletion_request WHERE requested_at >= $1 ORDER BY requested_at, id`, since.Add(-time.Hour))
 	if err != nil {
 		return 0, err
 	}
-	var pending []JournalEntry
+	var local, remote []JournalEntry
 	for rows.Next() {
 		var e JournalEntry
 		var mac []byte
@@ -120,36 +224,60 @@ func (j *Journal) Export(ctx context.Context, q database.Querier) (int, error) {
 			rows.Close()
 			return 0, err
 		}
-		if !j.seen[e.RequestID] {
-			e.V, e.ProtocolHMAC = 1, hex.EncodeToString(mac)
-			pending = append(pending, e)
+		e.V, e.ProtocolHMAC = 1, hex.EncodeToString(mac)
+		if j.Dir != "" && !j.seenLocal[e.RequestID] {
+			local = append(local, e)
+		}
+		if j.Remote != nil && !j.seenRemote[e.RequestID] {
+			remote = append(remote, e)
 		}
 	}
 	rows.Close()
-	if err := rows.Err(); err != nil || len(pending) == 0 {
+	if err := rows.Err(); err != nil {
 		return 0, err
 	}
+	n := 0
+	if len(local) > 0 {
+		if err := j.appendLocal(local); err != nil {
+			return 0, err
+		}
+		n = len(local)
+	}
+	for i, e := range remote {
+		line, _ := json.Marshal(e)
+		if err := j.Remote.Put(ctx, remoteKey(j.RemotePrefix, e.RequestID), line, "application/json"); err != nil {
+			return max(n, i), fmt.Errorf("diário no bucket: %w", err)
+		}
+		j.seenRemote[e.RequestID] = true
+		if e.RequestedAt.After(j.lastRemote) {
+			j.lastRemote = e.RequestedAt
+		}
+	}
+	return max(n, len(remote)), nil
+}
+
+func (j *Journal) appendLocal(pending []JournalEntry) error {
 	f, err := os.OpenFile(filepath.Join(j.Dir, JournalFile), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
-		return 0, err
+		return err
 	}
 	defer f.Close()
 	for _, e := range pending {
 		line, _ := json.Marshal(e)
 		if _, err := f.Write(append(line, '\n')); err != nil {
-			return 0, err
+			return err
 		}
 	}
 	if err := f.Sync(); err != nil {
-		return 0, err
+		return err
 	}
 	for _, e := range pending {
-		j.seen[e.RequestID] = true
-		if e.RequestedAt.After(j.last) {
-			j.last = e.RequestedAt
+		j.seenLocal[e.RequestID] = true
+		if e.RequestedAt.After(j.lastLocal) {
+			j.lastLocal = e.RequestedAt
 		}
 	}
-	return len(pending), nil
+	return nil
 }
 
 // RunJournal exporta a cada `every` (worker).
