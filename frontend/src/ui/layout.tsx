@@ -1,22 +1,54 @@
 import type { ReactNode } from "react";
 import { Link, NavLink } from "react-router";
-import { KeyRound, LogIn, Scissors, Search, UserPlus, UserRound } from "lucide-react";
+import { KeyRound, LogIn, Scissors, Search, Store, UserPlus, UserRound } from "lucide-react";
+import type { components } from "../api/schema.gen";
 import { useSession } from "../session/context";
 import { AvisosGerais } from "./estados";
 import { cx } from "./cx";
 
-/** Marca única do produto: tesoura + "Fila". */
-export function Brand({ to = "/", sub }: { to?: string; sub?: string | undefined }) {
+/** Identidade de uma loja para o canto superior esquerdo (nome e logo atuais, vindos do servidor). */
+export type StoreMark = { name: string; logo?: components["schemas"]["ImageRef"] | null | undefined };
+
+/**
+ * Canto superior esquerdo. Dentro de uma loja (página pública e gestão) mostra a logo e o nome
+ * DA LOJA; sem logo, um ícone com a cor da loja. Fora de loja, a marca do produto: tesoura + "Fila".
+ */
+export function Brand({
+  to = "/",
+  sub,
+  store,
+}: {
+  to?: string;
+  sub?: string | undefined;
+  store?: StoreMark | null | undefined;
+}) {
+  const logo = store?.logo?.variants[0];
   return (
     <Link
       to={to}
       className="inline-flex min-h-11 min-w-0 items-center gap-2 rounded-lg pr-1 text-fg no-underline"
     >
-      <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-on-primary">
-        <Scissors aria-hidden="true" className="size-[18px]" />
-      </span>
+      {logo ? (
+        <img
+          src={logo.url}
+          srcSet={store?.logo?.variants.map((v) => `${v.url} ${v.width}w`).join(", ")}
+          sizes="32px"
+          width={32}
+          height={32}
+          alt=""
+          className="size-8 shrink-0 rounded-lg object-contain"
+        />
+      ) : (
+        <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-on-primary">
+          {store ? (
+            <Store aria-hidden="true" className="size-[18px]" />
+          ) : (
+            <Scissors aria-hidden="true" className="size-[18px]" />
+          )}
+        </span>
+      )}
       <span className="grid min-w-0 leading-tight">
-        <span className="text-lg font-bold tracking-tight">Fila</span>
+        <span className="truncate text-lg font-bold tracking-tight">{store?.name || "Fila"}</span>
         {sub && <span className="truncate text-xs text-fg-muted">{sub}</span>}
       </span>
     </Link>
@@ -77,10 +109,13 @@ function HeaderAccount() {
 export function PublicShell({
   children,
   context,
+  store,
   width = "normal",
 }: {
   children: ReactNode;
   context?: ReactNode;
+  /** Loja aberta: o canto superior esquerdo mostra a logo e o nome dela, com link para a loja. */
+  store?: (StoreMark & { slug: string }) | null | undefined;
   width?: "narrow" | "normal" | "wide";
 }) {
   return (
@@ -89,7 +124,7 @@ export function PublicShell({
       <header className="sticky top-0 z-30 border-b border-line bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/85">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-1.5 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
-            <Brand />
+            {store ? <Brand to={`/loja/${store.slug}`} store={store} /> : <Brand />}
             {context && (
               <>
                 <span aria-hidden="true" className="h-6 w-px shrink-0 bg-line" />

@@ -36,7 +36,14 @@ export function Cadastro() {
   const { shop } = usePublicShop(slug);
   useStoreBrand(shop?.palette);
   const cfg = usePublicConfig();
-  const lojaVolta = voltar?.startsWith("/loja/") ? voltar : shop ? `/loja/${shop.slug}` : undefined;
+  // Volta para a loja sempre pelo endereço ATUAL (o link pode ter vindo de um QR com o nome antigo).
+  const lojaVolta = voltar?.startsWith("/loja/")
+    ? shop
+      ? voltar.replace(/^\/loja\/[^/?#]+/, `/loja/${shop.slug}`)
+      : voltar
+    : shop
+      ? `/loja/${shop.slug}`
+      : undefined;
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

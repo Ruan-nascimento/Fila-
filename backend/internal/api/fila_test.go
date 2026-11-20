@@ -667,3 +667,109 @@ func TestQueueRulesWithRealParticipations(t *testing.T) {
 	// Fila fechada: Beto ainda conclui o atendimento em curso.
 	b.betoB.mustStatus(b.betoB.closeVisit(b.id, called, "complete", func(string) string { return "performed" }, nil), 200)
 }
+
+// C-FILA-14 — a equipe troca a pessoa chamada com a próxima e reordena quem aguarda (T-P-11).
+func TestMoveParticipation(t *testing.T) {
+	e := newEnv(t)
+	b := e.barbearia(t)
+	ids := map[string]string{}
+	clientes := map[string]*browser{}
+	for _, n := range []string{"Maria", "João", "Lia"} {
+		c := e.visitorIn(b.id, n)
+		p, _ := visitOf(c.mustStatus(c.enter(b.id, b.filaBeto, b.corte), 201))
+		ids[n], clientes[n] = p["id"].(string), c
+	}
+	version := func(id string) int64 {
+		var v int64
+		if err := e.pool.QueryRow(context.Background(), `SELECT version FROM participation WHERE id = $1`, id).Scan(&v); err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	move := func(who *browser, nome, dir string) resp {
+		return who.partCmd(b.id, ids[nome], "move", map[string]any{"expected_version": version(ids[nome]), "direction": dir})
+	}
+	// Ordem de espera vista pela equipe (só aguardando, pela posição).
+	waitingOrder := func() string {
+		rows, err := e.pool.Query(context.Background(), `SELECT nick FROM participation WHERE queue_id = $1 AND status = 'waiting' ORDER BY position`, b.filaBeto)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		var out []string
+		for rows.Next() {
+			var n string
+			_ = rows.Scan(&n)
+			out = append(out, n)
+		}
+		return strings.Join(out, ",")
+	}
+
+	// Ninguém chamado: Maria é a primeira e não sobe mais.
+	if r := move(b.betoB, "Maria", "up"); r.status != 409 || r.code() != "invalid_transition" {
+		t.Fatalf("subir a primeira sem ninguém chamado: %d %s", r.status, r.raw)
+	}
+	// Lia sobe uma posição (profissional da fila).
+	b.betoB.mustStatus(move(b.betoB, "Lia", "up"), 200)
+	if got := waitingOrder(); got != "Maria,Lia,João" {
+		t.Fatalf("ordem depois de Lia subir: %s", got)
+	}
+	// Chama Maria; ela avisa que vai atrasar; Beto a desce: Lia vira a chamada, Maria a primeira a aguardar.
+	b.betoB.mustStatus(b.betoB.callNext(b.id, b.filaBeto), 200)
+	e.clock.Advance(3 * time.Minute)
+	r := b.betoB.mustStatus(move(b.betoB, "Maria", "down"), 200)
+	if p, _ := visitOf(r); p["status"] != "waiting" || p["position"] != float64(1) {
+		t.Fatalf("Maria depois de descer: %s", r.raw)
+	}
+	if st, _ := e.partStatus(t, ids["Lia"]); st != "called" {
+		t.Fatalf("Lia deveria estar chamada: %s", st)
+	}
+	var tol time.Time
+	if err := e.pool.QueryRow(context.Background(), `SELECT tolerance_ends_at FROM participation WHERE id = $1`, ids["Lia"]).Scan(&tol); err != nil {
+		t.Fatal(err)
+	}
+	if !tol.Equal(e.clock.Now().Add(10 * time.Minute)) {
+		t.Fatalf("tolerância de Lia deveria contar a partir da troca: %v", tol)
+	}
+	// O celular de Lia vê a chamada.
+	lia := clientes["Lia"]
+	if pl, _ := visitOf(lia.mustStatus(lia.do("GET", estPath(b.id, "/my-visit"), nil), 200)); pl["status"] != "called" {
+		t.Fatalf("Lia deveria ver a chamada: %v", pl["status"])
+	}
+	if got := waitingOrder(); got != "Maria,João" {
+		t.Fatalf("ordem de espera depois da troca: %s", got)
+	}
+	// A dona desfaz: Maria (primeira a aguardar) sobe e volta a ser a chamada.
+	b.owner.mustStatus(move(b.owner, "Maria", "up"), 200)
+	if st, _ := e.partStatus(t, ids["Maria"]); st != "called" {
+		t.Fatalf("Maria deveria voltar a ser chamada: %s", st)
+	}
+	if got := waitingOrder(); got != "Lia,João" {
+		t.Fatalf("ordem depois de Maria subir: %s", got)
+	}
+	// Último não desce; versão antiga recebe conflito; cliente e outro profissional não movem.
+	if r := move(b.betoB, "João", "down"); r.code() != "invalid_transition" {
+		t.Fatalf("descer o último: %s", r.raw)
+	}
+	if r := b.betoB.partCmd(b.id, ids["João"], "move", map[string]any{"expected_version": 1, "direction": "up"}); r.code() != "version_conflict" {
+		t.Fatalf("versão antiga: %s", r.raw)
+	}
+	if r := move(clientes["João"], "João", "up"); r.status != 401 && r.status != 404 && r.status != 403 {
+		t.Fatalf("cliente movendo a si mesmo: %d %s", r.status, r.raw)
+	}
+	caioB := e.staffMember(b.shop, b.caio, "caio@exemplo.com")
+	if r := move(caioB, "João", "up"); r.status != 403 {
+		t.Fatalf("profissional de outra fila: %d %s", r.status, r.raw)
+	}
+	if r := b.betoB.partCmd(b.id, ids["João"], "move", map[string]any{"expected_version": version(ids["João"]), "direction": "lado"}); r.status != 400 {
+		t.Fatalf("direção inválida: %d", r.status)
+	}
+	// Em atendimento não se move.
+	b.betoB.mustStatus(b.betoB.partCmd(b.id, ids["Maria"], "start", map[string]any{"expected_version": version(ids["Maria"])}), 200)
+	if r := move(b.betoB, "Maria", "down"); r.code() != "invalid_transition" {
+		t.Fatalf("mover quem está em atendimento: %s", r.raw)
+	}
+	if r := move(b.betoB, "Lia", "up"); r.code() != "invalid_transition" {
+		t.Fatalf("subir acima de quem está em atendimento: %s", r.raw)
+	}
+}

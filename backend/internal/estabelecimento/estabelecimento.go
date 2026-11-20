@@ -84,9 +84,22 @@ func MembershipsIn(ctx context.Context, q database.Querier, accountID, establish
 	return out, nil
 }
 
-// PublicBySlug devolve a loja ativa pelo endereço público (link/QR).
+// PublicBySlug devolve a loja ativa pelo endereço público (link/QR). Endereços antigos (a loja
+// trocou de nome) também valem: a loja volta com o endereço ATUAL em Slug, e quem chamou pode
+// levar o navegador até ele. Assim QR Codes já impressos continuam funcionando.
 func PublicBySlug(ctx context.Context, q database.Querier, slug string) (Public, error) {
-	return scanPublic(q.QueryRow(ctx, `SELECT `+publicColumns+` FROM establishment WHERE slug = $1 AND status = 'active'`, slug))
+	return scanPublic(q.QueryRow(ctx, `SELECT `+publicColumns+` FROM establishment
+		WHERE status = 'active' AND (slug = $1 OR id = (SELECT establishment_id FROM establishment_slug_alias WHERE slug = $1))
+		ORDER BY slug = $1 DESC LIMIT 1`, slug))
+}
+
+// slugUsedByOther diz se o endereço é (ou já foi) de OUTRA loja. Endereços antigos continuam
+// reservados para a loja que os usou, para que um QR impresso nunca abra a loja errada.
+func slugUsedByOther(ctx context.Context, q database.Querier, slug string, self uuid.UUID) (bool, error) {
+	var used bool
+	err := q.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM establishment WHERE slug = $1 AND id <> $2)
+		OR EXISTS (SELECT 1 FROM establishment_slug_alias WHERE slug = $1 AND establishment_id <> $2)`, slug, self).Scan(&used)
+	return used, err
 }
 
 // ActiveByID devolve a loja ativa pelo identificador.
@@ -108,6 +121,11 @@ func scanPublic(row pgx.Row) (Public, error) {
 // Create cria uma loja ativa (processo controlado do operador, ADR-0013).
 func Create(ctx context.Context, q database.Querier, name, slug, timezone string, now time.Time) (uuid.UUID, error) {
 	var id uuid.UUID
+	if used, err := slugUsedByOther(ctx, q, slug, uuid.Nil); err != nil {
+		return uuid.Nil, fmt.Errorf("conferir endereço: %w", err)
+	} else if used {
+		return uuid.Nil, ErrSlugTaken
+	}
 	err := q.QueryRow(ctx, `
 		INSERT INTO establishment (name, slug, timezone, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $4) RETURNING id`, name, slug, timezone, now).Scan(&id)

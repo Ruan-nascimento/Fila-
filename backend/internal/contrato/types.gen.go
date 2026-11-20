@@ -1121,6 +1121,24 @@ func (e MoneyCurrency) Valid() bool {
 	}
 }
 
+// Defines values for MoveParticipationRequestDirection.
+const (
+	Down MoveParticipationRequestDirection = "down"
+	Up   MoveParticipationRequestDirection = "up"
+)
+
+// Valid indicates whether the value is a known member of the MoveParticipationRequestDirection enum.
+func (e MoveParticipationRequestDirection) Valid() bool {
+	switch e {
+	case Down:
+		return true
+	case Up:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for OrderItemReportedOutcome.
 const (
 	OrderItemReportedOutcomeFullyPerformed     OrderItemReportedOutcome = "fully_performed"
@@ -3021,6 +3039,18 @@ type Money struct {
 // MoneyCurrency defines model for Money.Currency.
 type MoneyCurrency string
 
+// MoveParticipationRequest defines model for MoveParticipationRequest.
+type MoveParticipationRequest struct {
+	// Direction `up` = uma posição para frente; `down` = uma posição para trás.
+	Direction MoveParticipationRequestDirection `json:"direction"`
+
+	// ExpectedVersion Versão do agregado; incrementa a cada mudança.
+	ExpectedVersion Version `json:"expected_version"`
+}
+
+// MoveParticipationRequestDirection `up` = uma posição para frente; `down` = uma posição para trás.
+type MoveParticipationRequestDirection string
+
 // MyProfessionalProfile defines model for MyProfessionalProfile.
 type MyProfessionalProfile struct {
 	DisplayName string `json:"display_name"`
@@ -4536,6 +4566,12 @@ type InterruptServiceParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// MoveParticipationParams defines parameters for MoveParticipation.
+type MoveParticipationParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // MarkNoShowParams defines parameters for MarkNoShow.
 type MarkNoShowParams struct {
 	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
@@ -4896,6 +4932,9 @@ type CompleteServiceJSONRequestBody = CompleteServiceRequest
 
 // InterruptServiceJSONRequestBody defines body for InterruptService for application/json ContentType.
 type InterruptServiceJSONRequestBody = InterruptServiceRequest
+
+// MoveParticipationJSONRequestBody defines body for MoveParticipation for application/json ContentType.
+type MoveParticipationJSONRequestBody = MoveParticipationRequest
 
 // MarkNoShowJSONRequestBody defines body for MarkNoShow for application/json ContentType.
 type MarkNoShowJSONRequestBody = VersionedRequest

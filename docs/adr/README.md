@@ -33,3 +33,4 @@ Para mudar uma decisão, crie um novo ADR que substitua o anterior (não reescre
 | [ADR-0026](0026-operacao-trava-restauracao-metricas.md) | Operação: trava do worker, conciliação pós-restauração, diário de exclusões e métricas internas | Aceita (etapa 12) |
 | [ADR-0027](0027-sessao-unica-do-dono-e-dashboard-desktop.md) | Sessão única do dono (vaga por conta), instalação desktop com prova DPoP e módulo analítico somente leitura | Aceita |
 | [ADR-0028](0028-configuracoes-fotos-google-identidade-qr.md) | Configurações pessoais, fotos (módulo midia), Google só para cliente (OIDC + PKCE), identidade da loja (16 paletas) e QR Code | Aceita |
+| [ADR-0029](0029-mudar-de-lugar-na-fila-e-endereco-acompanha-o-nome.md) | Mudar de lugar na fila (T-P-11) e endereço da loja que acompanha o nome, com endereços antigos válidos | Aceita |

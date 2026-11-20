@@ -51,7 +51,7 @@ O produto precisava de: (1) "Minha conta" para cliente, profissional e dono; (2)
 
 | Conflito | Resolução |
 |---|---|
-| A tela "Dados da loja" já permitia **mudar o slug** (e a API `updateEstablishment` aceita), o que invalida QR impressos; a especificação pede não incluir troca de slug | A nova tela mostra o endereço só para leitura, com o motivo. A API foi mantida (compatibilidade, desktop e operador); redirects de slugs antigos **não** foram implementados — pendência registrada |
+| A tela "Dados da loja" já permitia **mudar o slug** (e a API `updateEstablishment` aceita), o que invalida QR impressos; a especificação pede não incluir troca de slug | A nova tela mostra o endereço só para leitura, com o motivo. A API foi mantida (compatibilidade, desktop e operador); redirects de slugs antigos **não** foram implementados — pendência registrada (resolvida no ADR-0029) |
 | Especificação sugere WebP | Sem codificador WebP em Go puro: JPEG/PNG (decisão acima) |
 | Especificação cita revisão `00bdf42` | Inexistente nesta cópia; usada `5bc96f0` |
 | Tema claro usava `purple-700` como primária; o catálogo pede `#9333EA` (purple-600) | Padrão da plataforma = paleta `purple` do catálogo (contraste medido 5,38:1 com branco). No escuro, primária `#C084FC` com texto zinc-950 |

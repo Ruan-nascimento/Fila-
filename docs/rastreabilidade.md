@@ -49,7 +49,7 @@ motivo. Teste citado aqui não quer dizer aprovado: o resultado de cada execuç�
 | R-FILA-02 | C-FILA-02 | automatizado |
 | R-FILA-03 | C-FILA-04 | automatizado |
 | R-FILA-04 | C-FILA-01, C-FILA-05 | automatizado |
-| R-FILA-05 | C-FILA-03, C-FILA-06, C-FILA-07 | automatizado |
+| R-FILA-05 | C-FILA-03, C-FILA-06, C-FILA-07, C-FILA-14 | automatizado |
 | R-FILA-06 | C-EST-03, C-EST-04, C-FILA-03 | automatizado |
 | R-FILA-07 | C-EST-03, C-EST-07, C-SEG-04 | automatizado |
 | R-FILA-08 | C-EST-05 | automatizado |
@@ -177,6 +177,7 @@ Resumo: automatizado: 126 · parcial: 0 · sem teste: 1 · sem cenário: 0 · au
 | C-FILA-04 — Comanda pendente bloqueia nova entrada | `backend/internal/api/fila_test.go: TestPendingOrderBlocksEntry` |
 | C-FILA-05 — Serviço inválido ou fila fechada | `backend/internal/api/fila_test.go: TestEntryValidation` |
 | C-FILA-06 — Ordem de chegada determinística | `backend/internal/api/fila_test.go: TestFIFOAndDoubleCall` |
+| C-FILA-14 — Equipe troca a pessoa chamada com a próxima | `backend/internal/api/fila_test.go: TestMoveParticipation` |
 | C-FILA-07 — Duas chamadas simultâneas não ocupam a cadeira duas vezes | `backend/internal/api/fila_test.go: TestFIFOAndDoubleCall` |
 | C-FILA-08 — Fila pública não vaza dados | `backend/internal/api/revisao_test.go: TestPublicQueueLeaksNothing` |
 | C-FILA-09 — Tolerância de 10 minutos e ausência | `backend/internal/api/fila_test.go: TestToleranceAndNoShow`<br>`frontend/e2e/piloto.spec.ts: roteiro do piloto: do primeiro cliente às pendências da dona` |

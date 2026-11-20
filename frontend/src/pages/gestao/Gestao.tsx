@@ -21,7 +21,7 @@ import { useBrandChanged, useStoreBrand } from "../../features/theme/tema";
 import { useSession } from "../../session/context";
 import { StreamProvider, StreamStatusNotice } from "../../stream/StreamProvider";
 import { AvisosGerais } from "../../ui/estados";
-import { Brand, SkipLink } from "../../ui/layout";
+import { Brand, SkipLink, type StoreMark } from "../../ui/layout";
 import { EmptyState, Loading, Notice, PageHeader, type IconType } from "../../ui/ui";
 import { cx } from "../../ui/cx";
 import { NaoElegivel } from "../dono/Dono";
@@ -177,7 +177,6 @@ export function GestaoLoja() {
     // Uma conexão de atualizações para toda a área da equipe desta loja. O layout muda só por CSS
     // (a mesma árvore em qualquer largura): trocar de tamanho não abre outra conexão.
     <StreamProvider estId={estId} channels={ctx.isOwner ? ["owner"] : ["professional"]}>
-      <MarcaDaLoja estId={estId} />
       <StaffShell ctx={ctx} base={base} userName={account?.name ?? ""} multipleStores={stores > 1}>
         <Routes>
           <Route path="filas/:queueId?" element={<Filas ctx={ctx} />} />
@@ -218,13 +217,16 @@ function StaffShell({
 }) {
   const gs = visibleGroups(ctx.isOwner);
   const role = ctx.isOwner ? "Dono" : "Profissional";
+  // Nome e logo ATUAIS da loja (relidos quando o dono salva): o canto superior esquerdo muda na hora.
+  const marca = useMarcaDaLoja(ctx.estId);
+  const store = { name: marca?.name ?? ctx.estName, logo: marca?.logo };
   return (
     <div className="min-h-dvh bg-bg lg:grid lg:grid-cols-[16rem_minmax(0,1fr)]">
       <SkipLink />
       {/* Computador: navegação lateral agrupada por atividade */}
       <aside className="sticky top-0 hidden h-dvh flex-col border-r border-line bg-surface lg:flex">
         <div className="px-4 pt-4 pb-2">
-          <Brand to={`${base}/filas`} sub={ctx.estName} />
+          <Brand to={`${base}/filas`} store={store} sub="Gestão" />
         </div>
         <nav aria-label="Gestão da loja" className="flex-1 overflow-y-auto px-3 py-2">
           {ctx.isOwner && (
@@ -279,7 +281,7 @@ function StaffShell({
         {/* Celular e tablet: barra superior com a loja em operação */}
         <header className="sticky top-0 z-30 border-b border-line bg-surface/95 backdrop-blur lg:hidden">
           <div className="flex items-center justify-between gap-3 px-4 py-1.5">
-            <Brand to={`${base}/filas`} sub={ctx.estName} />
+            <Brand to={`${base}/filas`} store={store} sub="Gestão" />
             {ctx.isOwner && <BotaoDashboard estId={ctx.estId} compact />}
             <Link
               to="/conta"
@@ -486,23 +488,36 @@ function MaisSheet({
   );
 }
 
-/** Aplica a paleta da loja à gestão contextual; relê depois que o dono salva a identidade. */
-function MarcaDaLoja({ estId }: { estId: string }) {
-  const [got, setGot] = useState<{ estId: string; palette: string } | null>(null);
+type Marca = { estId: string; palette: string; name: string; logo: StoreMark["logo"] };
+
+/**
+ * Identidade da loja na gestão (paleta, nome e logo); relê depois que o dono salva. Também
+ * atualiza a sessão, para que a lista de lojas e os demais lugares mostrem o nome novo.
+ */
+function useMarcaDaLoja(estId: string): Marca | null {
+  const { refresh } = useSession();
+  const [got, setGot] = useState<Marca | null>(null);
   const [version, setVersion] = useState(0);
-  const reload = useCallback(() => setVersion((n) => n + 1), []);
+  const reload = useCallback(() => {
+    setVersion((n) => n + 1);
+    void refresh();
+  }, [refresh]);
   useBrandChanged(estId, reload);
   useEffect(() => {
     let active = true;
     void call(() =>
       api.GET("/v1/establishments/{establishmentId}", { params: { path: { establishmentId: estId } } }),
     ).then((out) => {
-      if (active && out.ok) setGot({ estId, palette: out.data.data.palette });
+      if (active && out.ok) {
+        const d = out.data.data;
+        setGot({ estId, palette: d.palette, name: d.name, logo: d.logo });
+      }
     });
     return () => {
       active = false;
     };
   }, [estId, version]);
-  useStoreBrand(got?.estId === estId ? got.palette : null);
-  return null;
+  const mine = got?.estId === estId ? got : null;
+  useStoreBrand(mine?.palette);
+  return mine;
 }

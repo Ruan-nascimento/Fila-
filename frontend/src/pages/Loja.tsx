@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { Link, Navigate, NavLink, Route, Routes, useParams, useSearchParams } from "react-router";
+import {
+  Link,
+  Navigate,
+  NavLink,
+  Route,
+  Routes,
+  useLocation,
+  useParams,
+  useSearchParams,
+} from "react-router";
 import { History, MapPin, Phone, Star, Store, UsersRound } from "lucide-react";
 import { useStoreBrand } from "../features/theme/tema";
 import { formatPhone } from "../features/auth/acessoLoja";
@@ -28,6 +37,7 @@ export function Loja() {
   const [error, setError] = useState<{ notFound: boolean; message: string } | null>(null);
   const [attempt, setAttempt] = useState(0);
   const { state } = useSession();
+  const location = useLocation();
   // A cor da loja vale só aqui dentro; ao sair ou trocar de loja, os tokens são limpos.
   useStoreBrand(shop?.slug === slug ? shop.palette : null);
 
@@ -69,6 +79,12 @@ export function Loja() {
         <LoadError message={error.message} onRetry={() => setAttempt((n) => n + 1)} />
       </PublicShell>
     );
+  // Endereço antigo (a loja trocou de nome; QR Code já impresso): leva ao endereço atual,
+  // mantendo o resto do caminho (histórico, pontos) e a entrada pedida (?entrada=visitante).
+  if (shop && shop.slug !== slug) {
+    const rest = location.pathname.replace(/^\/loja\/[^/]+/, "");
+    return <Navigate to={`/loja/${shop.slug}${rest}${location.search}`} replace />;
+  }
   if (!shop)
     return (
       <PublicShell>
@@ -82,7 +98,7 @@ export function Loja() {
     state.status === "ready" &&
     (account !== null || state.session.visitors.some((v) => v.establishment_id === shop.id));
   return (
-    <PublicShell width="wide" context={shop.name}>
+    <PublicShell width="wide" store={shop}>
       <StreamProvider
         estId={shop.id}
         channels={

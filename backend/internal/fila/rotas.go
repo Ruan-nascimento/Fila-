@@ -23,6 +23,7 @@ func (s *Service) Routes() []hs.Route {
 		{Operation: "completeService", Method: http.MethodPost, Path: part + "/complete", Grants: staff, Handler: s.completeService},
 		{Operation: "interruptService", Method: http.MethodPost, Path: part + "/interrupt", Grants: staff, Handler: s.interruptService},
 		{Operation: "markNoShow", Method: http.MethodPost, Path: part + "/no-show", Grants: staff, Handler: s.markNoShow},
+		{Operation: "moveParticipation", Method: http.MethodPost, Path: part + "/move", Grants: staff, Handler: s.moveParticipation},
 		{Operation: "transferParticipation", Method: http.MethodPost, Path: part + "/transfer", Grants: []hs.Grant{hs.GrantOwner}, Handler: s.transferParticipation},
 		{Operation: "getCustomerAvatar", Method: http.MethodGet, Path: part + "/customer-avatar/{size}", Grants: staff, Handler: s.getCustomerAvatar},
 		{Operation: "callNext", Method: http.MethodPost, Path: est + "/queues/{queueId}/call-next", Grants: staff, Handler: s.callNext},

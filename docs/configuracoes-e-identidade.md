@@ -124,7 +124,7 @@ Imagens de teste geradas (gradiente + formas + ruído), não fotos reais; tamanh
 ## 5. Identidade da loja
 
 - Campos: nome público, logo, paleta (16 opções), descrição (até 280), endereço (até 200), telefone/WhatsApp público (normalizado para E.164; brasileiro sem +55 é aceito). Textos são texto simples; nada de HTML, CSS, script, fonte ou URL de logo.
-- Não muda o slug (QR impressos continuam valendo). Horários e agendamento não fazem parte deste escopo.
+- O endereço do link (slug) acompanha o nome, e o QR Code também; o endereço antigo continua abrindo a loja e leva ao novo (QR impressos continuam valendo — [ADR-0029](adr/0029-mudar-de-lugar-na-fila-e-endereco-acompanha-o-nome.md)). O canto superior esquerdo mostra a logo e o nome da loja. Horários e agendamento não fazem parte deste escopo.
 - Prévia isolada na própria tela; a loja publicada só muda depois de salvar. Conflito entre abas mostra aviso e mantém o que foi digitado. A tela avisa antes de fechar com alterações não salvas.
 - A cor vale na página da loja, no login/cadastro que vem da loja e na gestão daquela loja. Login global, Minha conta e outras lojas usam a identidade padrão; ao sair ou trocar de loja os tokens são limpos.
 

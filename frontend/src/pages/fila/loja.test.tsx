@@ -1,7 +1,7 @@
 // Regressões do redesign da loja pública: estados das filas, seleção integrada ao catálogo e
 // escolha mantida durante a identificação do visitante.
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { describe, expect, it } from "vitest";
 import { SessionProvider } from "../../session/session";
 import { anonymousSession, fakeApi, problem } from "../../test/fake-api";
@@ -170,5 +170,37 @@ describe("Loja: escolha e identificação", () => {
     expect(out.note).toBe("A fila de Beto foi pausada. Escolha outro profissional.");
     // Dados ainda desconhecidos não mexem na escolha.
     expect(reconcile(sel, null, services as never).next).toBe(sel);
+  });
+});
+
+describe("Loja: endereço antigo", () => {
+  it("link/QR com o nome antigo leva ao endereço atual e o topo mostra o nome da loja", async () => {
+    const atual = { ...shop, slug: "barbearia-nova", name: "Barbearia Nova" };
+    fakeApi({
+      "GET /v1/session": () => Response.json(anonymousSession),
+      "GET /v1/public/slugs/barbearia-antiga": () => Response.json({ data: atual }),
+      "GET /v1/public/slugs/barbearia-nova": () => Response.json({ data: atual }),
+      [`GET /v1/public/establishments/${EST}/services`]: () => Response.json({ data: services }),
+      [`GET /v1/public/establishments/${EST}/queues`]: () => Response.json({ data: [] }),
+    });
+    function Where() {
+      const l = useLocation();
+      return <output data-testid="endereco">{l.pathname + l.search}</output>;
+    }
+    render(
+      <MemoryRouter initialEntries={["/loja/barbearia-antiga?entrada=visitante"]}>
+        <SessionProvider>
+          <Routes>
+            <Route path="/loja/:slug/*" element={<Loja />} />
+          </Routes>
+          <Where />
+        </SessionProvider>
+      </MemoryRouter>,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("endereco")).toHaveTextContent("/loja/barbearia-nova?entrada=visitante"),
+    );
+    const topo = await screen.findByRole("link", { name: /Barbearia Nova/ });
+    expect(topo).toHaveAttribute("href", "/loja/barbearia-nova");
   });
 });

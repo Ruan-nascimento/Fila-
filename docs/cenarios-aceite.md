@@ -314,7 +314,19 @@ Então recebe `409 queue_not_open`.
 Dado Maria, João e Lia entrando nessa ordem na fila de Beto
 Quando Beto chama três vezes (concluindo cada atendimento entre as chamadas)
 Então a ordem das chamadas é Maria, João, Lia
-E não existe operação para reordenar ou furar a fila.
+E o cliente não tem operação para reordenar ou furar a fila.
+
+### C-FILA-14 — Equipe troca a pessoa chamada com a próxima
+- Regras: R-FILA-05 · Transições: T-P-11, T-P-02 · Contrato: `moveParticipation` · Tipo: integração
+
+Dado Maria chamada e João e Lia aguardando na fila de Beto
+Quando Maria avisa que vai atrasar e Beto toca em "descer" na Maria
+Então João passa a ser o chamado, com nova tolerância de 10 minutos
+E Maria volta a aguardar como a primeira da fila
+Quando Beto toca em "subir" na Lia
+Então Lia passa à frente de Maria
+E um cliente que tenta `moveParticipation` recebe `401`/`404`
+E quem está em atendimento recebe `409 invalid_transition`.
 
 ### C-FILA-07 — Duas chamadas simultâneas não ocupam a cadeira duas vezes
 - Regras: R-FILA-14, R-FILA-05 · Transições: T-P-02 · Contrato: `callNext` · Tipo: concorrência
