@@ -9,7 +9,7 @@ Topologia: **Vercel** (site + proxy `/v1` e `/healthz`) → **Render** (API Go +
 | Revisão inicial analisada | `a902365` (main, 20/11/2026) |
 | Branch de trabalho | `publicacao-v1` |
 | Última revisão desta preparação | ver `git log -1 publicacao-v1` |
-| Serviços criados nos provedores | Neon: projeto `fila-homologacao` (20/11/2026, plano gratuito por enquanto). Resend: domínio `mail.fiveline.pro` verificado (20/11/2026). Hostinger: 5 registros DNS acrescentados em `fiveline.pro` (A e `www` intactos) |
+| Serviços criados nos provedores | Neon: projeto `fila-homologacao` (20/11/2026, plano gratuito por enquanto). Resend: domínio `mail.fiveline.pro` verificado (20/11/2026). Hostinger: 5 registros DNS acrescentados em `fiveline.pro` (A e `www` intactos). Cloudflare R2: 3 buckets de homologação e 2 credenciais restritas (20/11/2026) |
 | Recursos preexistentes reaproveitados | repositório GitHub, workflows `CI` e `Fila Gestão (instaladores)`, comandos `migrate`/`fila-admin` |
 | Próxima ação | ver §8 |
 
@@ -19,7 +19,7 @@ Topologia: **Vercel** (site + proxy `/v1` e `/healthz`) → **Render** (API Go +
 |---|---|
 | E-mail pelo Resend (adaptador, config, worker, dispatcher com reserva curta) | **Implementado e testado** localmente. **Configurado e validado no ambiente real**: domínio `mail.fiveline.pro` verificado (DKIM, SPF, DMARC `p=none`), rastreamento de abertura e clique desligado, uma chave *Sending access* restrita ao domínio por ambiente (a chave recebe 401 ao tentar administrar), envio real pelo `ResendSender` com idempotência confirmada (reenvio devolve o mesmo id). Falta o envio pelo worker em homologação, que depende do Render |
 | Banco de homologação (Neon) | **Configurado e validado no ambiente real**: PostgreSQL 18.7, `uuidv7()`, conexão direta com `sslmode=require`, 23 migrations, papel `fila_app` sem DDL (`permission denied for schema public`), permissões verificadas. Conta ainda no plano gratuito |
-| Fotos e logos no R2 (adaptador S3 com assinatura SigV4) | **Implementado e testado** contra servidor S3 real local (SeaweedFS com autenticação) e nos testes ponta a ponta de fotos da API. **Aguardando credencial** do R2 |
+| Fotos e logos no R2 (adaptador S3 com assinatura SigV4) | **Implementado e testado** localmente. **Configurado e validado no ambiente real** (homologação, 20/11/2026): buckets privados `fila-hml-midia`, `fila-hml-diario` e `fila-hml-backup` criados por `scripts/r2-preparar.py`; ciclo de vida só em `backup/banco/` (35 dias); credencial da API restrita a mídia e diário, credencial do backup com leitura em mídia e diário e escrita só no backup. Verificado: gravar, ler e apagar com cada credencial; 403 da API no backup; 403 do backup ao gravar em mídia; 400 sem assinatura; testes de integração `internal/midia` (S3) passando contra o R2 real. Falta o upload de foto pelo site em homologação |
 | Diário de exclusões no bucket + `fila-admin diario baixar` | **Implementado e testado**: a restauração ponta a ponta reconcilia a partir do diário baixado do bucket |
 | IP do cliente atrás de Vercel → Render (proxy autenticado) | **Implementado e testado** (unidade e cadeia HTTP). **Não validado** na Vercel real |
 | `vercel.json` + `middleware.ts` (proxy, SPA, cabeçalhos, CSP em modo relatório) | **Implementado**: build, tipos e testes do proxy passam. **Não validado** na Vercel real |
@@ -152,4 +152,4 @@ Ver [evidencias.md](evidencias.md), seção "Preparação da V1 (20/11/2026)".
 
 ## 8. Próxima ação
 
-Domínio `fiveline.pro` e custos de homologação autorizados. Neon (§4.1) e Resend (§4.5) prontos, com as chaves em `~/.config/fila-v1/` (fora do Git, permissão 600; entrada por `scripts/segredo.sh`). Próximo: R2 (§4.2), depois Render (§4.3) e Vercel (§4.4). A chave *Full access* do Resend usada na configuração (`RESEND_SETUP_API_KEY`) deve ser apagada no painel quando não for mais necessária.
+Domínio `fiveline.pro` e custos de homologação autorizados. Neon (§4.1) e Resend (§4.5) prontos, com as chaves em `~/.config/fila-v1/` (fora do Git, permissão 600; entrada por `scripts/segredo.sh`). R2 (§4.2) pronto. Próximo: Render (§4.3) e Vercel (§4.4). A chave de configuração da Cloudflare (`CLOUDFLARE_SETUP_API_TOKEN`) expira sozinha em 28/11/2026; ela ainda será usada para o R2 de produção. A chave *Full access* do Resend usada na configuração (`RESEND_SETUP_API_KEY`) deve ser apagada no painel quando não for mais necessária.
