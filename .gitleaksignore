@@ -1,0 +1,7 @@
+# Falsos positivos verificados (regra generic-api-key) nos Blueprints do Render: as linhas
+# apontadas declaram NOMES de variável (bucket e região do S3), não valores secretos.
+# Só estas ocorrências exatas (commit:arquivo:regra:linha) são ignoradas.
+b480609cd49834334da066b5398ab84f99a0a5e4:deploy/render/homologacao.render.yaml:generic-api-key:49
+b480609cd49834334da066b5398ab84f99a0a5e4:deploy/render/homologacao.render.yaml:generic-api-key:51
+b480609cd49834334da066b5398ab84f99a0a5e4:deploy/render/producao.render.yaml:generic-api-key:49
+b480609cd49834334da066b5398ab84f99a0a5e4:deploy/render/producao.render.yaml:generic-api-key:51
