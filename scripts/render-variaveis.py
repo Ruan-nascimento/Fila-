@@ -47,9 +47,13 @@ GRUPO, API, WORKER = grupos[f"fila-{CURTO}-comum"], svcs[f"fila-api-{CURTO}"], s
 
 fixos = {"FILA_PUBLIC_BASE_URL": SITE, "FILA_ALLOWED_ORIGINS": SITE,
          "FILA_MAIL_FROM": "Fila <nao-responda@mail.fiveline.pro>"}
+# Pix só liga quando a chave do ambiente existe (teste em homologação; produção só após validação).
+if env.get("FILA_ABACATEPAY_API_KEY"):
+    fixos["FILA_PIX_PROVIDER"] = "abacatepay"
 plano = [
     ("grupo", GRUPO, ["FILA_PUBLIC_BASE_URL", "FILA_ALLOWED_ORIGINS", "FILA_DATABASE_URL", "FILA_SECRET_KEY",
-                      "FILA_S3_ENDPOINT", "FILA_S3_ACCESS_KEY_ID", "FILA_S3_SECRET_ACCESS_KEY"]),
+                      "FILA_S3_ENDPOINT", "FILA_S3_ACCESS_KEY_ID", "FILA_S3_SECRET_ACCESS_KEY",
+                      "FILA_ABACATEPAY_API_KEY", "FILA_PIX_PROVIDER"]),
     ("api", API, ["FILA_PROXY_SHARED_SECRET", "FILA_GOOGLE_CLIENT_ID", "FILA_GOOGLE_CLIENT_SECRET",
                   "FILA_ABACATEPAY_WEBHOOK_SECRET"]),
     ("worker", WORKER, ["FILA_RESEND_API_KEY", "FILA_MAIL_FROM", "FILA_MAIL_REPLY_TO", "FILA_HEARTBEAT_URL"]),
