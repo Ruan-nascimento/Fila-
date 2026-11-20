@@ -31,3 +31,5 @@ Thumbs.db
 deploy/env/*.env
 *.dump
 *.dump.enc
+.vercel/
+.env*.local

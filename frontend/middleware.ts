@@ -1,5 +1,5 @@
 import { ipAddress, rewrite } from "@vercel/functions";
-import { buildUpstream } from "./edge/proxy";
+import { buildUpstream } from "./edge/proxy.js";
 
 // Só a API passa pelo middleware; telas e arquivos estáticos são servidos direto pela Vercel.
 export const config = { matcher: ["/v1/:path*", "/healthz/:path*"] };

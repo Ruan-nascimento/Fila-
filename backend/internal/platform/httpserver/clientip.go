@@ -47,6 +47,14 @@ func ResolveClientIP(p ClientIPPolicy, next http.Handler) http.Handler {
 			// limita por IP continua decidindo pela própria configuração (comportamento anterior).
 			r = r.WithContext(context.WithValue(r.Context(), clientIPKey, ip))
 		}
+		// Com o proxy configurado, a API de negócio (/v1) só atende pedidos vindos dele: acesso
+		// direto ao endereço da plataforma pularia o IP real e juntaria limites por IP. /healthz
+		// continua aberto para a checagem de saúde do Render.
+		if len(p.ProxySecret) > 0 && !authenticated && strings.HasPrefix(r.URL.Path, "/v1/") {
+			writeProblem(w, r, &Error{Status: http.StatusForbidden, Code: "proxy_required", Title: "Acesso não permitido",
+				Detail: "Use o endereço do site."})
+			return
+		}
 		if r.URL.Path == "/healthz/client-ip" && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Cache-Control", "no-store")
