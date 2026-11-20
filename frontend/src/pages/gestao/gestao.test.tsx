@@ -239,6 +239,50 @@ describe("Mudar de lugar na fila", () => {
   });
 });
 
+describe("Comanda na fila", () => {
+  it("abre e fecha a comanda de quem aguarda", async () => {
+    fakeApi({
+      "GET /v1/session": () => Response.json(staffSession("professional")),
+      [`GET /v1/establishments/${EST}/queues`]: () =>
+        Response.json({
+          data: [
+            {
+              queue_id: QUEUE,
+              professional: { id: PRO, display_name: "Beto", status: "active" },
+              status: "open",
+              version: 1,
+              unavailable_signal: { active: false, note: null, since: null },
+              entries: [
+                {
+                  participation_id: "0190a000-0000-7000-8000-000000000b01",
+                  order_id: "0190a000-0000-7000-8000-000000000b02",
+                  ticket_code: "A001",
+                  nick: "Maria",
+                  status: "waiting",
+                  service_names: ["Corte"],
+                  called_at: null,
+                  tolerance_ends_at: null,
+                  has_pending_change_request: false,
+                  version: 1,
+                },
+              ],
+            },
+          ],
+          cursor: null,
+        }),
+    });
+    renderGestao(`/gestao/${EST}/filas`);
+    fireEvent.click(await screen.findByRole("button", { name: "Ver comanda de A001" }));
+    const ocultar = await screen.findByRole("button", { name: "Ocultar comanda de A001" });
+    expect(ocultar).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(ocultar);
+    expect(await screen.findByRole("button", { name: "Ver comanda de A001" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+  });
+});
+
 describe("Identidade da loja na gestão", () => {
   it("canto superior esquerdo mostra o nome e a logo atuais da loja", async () => {
     fakeApi({

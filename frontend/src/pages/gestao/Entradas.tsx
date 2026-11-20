@@ -5,6 +5,7 @@ import {
   ArrowUp,
   Ban,
   ChevronDown,
+  ChevronUp,
   Clock,
   Play,
   Scissors,
@@ -399,23 +400,32 @@ function ComandaEntrada({
   onDone: () => Promise<void>;
   defaultOpen?: boolean;
 }) {
-  const [shown, setShown] = useState(defaultOpen);
-  if (entry.status === "in_service" || shown)
-    return (
-      <div className="border-t border-line pt-3">
-        <Atendimento ctx={ctx} entry={entry} onDone={onDone} />
-      </div>
-    );
+  // null = segue o padrão (aberta em atendimento); depois do primeiro clique vale a escolha da pessoa.
+  const [choice, setChoice] = useState<boolean | null>(null);
+  const shown = choice ?? (defaultOpen || entry.status === "in_service");
+  const panelId = `comanda-${entry.participation_id}`;
   return (
-    <button
-      type="button"
-      aria-expanded={false}
-      onClick={() => setShown(true)}
-      className="inline-flex min-h-11 w-fit items-center gap-1 rounded-lg px-2 text-sm font-semibold text-accent hover:bg-select"
-    >
-      <ChevronDown aria-hidden="true" className="size-4" />
-      Ver comanda de {entry.ticket_code}
-    </button>
+    <div className={cx("grid gap-2", shown && "border-t border-line pt-3")}>
+      <button
+        type="button"
+        aria-expanded={shown}
+        aria-controls={shown ? panelId : undefined}
+        onClick={() => setChoice(!shown)}
+        className="inline-flex min-h-11 w-fit items-center gap-1 rounded-lg px-2 text-sm font-semibold text-accent hover:bg-select"
+      >
+        {shown ? (
+          <ChevronUp aria-hidden="true" className="size-4" />
+        ) : (
+          <ChevronDown aria-hidden="true" className="size-4" />
+        )}
+        {shown ? `Ocultar comanda de ${entry.ticket_code}` : `Ver comanda de ${entry.ticket_code}`}
+      </button>
+      {shown && (
+        <div id={panelId}>
+          <Atendimento ctx={ctx} entry={entry} onDone={onDone} />
+        </div>
+      )}
+    </div>
   );
 }
 
