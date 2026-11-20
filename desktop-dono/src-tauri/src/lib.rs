@@ -309,7 +309,7 @@ pub fn run() {
                 .center()
                 // Só uma dica de APRESENTAÇÃO para a gestão mostrar o atalho "Dashboard". Não
                 // concede nada: os dados exigem a prova de posse da chave, que a página não tem.
-                .initialization_script("window.__FILA_GESTAO_DESKTOP__ = true;")
+                .initialization_script("window.__GESTAO_DESKTOP__ = true;")
                 .on_navigation(move |url| {
                     // Atalho do Dashboard: guarda o ticket na memória nativa, cancela a navegação
                     // e abre a página local. O ticket nunca chega a ser carregado como página.

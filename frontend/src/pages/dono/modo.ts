@@ -32,10 +32,10 @@ export function lojasDoDono(view: SessionView): { id: string; name: string }[] {
 }
 
 /**
- * A janela é a do programa Fila Gestão (ele injeta `window.__FILA_GESTAO_DESKTOP__`). Só orienta a
+ * A janela é a do programa Fila Gestão (ele injeta `window.__GESTAO_DESKTOP__`). Só orienta a
  * apresentação (mostrar o atalho "Dashboard"): os dados analíticos exigem, no servidor, a prova de
  * posse da chave de uma instalação autorizada, que esta página nunca tem.
  */
 export function noProgramaDesktop(): boolean {
-  return modoDono() && (globalThis as { __FILA_GESTAO_DESKTOP__?: boolean }).__FILA_GESTAO_DESKTOP__ === true;
+  return modoDono() && (globalThis as { __GESTAO_DESKTOP__?: boolean }).__GESTAO_DESKTOP__ === true;
 }

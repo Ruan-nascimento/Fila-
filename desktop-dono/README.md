@@ -41,7 +41,7 @@ O que decide a permissão continua sendo **o servidor**: cada pedido é autoriza
 3. O nativo troca o ticket por um acesso preso à chave da instalação (`POST /v1/desktop/bindings` com prova DPoP). O acesso vale enquanto a sessão de dono da gestão for a ativa.
 4. Cada consulta leva o token e uma prova nova. O servidor confere sessão, vaga de dono, instalação, prova e vínculo com a loja.
 
-O item **Dashboard** só aparece dentro do programa: o programa injeta `window.__FILA_GESTAO_DESKTOP__`, uma dica de apresentação. No navegador comum, `/dono/painel-analitico` mostra só um aviso e não consulta nada. Nenhum cookie é copiado. As páginas remotas continuam sem acesso a comando nenhum. Os dados analíticos ficam só em memória e são apagados ao sair, ao perder a sessão ou ao trocar de loja.
+O item **Dashboard** só aparece dentro do programa: o programa injeta `window.__GESTAO_DESKTOP__`, uma dica de apresentação. No navegador comum, `/dono/painel-analitico` mostra só um aviso e não consulta nada. Nenhum cookie é copiado. As páginas remotas continuam sem acesso a comando nenhum. Os dados analíticos ficam só em memória e são apagados ao sair, ao perder a sessão ou ao trocar de loja.
 
 ## 1. Desenvolvimento
 
