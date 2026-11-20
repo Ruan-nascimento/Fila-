@@ -56,9 +56,28 @@ func ApplyGrants(ctx context.Context, q Querier, appRole string) error {
 	for _, t := range AppendOnlyTables {
 		stmts = append(stmts, `REVOKE UPDATE, DELETE ON `+pgx.Identifier{t}.Sanitize()+` FROM `+r)
 	}
+	// Tudo numa transação: as outras conexões (API e worker em execução durante o `Publicar`)
+	// veem as permissões antigas ou as novas, nunca o intervalo entre o REVOKE e o GRANT.
+	exec := q
+	var tx pgx.Tx
+	if b, ok := q.(interface {
+		Begin(context.Context) (pgx.Tx, error)
+	}); ok {
+		var err error
+		if tx, err = b.Begin(ctx); err != nil {
+			return fmt.Errorf("permissões: iniciar transação: %w", err)
+		}
+		defer func() { _ = tx.Rollback(ctx) }()
+		exec = tx
+	}
 	for _, s := range stmts {
-		if _, err := q.Exec(ctx, s); err != nil {
+		if _, err := exec.Exec(ctx, s); err != nil {
 			return fmt.Errorf("permissões (%s): %w", s, err)
+		}
+	}
+	if tx != nil {
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("permissões: confirmar: %w", err)
 		}
 	}
 	return nil
