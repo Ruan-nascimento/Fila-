@@ -65,6 +65,8 @@ comandos:
                 concilia o banco restaurado com o provedor de Pix, encerra sessões, troca a época
                 do fluxo e reaplica as exclusões do diário
   restauracao liberar                  solta a trava (só depois de reconciliar)
+  diario baixar -destino /pasta        copia o diário de exclusões do bucket (FILA_DELETION_JOURNAL_BUCKET)
+                para /pasta/exclusoes.jsonl (cópia externa; a reconciliação já baixa sozinha)
   (passo a passo: docs/operacao/backup-restauracao.md)`
 
 func main() {
@@ -97,6 +99,8 @@ func run(ctx context.Context, args, environ []string, stdout, stderr io.Writer) 
 		return maintenance(ctx, args[1:], environ, stdout, stderr)
 	case "restauracao":
 		return restore(ctx, args[1:], environ, stdout, stderr)
+	case "diario":
+		return journalCmd(ctx, args[1:], environ, stdout, stderr)
 	case "eventos", "nova-epoca":
 		if len(args) != 1 {
 			fmt.Fprintln(stderr, usage)

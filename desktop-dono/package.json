@@ -1,7 +1,7 @@
 {
   "name": "fila-gestao-desktop",
   "private": true,
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "Fila Gestão: programa instalável do dono (Tauri 2): gestão do site + Dashboard analítico local",
   "engines": {
     "node": "^24.15.0 || >=26.0.0"

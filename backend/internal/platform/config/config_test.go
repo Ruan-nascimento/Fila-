@@ -397,3 +397,110 @@ func TestDeployVarsAreIgnored(t *testing.T) {
 		t.Fatal("erro de digitação continua sendo acusado")
 	}
 }
+
+func TestMailResendConfig(t *testing.T) {
+	cfg, err := Load(valid("FILA_MAIL_MODE=resend", "FILA_RESEND_API_KEY=re_chave_de_teste_1",
+		"FILA_MAIL_FROM=Fila <nao-responda@mail.exemplo.com>", "FILA_MAIL_REPLY_TO=contato@exemplo.com", "FILA_MAIL_TIMEOUT=20s"))
+	if err != nil {
+		t.Fatalf("esperava válido: %v", err)
+	}
+	if cfg.Mail.Mode != MailResend || cfg.Mail.ResendAPIKey.Reveal() != "re_chave_de_teste_1" ||
+		cfg.Mail.From != "Fila <nao-responda@mail.exemplo.com>" || cfg.Mail.ReplyTo != "contato@exemplo.com" ||
+		cfg.Mail.Timeout != 20*time.Second {
+		t.Fatalf("e-mail inesperado: %+v", cfg.Mail)
+	}
+	if strings.Contains(fmt.Sprintf("%v %+v", cfg.Mail, cfg.Mail), "re_chave_de_teste_1") {
+		t.Fatal("chave do Resend apareceu na formatação")
+	}
+
+	_, err = Load(valid("FILA_MAIL_MODE=resend", "FILA_RESEND_API_KEY=sk_errada_segredo", "FILA_MAIL_FROM=sem-arroba",
+		"FILA_MAIL_REPLY_TO=x"))
+	var v *ValidationError
+	if !errors.As(err, &v) {
+		t.Fatalf("esperava erro de validação: %v", err)
+	}
+	msg := err.Error()
+	for _, want := range []string{VarResendKey, VarMailFrom, VarMailReplyTo} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("faltou problema em %s: %s", want, msg)
+		}
+	}
+	if strings.Contains(msg, "sk_errada_segredo") {
+		t.Fatal("mensagem de erro expõe o valor")
+	}
+
+	if _, err := Load(valid("FILA_MAIL_MODE=resend")); err == nil || !strings.Contains(err.Error(), VarResendKey) {
+		t.Fatalf("resend sem chave deveria falhar: %v", err)
+	}
+	// Variáveis do Resend sem o modo ligado são aceitas (preparação), mas não ligam nada.
+	cfg, err = Load(valid("FILA_MAIL_MODE=disabled", "FILA_RESEND_API_KEY=re_x"))
+	if err != nil || cfg.Mail.Mode != MailDisabled || cfg.Mail.ResendAPIKey != "" {
+		t.Fatalf("modo desligado: %+v err=%v", cfg.Mail, err)
+	}
+	// Chave por arquivo (segredo montado).
+	read := fakeFS(map[string]string{"/run/secrets/resend": "re_do_arquivo\n"})
+	env, err := secretFiles(valid("FILA_RESEND_API_KEY_FILE=/run/secrets/resend"), read)
+	if err != nil || !slicesContains(env, "FILA_RESEND_API_KEY=re_do_arquivo") {
+		t.Fatalf("chave do Resend por arquivo não lida: err=%v", err)
+	}
+}
+
+func slicesContains(env []string, kv string) bool {
+	for _, e := range env {
+		if e == kv {
+			return true
+		}
+	}
+	return false
+}
+
+func TestMediaS3Config(t *testing.T) {
+	ok := []string{"FILA_MEDIA_STORAGE=s3", "FILA_S3_ENDPOINT=https://abc123.r2.cloudflarestorage.com",
+		"FILA_S3_BUCKET=fila-producao-midia", "FILA_S3_ACCESS_KEY_ID=AKID123", "FILA_S3_SECRET_ACCESS_KEY=segredo-s3-de-teste"}
+	cfg, err := Load(valid(ok...))
+	if err != nil {
+		t.Fatalf("esperava válido: %v", err)
+	}
+	m := cfg.Media
+	if !m.Enabled() || m.Storage != MediaS3 || m.S3.Region != "auto" || m.S3.Bucket != "fila-producao-midia" ||
+		m.S3.Endpoint != "https://abc123.r2.cloudflarestorage.com" || m.S3.SecretKey.Reveal() != "segredo-s3-de-teste" || m.S3.Prefix != "" {
+		t.Fatalf("s3 inesperado: %+v", m.S3)
+	}
+	if strings.Contains(fmt.Sprintf("%+v", m), "segredo-s3-de-teste") {
+		t.Fatal("segredo do bucket apareceu na formatação")
+	}
+	_, err = Load(valid("FILA_MEDIA_STORAGE=s3", "FILA_S3_ENDPOINT=https://abc.r2.cloudflarestorage.com/meu-bucket",
+		"FILA_S3_BUCKET=Bucket_Invalido", "FILA_S3_SECRET_ACCESS_KEY=nao-aparece", "FILA_S3_PREFIX=../x"))
+	if err == nil {
+		t.Fatal("esperava erro")
+	}
+	for _, want := range []string{VarS3Endpoint, VarS3Bucket, VarS3AccessKey, VarS3Prefix} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("faltou %s: %v", want, err)
+		}
+	}
+	if strings.Contains(err.Error(), "nao-aparece") {
+		t.Fatal("erro expõe segredo")
+	}
+	prod := []string{"FILA_ENV=production", "FILA_DATABASE_URL=postgres://u:p-forte-1@db:5432/f?sslmode=require",
+		"FILA_PUBLIC_BASE_URL=https://app.exemplo.com", "FILA_ALLOWED_ORIGINS=https://app.exemplo.com",
+		"FILA_MEDIA_STORAGE=s3", "FILA_S3_ENDPOINT=http://abc.r2.cloudflarestorage.com", "FILA_S3_BUCKET=fila-prod",
+		"FILA_S3_ACCESS_KEY_ID=a", "FILA_S3_SECRET_ACCESS_KEY=b"}
+	if _, err := Load(prod); err == nil || !strings.Contains(err.Error(), VarS3Endpoint) {
+		t.Fatalf("produção sem https deveria falhar: %v", err)
+	}
+}
+
+func TestDeletionJournalBucketUsesS3Credentials(t *testing.T) {
+	cfg, err := Load(valid("FILA_DELETION_JOURNAL_BUCKET=fila-hml-diario", "FILA_S3_ENDPOINT=https://abc.r2.cloudflarestorage.com",
+		"FILA_S3_BUCKET=fila-hml-midia", "FILA_S3_ACCESS_KEY_ID=a", "FILA_S3_SECRET_ACCESS_KEY=b"))
+	if err != nil {
+		t.Fatalf("esperava válido: %v", err)
+	}
+	if cfg.Ops.DeletionJournalBucket != "fila-hml-diario" || cfg.Media.Enabled() || cfg.Media.S3.Endpoint == "" {
+		t.Fatalf("diário no bucket sem ligar fotos: %+v %+v", cfg.Ops, cfg.Media)
+	}
+	if _, err := Load(valid("FILA_DELETION_JOURNAL_BUCKET=fila-hml-diario")); err == nil || !strings.Contains(err.Error(), VarS3Endpoint) {
+		t.Fatalf("diário no bucket sem credenciais deveria falhar: %v", err)
+	}
+}

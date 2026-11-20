@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -116,5 +117,154 @@ func TestFileSenderWritesPrivateFile(t *testing.T) {
 	b, _ := os.ReadFile(dir + "/" + entries[0].Name())
 	if !strings.Contains(string(b), "Assunto: Oi") || !strings.Contains(string(b), "Corpo") {
 		t.Fatalf("conteúdo inesperado: %s", b)
+	}
+}
+
+// recorder conta envios por mensagem (chave de idempotência = id) e pode travar o envio.
+type recorder struct {
+	mu    sync.Mutex
+	calls map[uuid.UUID]int
+	block chan struct{} // se não nil, o 1º envio fica preso até fechar (processo "caído")
+	once  sync.Once
+	stuck chan struct{}
+	err   error
+}
+
+func newRecorder() *recorder {
+	return &recorder{calls: map[uuid.UUID]int{}, stuck: make(chan struct{})}
+}
+
+func (r *recorder) Send(_ context.Context, id uuid.UUID, _ mail.Message) error {
+	r.mu.Lock()
+	r.calls[id]++
+	first := r.block != nil
+	r.mu.Unlock()
+	if first {
+		r.once.Do(func() {
+			close(r.stuck)
+			<-r.block
+		})
+	}
+	return r.err
+}
+
+func (r *recorder) total() (msgs, calls int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, n := range r.calls {
+		msgs++
+		calls += n
+	}
+	return
+}
+
+func quietLog() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
+
+// Dois workers ao mesmo tempo nunca enviam a mesma mensagem (reserva com SKIP LOCKED + lease).
+func TestDispatcherConcurrentWorkersSendEachOnce(t *testing.T) {
+	pool := testdb.Migrated(t)
+	ctx := context.Background()
+	c := clock.NewFake(time.Date(2026, 11, 12, 10, 0, 0, 0, time.UTC))
+	ring, _ := keys.New(bytes.Repeat([]byte{3}, 32))
+	out := mail.NewOutbox(ring)
+	for range 30 {
+		_ = out.Enqueue(ctx, pool, "teste", mail.Message{To: "a@b.co", Subject: "s", Body: "b"}, c.Now())
+	}
+	rec := newRecorder()
+	var wg sync.WaitGroup
+	for range 4 {
+		d := &mail.Dispatcher{Pool: pool, Ring: ring, Sender: rec, Clock: c, Log: quietLog(), MaxAttempts: 3, BatchSize: 5}
+		wg.Go(func() {
+			for {
+				if n, err := d.RunOnce(ctx); err != nil || n == 0 {
+					return
+				}
+			}
+		})
+	}
+	wg.Wait()
+	msgs, calls := rec.total()
+	if msgs != 30 || calls != 30 {
+		t.Fatalf("esperava 30 mensagens enviadas uma vez cada; mensagens=%d envios=%d", msgs, calls)
+	}
+}
+
+// Worker cai depois do aceite e antes da confirmação: a reserva vence, outro worker reenvia com a
+// MESMA chave de idempotência e a confirmação atrasada do primeiro não sobrescreve nada.
+func TestDispatcherCrashAfterAcceptRetriesWithSameKey(t *testing.T) {
+	pool := testdb.Migrated(t)
+	ctx := context.Background()
+	c := clock.NewFake(time.Date(2026, 11, 12, 10, 0, 0, 0, time.UTC))
+	ring, _ := keys.New(bytes.Repeat([]byte{3}, 32))
+	_ = mail.NewOutbox(ring).Enqueue(ctx, pool, "teste", mail.Message{To: "a@b.co", Subject: "s", Body: "b"}, c.Now())
+
+	stuckRec := newRecorder()
+	stuckRec.block = make(chan struct{})
+	a := &mail.Dispatcher{Pool: pool, Ring: ring, Sender: stuckRec, Clock: c, Log: quietLog(), MaxAttempts: 3, BatchSize: 1,
+		Lease: time.Minute, SendTimeout: time.Hour}
+	done := make(chan struct{})
+	go func() { _, _ = a.RunOnce(ctx); close(done) }()
+	<-stuckRec.stuck // A reservou e "enviou"; ainda não confirmou
+
+	rec := newRecorder()
+	b := &mail.Dispatcher{Pool: pool, Ring: ring, Sender: rec, Clock: c, Log: quietLog(), MaxAttempts: 3, BatchSize: 1,
+		Lease: time.Minute}
+	if n, _ := b.RunOnce(ctx); n != 0 {
+		t.Fatal("reserva ainda válida não pode ser tomada por outro worker")
+	}
+	c.Advance(2 * time.Minute) // reserva de A venceu (A "caiu")
+	if n, err := b.RunOnce(ctx); err != nil || n != 1 {
+		t.Fatalf("B deveria reenviar: n=%d err=%v", n, err)
+	}
+	var idA, idB uuid.UUID
+	for k := range stuckRec.calls {
+		idA = k
+	}
+	for k := range rec.calls {
+		idB = k
+	}
+	if idA != idB {
+		t.Fatal("o reenvio deve usar a mesma identificação (chave de idempotência)")
+	}
+	close(stuckRec.block) // A "volta" e tenta confirmar com a reserva antiga
+	<-done
+	var attempts int
+	var sent bool
+	_ = pool.QueryRow(ctx, `SELECT attempts, sent_at IS NOT NULL AND payload IS NULL AND lease_until IS NULL FROM mail_outbox`).Scan(&attempts, &sent)
+	if !sent || attempts != 2 {
+		t.Fatalf("estado final incorreto: enviado=%v tentativas=%d", sent, attempts)
+	}
+}
+
+func TestDispatcherDropsExpiredAndPermanentFailures(t *testing.T) {
+	pool := testdb.Migrated(t)
+	ctx := context.Background()
+	c := clock.NewFake(time.Date(2026, 11, 12, 10, 0, 0, 0, time.UTC))
+	ring, _ := keys.New(bytes.Repeat([]byte{3}, 32))
+	out := mail.NewOutbox(ring)
+	_ = out.Enqueue(ctx, pool, "redefinicao_senha", mail.Message{To: "a@b.co", Subject: "s", Body: "b"}, c.Now())
+	c.Advance(31 * time.Minute) // link de redefinição (30 min) já venceu
+	rec := newRecorder()
+	d := &mail.Dispatcher{Pool: pool, Ring: ring, Sender: rec, Clock: c, Log: quietLog(), MaxAttempts: 8, BatchSize: 10,
+		MaxAge: mail.DefaultMaxAge}
+	if n, err := d.RunOnce(ctx); err != nil || n != 0 {
+		t.Fatalf("n=%d err=%v", n, err)
+	}
+	if m, _ := rec.total(); m != 0 {
+		t.Fatal("e-mail com link vencido não pode ser enviado")
+	}
+	var lastErr string
+	_ = pool.QueryRow(ctx, `SELECT last_error FROM mail_outbox WHERE failed_at IS NOT NULL AND payload IS NULL`).Scan(&lastErr)
+	if lastErr != "vencido antes do envio" {
+		t.Fatalf("last_error=%q", lastErr)
+	}
+
+	_ = out.Enqueue(ctx, pool, "verificacao_email", mail.Message{To: "x@b.co", Subject: "s", Body: "b"}, c.Now())
+	rec.err = &mail.Permanent{Err: errors.New("recusado")}
+	_, _ = d.RunOnce(ctx)
+	var failed int
+	_ = pool.QueryRow(ctx, `SELECT count(*) FROM mail_outbox WHERE failed_at IS NOT NULL AND attempts = 1 AND kind = 'verificacao_email'`).Scan(&failed)
+	if failed != 1 {
+		t.Fatal("erro permanente deve desistir na primeira tentativa")
 	}
 }

@@ -1,0 +1,104 @@
+# Publicação coordenada (API + worker no Render) — acionada manualmente.
+#
+#   1. Aplica as migrations com a credencial de MIGRADOR (só existe aqui, no GitHub Environment;
+#      nunca nos serviços do Render) e reaplica/confere as permissões do papel da aplicação.
+#   2. Aciona os deploy hooks da API e do worker com o MESMO commit.
+#   3. Espera a API responder com a revisão nova (cabeçalho X-Fila-Revision) e ficar pronta.
+#
+# Configuração (Settings → Environments → homologacao / producao):
+#   Secrets:   FILA_MIGRATOR_DATABASE_URL  URL DIRETA do Neon com o papel dono do banco
+#              RENDER_DEPLOY_HOOK_API      Render → fila-api-* → Settings → Deploy Hook
+#              RENDER_DEPLOY_HOOK_WORKER   Render → fila-worker-* → Settings → Deploy Hook
+#   Variables: FILA_PUBLIC_BASE_URL        https://app.seudominio.com.br (origem do site)
+#              FILA_APP_ROLE               fila_app
+# Em "producao", ligue "Required reviewers" para exigir aprovação antes de rodar.
+name: Publicar
+
+on:
+  workflow_dispatch:
+    inputs:
+      ambiente:
+        description: "Ambiente"
+        required: true
+        type: choice
+        options: [homologacao, producao]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publicar-${{ inputs.ambiente }}
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    name: Migrar e publicar (${{ inputs.ambiente }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    environment: ${{ inputs.ambiente }}
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      FILA_ENV: ${{ inputs.ambiente == 'producao' && 'production' || 'homologacao' }}
+      FILA_PUBLIC_BASE_URL: ${{ vars.FILA_PUBLIC_BASE_URL }}
+      FILA_ALLOWED_ORIGINS: ${{ vars.FILA_PUBLIC_BASE_URL }}
+      FILA_COOKIE_SECURE: "true"
+      FILA_LOG_FORMAT: text
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: Conferir configuração do ambiente
+        env:
+          HAS_DB: ${{ secrets.FILA_MIGRATOR_DATABASE_URL != '' }}
+          HAS_API: ${{ secrets.RENDER_DEPLOY_HOOK_API != '' }}
+          HAS_WORKER: ${{ secrets.RENDER_DEPLOY_HOOK_WORKER != '' }}
+          ROLE: ${{ vars.FILA_APP_ROLE }}
+        run: |
+          ok=1
+          [ "$HAS_DB" = true ] || { echo "::error::falta o secret FILA_MIGRATOR_DATABASE_URL"; ok=0; }
+          [ "$HAS_API" = true ] || { echo "::error::falta o secret RENDER_DEPLOY_HOOK_API"; ok=0; }
+          [ "$HAS_WORKER" = true ] || { echo "::error::falta o secret RENDER_DEPLOY_HOOK_WORKER"; ok=0; }
+          [ -n "$ROLE" ] || { echo "::error::falta a variable FILA_APP_ROLE (ex.: fila_app)"; ok=0; }
+          case "$FILA_PUBLIC_BASE_URL" in https://*) ;; *) echo "::error::FILA_PUBLIC_BASE_URL deve ser https://..."; ok=0;; esac
+          [ $ok = 1 ]
+      - name: Compilar o migrador
+        run: go build -trimpath -o ../bin/ ./cmd/migrate
+      - name: Migrations e permissões
+        env:
+          FILA_DATABASE_URL: ${{ secrets.FILA_MIGRATOR_DATABASE_URL }}
+          ROLE: ${{ vars.FILA_APP_ROLE }}
+        run: |
+          ../bin/migrate status
+          ../bin/migrate up
+          ../bin/migrate permissoes -app "$ROLE"
+          ../bin/migrate permissoes -app "$ROLE" -verificar
+          ../bin/migrate status
+      - name: Acionar deploy (mesmo commit na API e no worker)
+        env:
+          HOOK_API: ${{ secrets.RENDER_DEPLOY_HOOK_API }}
+          HOOK_WORKER: ${{ secrets.RENDER_DEPLOY_HOOK_WORKER }}
+        run: |
+          for hook in "$HOOK_API" "$HOOK_WORKER"; do
+            sep='?'; case "$hook" in *\?*) sep='&';; esac
+            curl -fsS -X POST -o /dev/null "${hook}${sep}ref=${GITHUB_SHA}"
+          done
+          echo "deploy pedido para ${GITHUB_SHA::12}"
+      - name: Esperar a API nova no ar
+        run: |
+          want="${GITHUB_SHA::12}"
+          for i in $(seq 1 90); do
+            rev="$(curl -fsS -D - -o /dev/null "$FILA_PUBLIC_BASE_URL/healthz/live" 2>/dev/null | tr -d '\r' | awk -F': ' 'tolower($1)=="x-fila-revision"{print $2}')"
+            if [ "$rev" = "$want" ] && curl -fsS -o /dev/null "$FILA_PUBLIC_BASE_URL/healthz/ready"; then
+              echo "API no ar com a revisão $want e pronta"; exit 0
+            fi
+            sleep 20
+          done
+          echo "::error::a API não ficou pronta com a revisão $want em 30 min (veja os logs do Render)"; exit 1
+      - name: Lembrete do worker
+        run: echo "A saúde da API não comprova o worker. Confira no Render o log 'worker pronto' e o monitor de sinal de vida."

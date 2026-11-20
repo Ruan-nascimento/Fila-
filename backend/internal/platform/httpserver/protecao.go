@@ -75,6 +75,8 @@ type Options struct {
 	// ficam fora (o provedor repete avisos e tem limite de corpo próprio).
 	Limiter           *IPLimiter
 	TrustForwardedFor bool
+	// ProxySecret: segredo do proxy de borda (FILA_PROXY_SHARED_SECRET); vazio = sem proxy de borda.
+	ProxySecret []byte
 	// Observe recebe rota-modelo, método, status e duração de cada requisição (métricas).
 	Observe func(route, method string, status int, d time.Duration)
 	// Limited é chamado a cada requisição recusada pelo limite geral (métrica).

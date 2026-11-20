@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 	"mime"
-	"net"
 	"net/http"
 	"slices"
 	"strings"
@@ -93,19 +92,11 @@ func pointer(field string) string {
 // usa o último endereço de X-Forwarded-For (o acrescentado pelo nosso proxy reverso).
 // O resultado só serve para limitar tentativas: nunca é prova de identidade.
 func ClientIP(r *http.Request, trustForwardedFor bool) string {
-	if trustForwardedFor {
-		if xff := r.Header.Values("X-Forwarded-For"); len(xff) > 0 {
-			parts := strings.Split(xff[len(xff)-1], ",")
-			if ip := net.ParseIP(strings.TrimSpace(parts[len(parts)-1])); ip != nil {
-				return ip.String()
-			}
-		}
+	// Já resolvido por ResolveClientIP (política completa, inclusive proxy autenticado).
+	if ip, ok := r.Context().Value(clientIPKey).(string); ok && ip != "" {
+		return ip
 	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return host
+	return clientIPFromPeer(r, trustForwardedFor)
 }
 
 // IsUnsafeMethod informa se o método altera estado (exige validação de origem e CSRF).

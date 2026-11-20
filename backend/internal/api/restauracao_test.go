@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"fila/internal/exclusao"
@@ -132,6 +133,25 @@ func TestRestoreReconcilesBeforeWorkerResumes(t *testing.T) {
 	rafa.mustStatus(rafa.requestDeletion(), 202)
 	if n, err := (&exclusao.Journal{Dir: journal}).Export(ctx, a.pool); err != nil || n != 2 {
 		t.Fatalf("diário: %d %v", n, err)
+	}
+	// Com um servidor S3 de teste, o diário também vai para o bucket e a reconciliação usa a cópia
+	// BAIXADA do bucket (caminho da hospedagem em que o disco do worker não é exportável).
+	if st := testObjectStore(); st != nil {
+		prefix := "diario-" + strings.ReplaceAll(uuid.NewString(), "-", "")[:12] + "/"
+		if n, err := (&exclusao.Journal{Remote: st, RemotePrefix: prefix}).Export(ctx, a.pool); err != nil || n != 2 {
+			t.Fatalf("diário no bucket: %d %v", n, err)
+		}
+		if n, err := (&exclusao.Journal{Remote: st, RemotePrefix: prefix}).Export(ctx, a.pool); err != nil || n != 0 {
+			t.Fatalf("nova instância do worker não pode duplicar o diário: %d %v", n, err)
+		}
+		entries, err := exclusao.ReadRemoteJournal(ctx, st, prefix)
+		if err != nil || len(entries) != 2 {
+			t.Fatalf("leitura do diário no bucket: %d %v", len(entries), err)
+		}
+		journal = t.TempDir()
+		if err := exclusao.WriteJournalFile(journal, entries); err != nil {
+			t.Fatal(err)
+		}
 	}
 	creates := a.pix.Creates()
 

@@ -9,15 +9,19 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/go-jose/go-jose/v4"
+	"github.com/google/uuid"
 
 	"fila/internal/api"
 	"fila/internal/midia"
 	"fila/internal/platform/config"
+	"fila/internal/platform/objstore"
 )
 
 // fakeGoogle é um provedor OpenID Connect de TESTE (só nos testes automatizados; produção recusa
@@ -155,6 +159,14 @@ func newEnvFull(t *testing.T) (*env, *fakeGoogle) {
 		d.GoogleHTTPClient = g.srv.Client()
 		d.MediaStore = midia.FileStore{Root: dir}
 		d.Config.Media = config.MediaConfig{Storage: config.MediaFilesystem, Dir: dir, UploadsPerMin: 5, UploadsPerDay: 20, Workers: 1}
+		// Com um servidor S3 de teste (FILA_TEST_S3_*), as fotos usam o adaptador S3 de verdade
+		// (bucket descartável, prefixo aleatório por teste) em vez da pasta.
+		if ep := os.Getenv("FILA_TEST_S3_ENDPOINT"); ep != "" {
+			d.MediaStore = midia.NewS3Store(&objstore.Client{Endpoint: ep, Region: "auto", Bucket: os.Getenv("FILA_TEST_S3_BUCKET"),
+				AccessKey: os.Getenv("FILA_TEST_S3_ACCESS_KEY"), SecretKey: os.Getenv("FILA_TEST_S3_SECRET_KEY")},
+				"api-"+strings.ReplaceAll(uuid.NewString(), "-", "")+"/")
+			d.Config.Media.Storage = config.MediaS3
+		}
 	})
 	// O id_token usa o relógio real (a biblioteca confere exp com o relógio do processo).
 	g.now = time.Now
@@ -175,4 +187,14 @@ func (b *browser) googleLogin(g *fakeGoogle, body map[string]any, sub, email str
 	r := b.mustStatus(b.do("POST", "/v1/auth/google/start", body), 200)
 	state, code := g.authorize(r.data()["authorization_url"].(string), sub, email, extra, nil)
 	return b.do("GET", "/v1/auth/google/callback?state="+url.QueryEscape(state)+"&code="+url.QueryEscape(code), nil)
+}
+
+// testObjectStore devolve o cliente do bucket S3 de teste (FILA_TEST_S3_*) ou nil.
+func testObjectStore() *objstore.Client {
+	ep := os.Getenv("FILA_TEST_S3_ENDPOINT")
+	if ep == "" {
+		return nil
+	}
+	return &objstore.Client{Endpoint: ep, Region: "auto", Bucket: os.Getenv("FILA_TEST_S3_BUCKET"),
+		AccessKey: os.Getenv("FILA_TEST_S3_ACCESS_KEY"), SecretKey: os.Getenv("FILA_TEST_S3_SECRET_KEY")}
 }

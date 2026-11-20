@@ -1,0 +1,110 @@
+# Backup externo diário (complementa o histórico/PITR do Neon, que fica no próprio Neon).
+#
+#   1. pg_dump (formato custom) do banco → conferido com pg_restore --list → CIFRADO com age
+#      (chave pública; a privada fica só com o responsável, fora do GitHub e do R2).
+#   2. Envia o arquivo cifrado ao bucket de BACKUP no R2 (banco/AAAA/MM/DD/...).
+#   3. Copia (sem apagar nada no destino) as fotos e o diário de exclusões para o bucket de backup.
+#   4. Avisa o monitor externo: sucesso (ping) ou falha (/fail). Se o backup NÃO rodar, o monitor
+#      percebe a ausência do sinal e alerta (backup ausente/atrasado).
+#
+# Repositório público: nada aqui imprime dados, URLs com senha ou chaves (os secrets são mascarados
+# e o dump nunca vira artefato do Actions).
+#
+# Configuração (Settings → Environments → producao; repita em homologacao se quiser ensaiar):
+#   Secrets:   FILA_BACKUP_DATABASE_URL   URL DIRETA do Neon (papel dono/migrador, só leitura aqui)
+#              R2_BACKUP_ACCESS_KEY_ID / R2_BACKUP_SECRET_ACCESS_KEY  token R2: leitura nos buckets
+#                                          de fotos e diário + escrita no bucket de backup
+#              FILA_BACKUP_HEARTBEAT_URL  monitor de sinal de vida do backup
+#   Variables: R2_ENDPOINT                https://<id-da-conta>.r2.cloudflarestorage.com
+#              R2_BACKUP_BUCKET           ex.: fila-prod-backup
+#              R2_MEDIA_BUCKET            ex.: fila-prod-midia
+#              R2_JOURNAL_BUCKET          ex.: fila-prod-diario
+#              BACKUP_AGE_RECIPIENT       chave PÚBLICA age (age1...)
+name: Backup
+
+on:
+  schedule:
+    - cron: "17 6 * * *" # 03:17 em Brasília
+  workflow_dispatch:
+    inputs:
+      ambiente:
+        description: "Ambiente"
+        required: true
+        default: producao
+        type: choice
+        options: [producao, homologacao]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup-${{ inputs.ambiente || 'producao' }}
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: Backup (${{ inputs.ambiente || 'producao' }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    environment: ${{ inputs.ambiente || 'producao' }}
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_BACKUP_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_BACKUP_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: auto
+      AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+      AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+      R2: ${{ vars.R2_ENDPOINT }}
+      BACKUP_BUCKET: ${{ vars.R2_BACKUP_BUCKET }}
+      HEARTBEAT: ${{ secrets.FILA_BACKUP_HEARTBEAT_URL }}
+    steps:
+      - name: Conferir configuração
+        env:
+          HAS_DB: ${{ secrets.FILA_BACKUP_DATABASE_URL != '' }}
+          RECIPIENT: ${{ vars.BACKUP_AGE_RECIPIENT }}
+        run: |
+          ok=1
+          [ "$HAS_DB" = true ] || { echo "::error::falta o secret FILA_BACKUP_DATABASE_URL"; ok=0; }
+          [ -n "$AWS_ACCESS_KEY_ID" ] && [ -n "$AWS_SECRET_ACCESS_KEY" ] || { echo "::error::faltam as credenciais R2 de backup"; ok=0; }
+          case "$R2" in https://*) ;; *) echo "::error::R2_ENDPOINT deve ser https://..."; ok=0;; esac
+          [ -n "$BACKUP_BUCKET" ] || { echo "::error::falta R2_BACKUP_BUCKET"; ok=0; }
+          case "$RECIPIENT" in age1*) ;; *) echo "::error::BACKUP_AGE_RECIPIENT deve ser uma chave pública age1..."; ok=0;; esac
+          [ $ok = 1 ]
+      - name: Ferramentas (age)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq age >/dev/null
+      - name: Dump do banco (PostgreSQL 18), conferência e cifragem
+        env:
+          DB: ${{ secrets.FILA_BACKUP_DATABASE_URL }}
+          RECIPIENT: ${{ vars.BACKUP_AGE_RECIPIENT }}
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$RUNNER_TEMP/bk"
+          docker run --rm -e DB -v "$RUNNER_TEMP/bk:/bk" postgres:18.7 \
+            sh -c 'pg_dump --format=custom --no-owner --no-privileges --dbname="$DB" --file=/bk/fila.dump && pg_restore --list /bk/fila.dump > /bk/lista.txt'
+          n="$(grep -c 'TABLE DATA' "$RUNNER_TEMP/bk/lista.txt" || true)"
+          [ "$n" -gt 10 ] || { echo "::error::dump suspeito: só $n tabelas com dados"; exit 1; }
+          age -r "$RECIPIENT" -o "$RUNNER_TEMP/bk/fila.dump.age" "$RUNNER_TEMP/bk/fila.dump"
+          shred -u "$RUNNER_TEMP/bk/fila.dump" "$RUNNER_TEMP/bk/lista.txt"
+          echo "dump conferido ($n tabelas) e cifrado: $(du -h "$RUNNER_TEMP/bk/fila.dump.age" | cut -f1)"
+      - name: Enviar ao bucket de backup
+        run: |
+          set -euo pipefail
+          key="banco/$(date -u +%Y/%m/%d)/fila-$(date -u +%Y%m%dT%H%M%SZ).dump.age"
+          aws s3 cp --only-show-errors --endpoint-url "$R2" "$RUNNER_TEMP/bk/fila.dump.age" "s3://$BACKUP_BUCKET/$key"
+          aws s3api head-object --endpoint-url "$R2" --bucket "$BACKUP_BUCKET" --key "$key" >/dev/null
+          echo "enviado: $key"
+      - name: Copiar fotos e diário de exclusões (sem apagar no destino)
+        env:
+          MEDIA: ${{ vars.R2_MEDIA_BUCKET }}
+          JOURNAL: ${{ vars.R2_JOURNAL_BUCKET }}
+        run: |
+          set -euo pipefail
+          if [ -n "$MEDIA" ]; then aws s3 sync --only-show-errors --endpoint-url "$R2" "s3://$MEDIA" "s3://$BACKUP_BUCKET/midia/"; fi
+          if [ -n "$JOURNAL" ]; then aws s3 sync --only-show-errors --endpoint-url "$R2" "s3://$JOURNAL" "s3://$BACKUP_BUCKET/diario/"; fi
+          echo "cópia de objetos concluída"
+      - name: Sinal de vida do backup (sucesso)
+        if: success()
+        run: if [ -n "$HEARTBEAT" ]; then curl -fsS -m 10 --retry 3 -o /dev/null "$HEARTBEAT"; fi
+      - name: Sinal de vida do backup (falha)
+        if: failure()
+        run: if [ -n "$HEARTBEAT" ]; then curl -fsS -m 10 --retry 3 -o /dev/null -X POST --data "backup_falhou" "${HEARTBEAT%/}/fail"; fi
