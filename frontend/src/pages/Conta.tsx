@@ -1,8 +1,26 @@
-import { useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router";
-import { ChevronRight, KeyRound, LogOut, Store, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router";
+import {
+  BadgeCheck,
+  ChevronRight,
+  KeyRound,
+  LogOut,
+  Monitor,
+  Moon,
+  Store,
+  Sun,
+  Trash2,
+  Unlink,
+} from "lucide-react";
 import { api } from "../api/client";
-import { call, fieldErrors, problemMessage } from "../api/problem";
+import { call, fieldErrors, problemMessage, type Problem } from "../api/problem";
+import type { components } from "../api/schema.gen";
+import { PerfilProfissional } from "../features/account/PerfilProfissional";
+import { Reautenticar } from "../features/account/Reautenticar";
+import { GoogleButton } from "../features/auth/GoogleButton";
+import { usePublicConfig } from "../features/config/publicConfig";
+import { ImageUploadField } from "../features/media/ImageUploadField";
+import { applyAppearance, type Appearance } from "../features/theme/tema";
 import { modoDono } from "./dono/modo";
 import { useSession } from "../session/context";
 import {
@@ -12,11 +30,13 @@ import {
   ButtonLink,
   Card,
   Field,
+  LoadError,
   Loading,
   Notice,
   PageHeader,
   PasswordField,
   Section,
+  Segmented,
   Submit,
 } from "../ui/ui";
 import { useInlinePanel } from "../ui/useInlinePanel";
@@ -25,6 +45,8 @@ import { ExcluirConta, ExclusaoSolicitada } from "./exclusao/Exclusao";
 import type { DeletionRequest } from "./exclusao/textos";
 import { useCommand } from "./gestao/comando";
 import { CommandError } from "./gestao/comum";
+
+type MyProfile = components["schemas"]["MyProfile"];
 
 const dateTime = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" });
 
@@ -43,11 +65,48 @@ function NaoConectado() {
   );
 }
 
+/** Perfil da própria conta (GET /v1/me), relido depois de cada alteração confirmada. */
+function useMyProfile(accountId: string | undefined) {
+  const [profile, setProfile] = useState<MyProfile | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    if (!accountId) return;
+    let active = true;
+    void call(() => api.GET("/v1/me")).then((out) => {
+      if (!active) return;
+      if (out.ok) {
+        setProfile(out.data.data);
+        setError(null);
+      } else setError(problemMessage(out.problem, out.offline));
+    });
+    return () => {
+      active = false;
+    };
+  }, [accountId, attempt]);
+  const reload = useCallback(() => setAttempt((n) => n + 1), []);
+  return { profile, setProfile, error, reload };
+}
+
+const googleStatus: Record<string, { kind: "ok" | "erro" | "info"; text: string }> = {
+  conectado: { kind: "ok", text: "Google conectado. Você pode entrar com ele nesta conta de cliente." },
+  ja_vinculado: { kind: "erro", text: "Esta conta Google já está ligada a outra conta. Nada foi alterado." },
+  falhou: { kind: "erro", text: "Não foi possível conectar o Google. Tente de novo." },
+  cancelado: { kind: "info", text: "Conexão com o Google cancelada. Nada foi alterado." },
+  indisponivel: { kind: "erro", text: "O Google não está disponível agora." },
+};
+
+/** "Minha conta": dados da pessoa autenticada, sem depender de loja selecionada. */
 export function Conta() {
   const { state, refresh } = useSession();
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
   const [logoutError, setLogoutError] = useState<string | null>(null);
   const [leaving, setLeaving] = useState(false);
+  const cfg = usePublicConfig();
+  const accountId = state.status === "ready" ? state.session.account?.id : undefined;
+  const { profile, setProfile, error, reload } = useMyProfile(accountId);
+  const gs = params.get("google");
 
   if (state.status === "loading") return <Loading />;
   if (state.status === "offline")
@@ -72,26 +131,58 @@ export function Conta() {
     navigate(modoDono() ? "/dono" : "/");
   }
 
-  const lojas = new Map<string, { name: string; roles: string[] }>();
+  const lojas = new Map<string, { name: string; roles: string[]; professional: boolean }>();
   for (const m of memberships) {
-    const cur = lojas.get(m.establishment_id) ?? { name: m.establishment_name, roles: [] };
+    const cur = lojas.get(m.establishment_id) ?? {
+      name: m.establishment_name,
+      roles: [],
+      professional: false,
+    };
     cur.roles.push(m.role === "owner" ? "dono" : "profissional");
+    if (m.professional_id) cur.professional = true;
     lojas.set(m.establishment_id, cur);
   }
+  const updated = (p: MyProfile) => {
+    setProfile(p);
+    void refresh();
+  };
+  const mediaEnabled = cfg?.media_uploads === true;
 
   return (
-    <section aria-labelledby="titulo-conta" className="grid gap-6">
-      <PageHeader id="titulo-conta" title="Minha conta" />
+    <section aria-labelledby="titulo-conta" className="grid gap-8">
+      <PageHeader
+        id="titulo-conta"
+        title="Minha conta"
+        description="Seus dados pessoais. As configurações da barbearia ficam na gestão."
+      />
+      {gs && googleStatus[gs] && (
+        <Notice kind={googleStatus[gs].kind}>
+          <p>{googleStatus[gs].text}</p>
+          <p>
+            <button
+              type="button"
+              className="min-h-11 font-semibold underline"
+              onClick={() => {
+                params.delete("google");
+                setParams(params, { replace: true });
+              }}
+            >
+              Fechar aviso
+            </button>
+          </p>
+        </Notice>
+      )}
       <Card className="flex flex-wrap items-center gap-4 p-5">
-        <Avatar name={account.name} className="size-14 text-lg" />
+        <Avatar name={account.name} image={profile?.avatar} size={56} priority className="size-14 text-lg" />
         <dl className="m-0 grid min-w-0 flex-1 gap-0.5">
           <dt className="sr-only">Nome</dt>
           <dd className="m-0 text-xl font-bold">{account.name}</dd>
           <dt className="sr-only">E-mail</dt>
           <dd className="m-0 text-fg-muted">{account.email}</dd>
           <dt className="sr-only">Usando como</dt>
-          <dd className="m-0 mt-1">
+          <dd className="m-0 mt-1 flex flex-wrap gap-1">
             <Badge tone="primary">{session.kind === "staff" ? "Equipe da barbearia" : "Cliente"}</Badge>
+            {session.auth_method === "google" && <Badge>Entrou com o Google</Badge>}
           </dd>
           <dt className="sr-only">Sessão válida até</dt>
           <dd className="m-0 text-xs text-fg-muted">
@@ -99,6 +190,45 @@ export function Conta() {
           </dd>
         </dl>
       </Card>
+
+      {error && !profile && <LoadError message={error} onRetry={reload} />}
+
+      <Section title="Dados pessoais">
+        <MeuNome current={account.name} profile={profile} onDone={updated} />
+        <div className="grid max-w-xl gap-1 text-sm">
+          <span className="font-semibold">E-mail</span>
+          <span className="flex flex-wrap items-center gap-2">
+            {account.email}
+            {profile?.email_verified && (
+              <span className="inline-flex items-center gap-1 text-success">
+                <BadgeCheck aria-hidden="true" className="size-4" /> verificado
+              </span>
+            )}
+          </span>
+          <span className="text-fg-muted">O e-mail não pode ser trocado por aqui.</span>
+        </div>
+      </Section>
+
+      {profile && (
+        <Section
+          title="Foto pessoal"
+          description="Aparece para você e, durante o atendimento, para a equipe da loja em que você estiver na fila. Nunca na fila pública."
+        >
+          {mediaEnabled ? (
+            <MinhaFoto profile={profile} name={account.name} onDone={updated} />
+          ) : (
+            <p className="m-0 text-sm text-fg-muted">
+              O envio de fotos ainda não está disponível. Usamos suas iniciais.
+            </p>
+          )}
+        </Section>
+      )}
+
+      {profile && <Aparencia profile={profile} onDone={updated} />}
+
+      {profile && (
+        <MetodosDeAcesso profile={profile} googleEnabled={cfg?.google_login === true} onChanged={reload} />
+      )}
 
       {lojas.size > 0 && (
         <Section title="Acesso de equipe">
@@ -130,14 +260,23 @@ export function Conta() {
           </ul>
           {session.kind !== "staff" && (
             <p className="m-0 text-sm text-fg-muted">
-              Para usar o acesso de equipe, saia e entre escolhendo “Equipe da barbearia”.
+              Para usar o acesso de equipe, saia e entre escolhendo “Equipe da barbearia” (com senha).
             </p>
           )}
+          {session.kind === "staff" &&
+            profile &&
+            [...lojas]
+              .filter(([, l]) => l.professional)
+              .map(([id]) => (
+                <PerfilProfissional
+                  key={id}
+                  estId={id}
+                  mediaEnabled={mediaEnabled}
+                  hasAvatar={profile.avatar !== null}
+                />
+              ))}
         </Section>
       )}
-
-      <MeuNome current={account.name} onDone={refresh} />
-      <TrocarSenha onDone={refresh} />
 
       <div className="grid gap-2">
         {logoutError && <Notice kind="erro">{logoutError}</Notice>}
@@ -167,11 +306,12 @@ export function Conta() {
   );
 }
 
-/** Área separada da exclusão: efeitos, confirmação, senha e, no fim, o protocolo. */
+/** Área separada da exclusão: efeitos, confirmação (senha ou código), e no fim o protocolo. */
 export function ExcluirContaPagina() {
   const { state, refresh } = useSession();
-  // Depois do pedido de exclusão a sessão acaba; o resultado (com o protocolo) fica nesta tela.
   const [deletion, setDeletion] = useState<DeletionRequest | null>(null);
+  const accountId = state.status === "ready" ? state.session.account?.id : undefined;
+  const { profile } = useMyProfile(accountId);
   if (deletion) return <ExclusaoSolicitada request={deletion} />;
   if (state.status === "loading") return <Loading />;
   if (state.status !== "ready" || !state.session.account) return <NaoConectado />;
@@ -184,6 +324,7 @@ export function ExcluirContaPagina() {
         description="Você pode excluir sua conta do Fila. A ação é permanente."
       />
       <ExcluirConta
+        hasPassword={profile?.has_password ?? true}
         onRequested={(d) => {
           setDeletion(d);
           void refresh();
@@ -193,30 +334,56 @@ export function ExcluirContaPagina() {
   );
 }
 
+function conflictOf(p: Problem | null): MyProfile | null {
+  return p?.code === "version_conflict" && p.current ? (p.current as unknown as MyProfile) : null;
+}
+
 /** Nome exibido: muda para as próximas visitas (as já feitas guardam o nome da época). */
-function MeuNome({ current, onDone }: { current: string; onDone: () => Promise<void> }) {
+function MeuNome({
+  current,
+  profile,
+  onDone,
+}: {
+  current: string;
+  profile: MyProfile | null;
+  onDone: (p: MyProfile) => void;
+}) {
   const [name, setName] = useState(current);
   const [done, setDone] = useState(false);
+  const [conflict, setConflict] = useState(false);
   const cmd = useCommand();
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setDone(false);
+    setConflict(false);
     if (name.trim() === "" || name.trim() === current) return;
-    const out = await cmd.run(`nome:${name.trim()}`, (key) =>
-      api.PATCH("/v1/me", { params: { header: { "Idempotency-Key": key } }, body: { name: name.trim() } }),
+    const body = profile ? { name: name.trim(), expected_version: profile.version } : { name: name.trim() };
+    const out = await cmd.run(`nome:${JSON.stringify(body)}`, (key) =>
+      api.PATCH("/v1/me", { params: { header: { "Idempotency-Key": key } }, body }),
     );
     if (out.ok) {
       setDone(true);
-      await onDone();
+      onDone(out.data.data);
+    } else {
+      const cur = conflictOf(out.problem);
+      if (cur) {
+        // Outra aba mudou o perfil: mantém o que foi digitado e pede para revisar.
+        setConflict(true);
+        onDone(cur);
+      }
     }
   }
   const errors = fieldErrors(cmd.problem);
   return (
-    <form onSubmit={onSubmit} noValidate aria-labelledby="titulo-nome" className="grid max-w-xl gap-3">
-      <h2 id="titulo-nome" className="m-0 text-base font-semibold">
-        Meu nome
-      </h2>
-      {!cmd.problem?.errors?.length && <CommandError problem={cmd.problem} offline={cmd.offline} />}
+    <form onSubmit={onSubmit} noValidate aria-label="Meu nome" className="grid max-w-xl gap-3">
+      {!cmd.problem?.errors?.length && !conflict && (
+        <CommandError problem={cmd.problem} offline={cmd.offline} />
+      )}
+      {conflict && (
+        <Notice kind="info">
+          <p>Seu perfil foi alterado em outra aba ou aparelho. Revise o nome e salve de novo.</p>
+        </Notice>
+      )}
       {done && (
         <Notice kind="ok">
           <p>Nome atualizado.</p>
@@ -239,12 +406,244 @@ function MeuNome({ current, onDone }: { current: string; onDone: () => Promise<v
   );
 }
 
-function TrocarSenha({ onDone }: { onDone: () => Promise<void> }) {
+function MinhaFoto({
+  profile,
+  name,
+  onDone,
+}: {
+  profile: MyProfile;
+  name: string;
+  onDone: (p: MyProfile) => void;
+}) {
+  const cmd = useCommand();
+  const [msg, setMsg] = useState<string | null>(null);
+  async function attach(assetId: string): Promise<boolean> {
+    setMsg(null);
+    const out = await cmd.run(`avatar:${assetId}:${profile.version}`, (key) =>
+      api.PUT("/v1/me/avatar", {
+        params: { header: { "Idempotency-Key": key } },
+        body: { asset_id: assetId, expected_version: profile.version },
+      }),
+    );
+    if (out.ok) {
+      onDone(out.data.data);
+      setMsg("Foto salva.");
+      return true;
+    }
+    const cur = conflictOf(out.problem);
+    if (cur) onDone(cur);
+    return false;
+  }
+  async function remove() {
+    setMsg(null);
+    const out = await cmd.run(`remover-avatar:${profile.version}`, (key) =>
+      api.POST("/v1/me/avatar/remove", {
+        params: { header: { "Idempotency-Key": key } },
+        body: { expected_version: profile.version },
+      }),
+    );
+    if (out.ok) {
+      onDone(out.data.data);
+      setMsg("Foto removida. Cópias que alguém já tenha baixado não podem ser recolhidas.");
+    } else {
+      const cur = conflictOf(out.problem);
+      if (cur) onDone(cur);
+    }
+  }
+  return (
+    <div className="grid max-w-xl gap-3">
+      {cmd.problem?.code === "version_conflict" ? (
+        <Notice kind="info">
+          <p>Seu perfil mudou em outra aba. Confira a foto atual e tente de novo.</p>
+        </Notice>
+      ) : (
+        <CommandError problem={cmd.problem} offline={cmd.offline} />
+      )}
+      {msg && (
+        <Notice kind="ok">
+          <p>{msg}</p>
+        </Notice>
+      )}
+      <ImageUploadField
+        purpose="avatar"
+        current={profile.avatar}
+        currentLabel={`Foto de ${name}`}
+        onReady={attach}
+        onRemove={() => void remove()}
+        removing={cmd.busy !== null}
+        saving={cmd.busy !== null}
+      />
+    </div>
+  );
+}
+
+function Aparencia({ profile, onDone }: { profile: MyProfile; onDone: (p: MyProfile) => void }) {
+  const cmd = useCommand();
+  const [pending, setPending] = useState<Appearance | null>(null);
+  const value = pending ?? profile.appearance;
+  async function choose(a: Appearance) {
+    setPending(a);
+    const out = await cmd.run(`aparencia:${a}:${profile.version}`, (key) =>
+      api.PATCH("/v1/me", {
+        params: { header: { "Idempotency-Key": key } },
+        body: { appearance: a, expected_version: profile.version },
+      }),
+    );
+    setPending(null);
+    if (out.ok) {
+      applyAppearance(out.data.data.appearance);
+      onDone(out.data.data);
+    } else {
+      const cur = conflictOf(out.problem);
+      if (cur) onDone(cur);
+    }
+  }
+  return (
+    <Section
+      title="Aparência"
+      description="Vale para você em qualquer loja. A cor principal de cada loja é escolhida pela barbearia."
+    >
+      <div className="max-w-md">
+        <Segmented
+          legend="Tema"
+          name="aparencia"
+          value={value}
+          onChange={(a) => void choose(a)}
+          options={[
+            { value: "system", label: "Do sistema", icon: Monitor },
+            { value: "light", label: "Claro", icon: Sun },
+            { value: "dark", label: "Escuro", icon: Moon },
+          ]}
+        />
+      </div>
+      <CommandError problem={cmd.problem} offline={cmd.offline} />
+    </Section>
+  );
+}
+
+/** Senha e Google. Conta só com Google não vê "trocar senha" nem é obrigada a informar senha. */
+function MetodosDeAcesso({
+  profile,
+  googleEnabled,
+  onChanged,
+}: {
+  profile: MyProfile;
+  googleEnabled: boolean;
+  onChanged: () => void;
+}) {
+  const [reauthFor, setReauthFor] = useState<"link" | "unlink" | null>(null);
+  const [unlinkError, setUnlinkError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const { refresh } = useSession();
+
+  async function startLink() {
+    const out = await call(() => api.POST("/v1/auth/google/start", { body: { intent: "link" } }));
+    if (out.ok) window.location.assign(out.data.data.authorization_url);
+    else if (out.problem?.code === "reauthentication_required") setReauthFor("link");
+    else setUnlinkError(problemMessage(out.problem, out.offline));
+  }
+
+  async function unlink() {
+    setBusy(true);
+    setUnlinkError(null);
+    const out = await call(() => api.POST("/v1/auth/google/unlink"));
+    setBusy(false);
+    if (out.ok) {
+      onChanged();
+      await refresh();
+    } else if (out.problem?.code === "reauthentication_required") setReauthFor("unlink");
+    else setUnlinkError(problemMessage(out.problem, out.offline));
+  }
+
+  return (
+    <Section title="Como você entra">
+      <ul className="m-0 grid max-w-xl list-none gap-3 p-0">
+        <li className="grid gap-2 rounded-xl border border-line bg-surface p-4">
+          <span className="flex items-center gap-2 font-semibold">
+            <KeyRound aria-hidden="true" className="size-5" /> Senha
+          </span>
+          {profile.has_password ? (
+            <TrocarSenha />
+          ) : (
+            <p className="m-0 text-sm text-fg-muted">Esta conta não tem senha: você entra com o Google.</p>
+          )}
+        </li>
+        <li className="grid gap-2 rounded-xl border border-line bg-surface p-4">
+          <span className="font-semibold">Google</span>
+          {profile.google.linked ? (
+            <>
+              <p className="m-0 text-sm">
+                Conectado{profile.google.email ? ` como ${profile.google.email}` : ""}. Serve só para entrar
+                como cliente.
+              </p>
+              {profile.has_password ? (
+                <Button
+                  variant="secondary"
+                  icon={Unlink}
+                  className="justify-self-start"
+                  disabled={busy}
+                  onClick={() => void unlink()}
+                >
+                  Desconectar Google
+                </Button>
+              ) : (
+                <p className="m-0 text-sm text-fg-muted">
+                  É o único jeito de entrar nesta conta, por isso não pode ser desconectado.
+                </p>
+              )}
+            </>
+          ) : googleEnabled ? (
+            <>
+              <p className="m-0 text-sm text-fg-muted">
+                Conecte para entrar como cliente com o Google. Pedimos sua senha antes, por segurança.
+              </p>
+              <div className="max-w-xs">
+                <GoogleButton
+                  intent={{ kind: "link" }}
+                  label="Conectar com o Google"
+                  onProblem={(p) => {
+                    if (p?.code === "reauthentication_required") {
+                      setReauthFor("link");
+                      return true;
+                    }
+                    return false;
+                  }}
+                />
+              </div>
+            </>
+          ) : (
+            <p className="m-0 text-sm text-fg-muted">Entrar com o Google não está disponível.</p>
+          )}
+          {unlinkError && (
+            <Notice kind="erro">
+              <p>{unlinkError}</p>
+            </Notice>
+          )}
+          {reauthFor && (
+            <Reautenticar
+              hasPassword={profile.has_password}
+              onCancel={() => setReauthFor(null)}
+              onDone={() => {
+                const what = reauthFor;
+                setReauthFor(null);
+                if (what === "link") void startLink();
+                else void unlink();
+              }}
+            />
+          )}
+        </li>
+      </ul>
+    </Section>
+  );
+}
+
+function TrocarSenha() {
   const form = useForm();
   const panel = useInlinePanel();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [done, setDone] = useState(false);
+  const { refresh } = useSession();
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -257,15 +656,12 @@ function TrocarSenha({ onDone }: { onDone: () => Promise<void> }) {
       setNext("");
       setDone(true);
       panel.hide();
-      await onDone();
+      await refresh();
     }
   }
 
   return (
-    <section aria-labelledby="titulo-senha" className="grid max-w-xl gap-3">
-      <h2 id="titulo-senha" className="m-0 text-base font-semibold">
-        Senha
-      </h2>
+    <div className="grid gap-3">
       {done && (
         <Notice kind="ok">
           <p>Senha alterada.</p>
@@ -291,7 +687,7 @@ function TrocarSenha({ onDone }: { onDone: () => Promise<void> }) {
           onSubmit={onSubmit}
           noValidate
           aria-label="Trocar senha"
-          className="grid gap-4 rounded-xl border border-line bg-surface p-4"
+          className="grid gap-4 rounded-xl border border-line bg-surface-2 p-4"
         >
           <p className="m-0 text-sm text-fg-muted">
             As outras sessões abertas desta conta serão encerradas; esta continua.
@@ -324,6 +720,6 @@ function TrocarSenha({ onDone }: { onDone: () => Promise<void> }) {
           </div>
         </form>
       )}
-    </section>
+    </div>
   );
 }

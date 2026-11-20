@@ -1,8 +1,27 @@
 import { useEffect, useId, useState, type FormEvent } from "react";
+import { Link } from "react-router";
+import { Gift, Store, UsersRound } from "lucide-react";
 import { api } from "../../api/client";
 import { call, fieldErrors, problemMessage } from "../../api/problem";
 import type { components } from "../../api/schema.gen";
-import { CopyButton, Field, LoadError, Loading, Notice, PageHeader, Submit } from "../../ui/ui";
+import { usePublicConfig } from "../../features/config/publicConfig";
+import { StoreQrPanel } from "../../features/establishments/StoreQrPanel";
+import { ThemePalettePicker } from "../../features/establishments/ThemePalettePicker";
+import { ImageUploadField } from "../../features/media/ImageUploadField";
+import { paletteOf, paletteVars, type PaletteId } from "../../features/theme/paletas";
+import { notifyBrandChanged } from "../../features/theme/tema";
+import {
+  Button,
+  Field,
+  LoadError,
+  Loading,
+  Notice,
+  PageHeader,
+  Section,
+  Submit,
+  TextArea,
+} from "../../ui/ui";
+import { useUnsavedWarning } from "../../ui/useUnsavedWarning";
 import { useCommand } from "./comando";
 import { CommandError, type StaffContext } from "./comum";
 
@@ -26,15 +45,43 @@ const brTimezones = [
   "America/Noronha",
 ];
 
-/** Configuração da loja (só o dono): nome, endereço público (slug) e fuso horário. */
+type Form = {
+  name: string;
+  timezone: string;
+  palette: PaletteId;
+  public_description: string;
+  public_address: string;
+  public_phone: string;
+};
+
+function formOf(e: Establishment): Form {
+  return {
+    name: e.name,
+    timezone: e.timezone,
+    palette: paletteOf(e.palette).id,
+    public_description: e.public_description ?? "",
+    public_address: e.public_address ?? "",
+    public_phone: e.public_phone ?? "",
+  };
+}
+
+/**
+ * Configurações da barbearia (só o dono desta loja): identidade (nome, logo e paleta),
+ * informações públicas, acesso e divulgação (link e QR Code) e atalhos para a operação. Cada
+ * pedido leva a loja do contexto e o servidor confere o vínculo. O slug não muda aqui: mudar o
+ * endereço invalidaria QR Codes já impressos.
+ */
 export function LojaConfig({ ctx }: { ctx: StaffContext }) {
   const [est, setEst] = useState<Establishment | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const cmd = useCommand();
-  const [form, setForm] = useState({ name: "", slug: "", timezone: "" });
-  const [saved, setSaved] = useState(false);
+  const logoCmd = useCommand();
+  const [form, setForm] = useState<Form | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
+  const [conflict, setConflict] = useState(false);
   const listId = useId();
+  const cfg = usePublicConfig();
 
   useEffect(() => {
     let active = true;
@@ -45,7 +92,7 @@ export function LojaConfig({ ctx }: { ctx: StaffContext }) {
       if (out.ok) {
         setEst(out.data.data);
         setLoadError(null);
-        setForm({ name: out.data.data.name, slug: out.data.data.slug, timezone: out.data.data.timezone });
+        setForm(formOf(out.data.data));
       } else setLoadError(problemMessage(out.problem, out.offline));
     });
     return () => {
@@ -53,28 +100,78 @@ export function LojaConfig({ ctx }: { ctx: StaffContext }) {
     };
   }, [ctx.estId, attempt]);
 
+  const dirty = !!est && !!form && JSON.stringify(form) !== JSON.stringify(formOf(est));
+  useUnsavedWarning(dirty);
+
+  function accepted(e: Establishment, msg: string) {
+    setEst(e);
+    setSaved(msg);
+    notifyBrandChanged(ctx.estId);
+  }
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!est) return;
-    setSaved(false);
-    const out = await cmd.run(`loja:${est.version}:${JSON.stringify(form)}`, (key) =>
+    if (!est || !form) return;
+    setSaved(null);
+    setConflict(false);
+    const body = { expected_version: est.version, ...form };
+    const out = await cmd.run(`loja:${JSON.stringify(body)}`, (key) =>
       api.PATCH("/v1/establishments/{establishmentId}", {
         params: { path: { establishmentId: ctx.estId }, header: { "Idempotency-Key": key } },
-        body: { expected_version: est.version, ...form },
+        body,
       }),
     );
     if (out.ok) {
-      setEst(out.data.data);
-      setSaved(true);
+      accepted(out.data.data, "Configurações salvas. A página da loja já mostra a nova identidade.");
+      setForm(formOf(out.data.data));
     } else if (out.problem?.code === "version_conflict" && out.problem.current) {
-      const cur = out.problem.current as unknown as Establishment;
-      setEst(cur);
-      setForm({ name: cur.name, slug: cur.slug, timezone: cur.timezone });
+      // Outra aba salvou antes: mantém o que foi digitado e mostra o aviso para revisar.
+      setEst(out.problem.current as unknown as Establishment);
+      setConflict(true);
+    }
+  }
+
+  async function setLogo(assetId: string): Promise<boolean> {
+    if (!est) return false;
+    setSaved(null);
+    const out = await logoCmd.run(`logo:${assetId}:${est.version}`, (key) =>
+      api.PUT("/v1/establishments/{establishmentId}/logo", {
+        params: { path: { establishmentId: ctx.estId }, header: { "Idempotency-Key": key } },
+        body: { asset_id: assetId, expected_version: est.version },
+      }),
+    );
+    if (out.ok) {
+      accepted(out.data.data, "Logo salva.");
+      return true;
+    }
+    if (out.problem?.code === "version_conflict" && out.problem.current) {
+      setEst(out.problem.current as unknown as Establishment);
+      setConflict(true);
+    }
+    return false;
+  }
+
+  async function removeLogo() {
+    if (!est) return;
+    setSaved(null);
+    const out = await logoCmd.run(`sem-logo:${est.version}`, (key) =>
+      api.POST("/v1/establishments/{establishmentId}/logo/remove", {
+        params: { path: { establishmentId: ctx.estId }, header: { "Idempotency-Key": key } },
+        body: { expected_version: est.version },
+      }),
+    );
+    if (out.ok) accepted(out.data.data, "Logo removida. A loja passa a mostrar o nome.");
+    else if (out.problem?.code === "version_conflict" && out.problem.current) {
+      setEst(out.problem.current as unknown as Establishment);
+      setConflict(true);
     }
   }
 
   const header = (
-    <PageHeader title="Dados da loja" description="Nome, link público e fuso horário da barbearia." />
+    <PageHeader
+      title="Configurações da barbearia"
+      description={`Identidade, informações públicas e divulgação de ${ctx.estName}. Seus dados pessoais ficam em Minha conta.`}
+    />
   );
   if (loadError && !est)
     return (
@@ -83,7 +180,8 @@ export function LojaConfig({ ctx }: { ctx: StaffContext }) {
         <LoadError message={loadError} onRetry={() => setAttempt((n) => n + 1)} />
       </>
     );
-  if (!est)
+  // Trocar de loja invalida tudo da loja anterior (formulário, prévia e QR) até a nova chegar.
+  if (!est || !form || est.id !== ctx.estId)
     return (
       <>
         {header}
@@ -91,70 +189,234 @@ export function LojaConfig({ ctx }: { ctx: StaffContext }) {
       </>
     );
   const errors = fieldErrors(cmd.problem);
-  // Prévia a partir da origem e da rota reais da aplicação.
-  const origin = globalThis.location?.origin ?? "";
-  const link = `${origin}/loja/${est.slug}`;
-  const prefix = `${origin.replace(/^https?:\/\//, "")}/loja/`;
+  const origin =
+    cfg?.public_base_url || new URL(est.public_url || globalThis.location?.href || "http://localhost").origin;
+  const set = (patch: Partial<Form>) => {
+    setSaved(null);
+    setForm({ ...form, ...patch });
+  };
+
   return (
-    <div className="grid gap-5">
+    <div className="grid max-w-4xl gap-8">
       {header}
-      <form onSubmit={onSubmit} noValidate className="grid max-w-xl gap-4" aria-label="Dados da loja">
-        {!cmd.problem?.errors?.length && <CommandError problem={cmd.problem} offline={cmd.offline} />}
-        {saved && (
-          <Notice kind="ok">
-            <p>Dados salvos.</p>
-          </Notice>
+      {conflict && (
+        <Notice kind="info" title="As configurações foram alteradas em outra aba ou aparelho">
+          <p>
+            O que você digitou foi mantido. Revise e salve de novo, ou recarregue para ver a versão atual.
+          </p>
+          <p>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setConflict(false);
+                setForm(formOf(est));
+              }}
+            >
+              Descartar minhas alterações e ver a atual
+            </Button>
+          </p>
+        </Notice>
+      )}
+      {saved && (
+        <Notice kind="ok">
+          <p>{saved}</p>
+        </Notice>
+      )}
+
+      <form onSubmit={onSubmit} noValidate className="grid gap-8" aria-label="Configurações da barbearia">
+        {!cmd.problem?.errors?.length && cmd.problem?.code !== "version_conflict" && (
+          <CommandError problem={cmd.problem} offline={cmd.offline} />
         )}
-        <Field
-          label="Nome da loja"
-          required
-          maxLength={80}
-          value={form.name}
-          error={errors.name}
-          onChange={(e) => setForm({ ...form, name: e.target.value })}
-        />
-        <Field
-          label="Endereço público"
-          prefix={prefix}
-          required
-          autoCapitalize="none"
-          spellCheck={false}
-          value={form.slug}
-          error={errors.slug}
-          hint="Letras minúsculas, números e hífen. É o link que os clientes usam para entrar na fila."
-          onChange={(e) => setForm({ ...form, slug: e.target.value.toLowerCase() })}
-        />
-        <Field
-          label="Fuso horário"
-          required
-          maxLength={64}
-          list={listId}
-          value={form.timezone}
-          error={errors.timezone}
-          hint="Ex.: America/Sao_Paulo, America/Manaus."
-          onChange={(e) => setForm({ ...form, timezone: e.target.value })}
-        />
-        <datalist id={listId}>
-          {brTimezones.map((tz) => (
-            <option key={tz} value={tz} />
-          ))}
-        </datalist>
-        <div>
-          <Submit busy={cmd.busy !== null}>Salvar</Submit>
+        <Section title="Identidade">
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_16rem] xl:items-start">
+            <div className="grid max-w-xl gap-4">
+              <Field
+                label="Nome público"
+                required
+                maxLength={80}
+                value={form.name}
+                error={errors.name}
+                onChange={(e) => set({ name: e.target.value })}
+              />
+              <ThemePalettePicker value={form.palette} onChange={(palette) => set({ palette })} />
+            </div>
+            <PreviaIdentidade name={form.name} palette={form.palette} logo={est.logo} pending={dirty} />
+          </div>
+        </Section>
+
+        <Section
+          title="Informações públicas"
+          description="Aparecem na página da loja para qualquer pessoa. Texto simples, sem formatação."
+        >
+          <div className="grid max-w-xl gap-4">
+            <TextArea
+              label="Descrição curta"
+              maxLength={280}
+              rows={3}
+              hint={`${form.public_description.length}/280 caracteres. Deixe vazio para não mostrar.`}
+              value={form.public_description}
+              error={errors.public_description}
+              onChange={(e) => set({ public_description: e.target.value })}
+            />
+            <Field
+              label="Endereço"
+              maxLength={200}
+              autoComplete="off"
+              hint="Opcional. Ex.: Rua das Flores, 120 — Centro"
+              value={form.public_address}
+              error={errors.public_address}
+              onChange={(e) => set({ public_address: e.target.value })}
+            />
+            <Field
+              label="Telefone ou WhatsApp da loja"
+              type="tel"
+              inputMode="tel"
+              autoComplete="off"
+              hint="Será publicado na página da loja. Não usamos o seu telefone pessoal."
+              value={form.public_phone}
+              error={errors.public_phone}
+              onChange={(e) => set({ public_phone: e.target.value })}
+            />
+            <Field
+              label="Fuso horário"
+              required
+              maxLength={64}
+              list={listId}
+              value={form.timezone}
+              error={errors.timezone}
+              hint="Ex.: America/Sao_Paulo, America/Manaus."
+              onChange={(e) => set({ timezone: e.target.value })}
+            />
+            <datalist id={listId}>
+              {brTimezones.map((tz) => (
+                <option key={tz} value={tz} />
+              ))}
+            </datalist>
+          </div>
+        </Section>
+
+        <div className="sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center gap-3 border-t border-line bg-bg/95 px-1 py-3 pb-safe">
+          <Submit busy={cmd.busy !== null}>Salvar configurações</Submit>
+          {dirty && (
+            <span role="status" className="text-sm font-semibold text-warning">
+              Alterações ainda não salvas
+            </span>
+          )}
         </div>
       </form>
-      <section aria-labelledby="titulo-link-loja" className="grid max-w-xl gap-2 border-t border-line pt-5">
-        <h2 id="titulo-link-loja" className="m-0 text-base font-semibold">
-          Link da loja
-        </h2>
-        <p className="m-0 text-sm text-fg-muted">
-          Use em QR code, redes sociais e no balcão. Mostra o endereço salvo.
+
+      <Section
+        title="Logo"
+        description="Aparece na página da loja, no login vindo da loja e no cartão do QR Code."
+      >
+        {cfg?.media_uploads ? (
+          <div className="max-w-xl">
+            <CommandError problem={logoCmd.problem} offline={logoCmd.offline} />
+            <ImageUploadField
+              purpose="logo"
+              establishmentId={ctx.estId}
+              current={est.logo}
+              currentLabel={`Logo de ${est.name}`}
+              onReady={setLogo}
+              onRemove={() => void removeLogo()}
+              removing={logoCmd.busy !== null}
+              saving={logoCmd.busy !== null}
+              shape="square"
+            />
+          </div>
+        ) : (
+          <p className="m-0 text-sm text-fg-muted">
+            O envio de imagens ainda não está disponível. A loja aparece com o nome.
+          </p>
+        )}
+      </Section>
+
+      <Section title="Acesso e divulgação" description="Use em cartazes, no balcão e nas redes sociais.">
+        <p className="m-0 text-sm">
+          Endereço da loja: <span className="font-mono">/loja/{est.slug}</span>. Ele não muda por aqui, para
+          não invalidar QR Codes já impressos.
         </p>
-        <p className="m-0 rounded-lg bg-surface-2 px-3 py-2 font-mono text-sm break-all">
-          <a href={link}>{link}</a>
-        </p>
-        <CopyButton text={link} label="Copiar link" />
-      </section>
+        <StoreQrPanel origin={origin} slug={est.slug} storeName={est.name} logo={est.logo} />
+      </Section>
+
+      <Section title="Operação" description="Regras de fila e fidelidade continuam nas telas próprias.">
+        <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
+          <li>
+            <Link
+              to={`/gestao/${ctx.estId}/filas`}
+              className="inline-flex min-h-11 items-center gap-2 font-semibold"
+            >
+              <UsersRound aria-hidden="true" className="size-5" /> Filas
+            </Link>
+          </li>
+          <li>
+            <Link
+              to={`/gestao/${ctx.estId}/premios`}
+              className="inline-flex min-h-11 items-center gap-2 font-semibold"
+            >
+              <Gift aria-hidden="true" className="size-5" /> Pontos e prêmios
+            </Link>
+          </li>
+        </ul>
+      </Section>
+    </div>
+  );
+}
+
+/**
+ * Prévia isolada: a paleta escolhida vale só dentro deste quadro (data-brand + variáveis locais),
+ * sem mudar a tela do dono nem a loja publicada até salvar.
+ */
+function PreviaIdentidade({
+  name,
+  palette,
+  logo,
+  pending,
+}: {
+  name: string;
+  palette: PaletteId;
+  logo: Establishment["logo"];
+  pending: boolean;
+}) {
+  return (
+    <div className="grid min-w-0 gap-2">
+      <p className="m-0 text-sm font-semibold">
+        Prévia {pending && <span className="font-normal text-warning">(alterações ainda não salvas)</span>}
+      </p>
+      <div
+        data-brand={palette}
+        style={paletteVars(palette)}
+        className="grid gap-3 rounded-xl border border-line bg-bg p-4"
+      >
+        <div className="flex items-center gap-2">
+          {logo ? (
+            <img
+              src={logo.variants[0]?.url}
+              width={40}
+              height={40}
+              alt=""
+              className="size-10 rounded-lg object-contain"
+            />
+          ) : (
+            <span
+              aria-hidden="true"
+              className="inline-flex size-10 items-center justify-center rounded-lg bg-select text-accent"
+            >
+              <Store className="size-5" />
+            </span>
+          )}
+          <span className="min-w-0 truncate font-bold">{name || "Nome da loja"}</span>
+        </div>
+        <span className="inline-flex min-h-11 items-center justify-center rounded-lg bg-primary px-4 font-semibold text-on-primary">
+          Entrar na fila
+        </span>
+        <span className="text-sm">
+          Link de exemplo: <span className="font-semibold text-accent underline">ver serviços</span>
+        </span>
+        <span className="rounded-lg border border-select-line bg-select px-3 py-2 text-sm text-accent">
+          Item selecionado
+        </span>
+      </div>
     </div>
   );
 }

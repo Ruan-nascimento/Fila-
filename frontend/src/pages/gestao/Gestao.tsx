@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useParams } from "react-router";
 import {
   ArrowLeftRight,
@@ -15,6 +15,9 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
+import { api } from "../../api/client";
+import { call } from "../../api/problem";
+import { useBrandChanged, useStoreBrand } from "../../features/theme/tema";
 import { useSession } from "../../session/context";
 import { StreamProvider, StreamStatusNotice } from "../../stream/StreamProvider";
 import { AvisosGerais } from "../../ui/estados";
@@ -109,7 +112,7 @@ const groups: Group[] = [
     items: [
       { path: "servicos", label: "Serviços", icon: Scissors },
       { path: "profissionais", label: "Profissionais", icon: UserRound, owner: true },
-      { path: "loja", label: "Loja", icon: Store, owner: true },
+      { path: "loja", label: "Configurações da loja", icon: Store, owner: true },
     ],
   },
   {
@@ -174,6 +177,7 @@ export function GestaoLoja() {
     // Uma conexão de atualizações para toda a área da equipe desta loja. O layout muda só por CSS
     // (a mesma árvore em qualquer largura): trocar de tamanho não abre outra conexão.
     <StreamProvider estId={estId} channels={ctx.isOwner ? ["owner"] : ["professional"]}>
+      <MarcaDaLoja estId={estId} />
       <StaffShell ctx={ctx} base={base} userName={account?.name ?? ""} multipleStores={stores > 1}>
         <Routes>
           <Route path="filas/:queueId?" element={<Filas ctx={ctx} />} />
@@ -480,4 +484,25 @@ function MaisSheet({
       </div>
     </div>
   );
+}
+
+/** Aplica a paleta da loja à gestão contextual; relê depois que o dono salva a identidade. */
+function MarcaDaLoja({ estId }: { estId: string }) {
+  const [got, setGot] = useState<{ estId: string; palette: string } | null>(null);
+  const [version, setVersion] = useState(0);
+  const reload = useCallback(() => setVersion((n) => n + 1), []);
+  useBrandChanged(estId, reload);
+  useEffect(() => {
+    let active = true;
+    void call(() =>
+      api.GET("/v1/establishments/{establishmentId}", { params: { path: { establishmentId: estId } } }),
+    ).then((out) => {
+      if (active && out.ok) setGot({ estId, palette: out.data.data.palette });
+    });
+    return () => {
+      active = false;
+    };
+  }, [estId, version]);
+  useStoreBrand(got?.estId === estId ? got.palette : null);
+  return null;
 }

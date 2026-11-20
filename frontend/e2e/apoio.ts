@@ -231,7 +231,7 @@ export async function entrarNaTela(page: Page, email: string, comoEquipe: boolea
   await page.getByLabel("E-mail").fill(email);
   await page.getByLabel("Senha", { exact: true }).fill(senha);
   await page.getByRole("radio", { name: comoEquipe ? /Equipe/ : /Cliente/ }).check();
-  await page.getByRole("button", { name: "Entrar" }).click();
+  await page.getByRole("button", { name: "Entrar", exact: true }).click();
   await confirmarTrocaSeHouver(page);
   await expect(page.getByRole("link", { name: "Minha conta" })).toBeVisible();
   if (api) await api.adotarSessao(page);

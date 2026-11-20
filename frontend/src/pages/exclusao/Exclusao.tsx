@@ -3,7 +3,17 @@ import { Link } from "react-router";
 import { CircleCheck, Clock, Search, Trash2 } from "lucide-react";
 import { api } from "../../api/client";
 import { call, problemMessage } from "../../api/problem";
-import { Card, Choice, CopyButton, Field, Notice, PageHeader, PasswordField, Submit } from "../../ui/ui";
+import {
+  Button,
+  Card,
+  Choice,
+  CopyButton,
+  Field,
+  Notice,
+  PageHeader,
+  PasswordField,
+  Submit,
+} from "../../ui/ui";
 import { useCommand } from "../gestao/comando";
 import { CommandError } from "../gestao/comum";
 import { blockerText, metaText, type DeletionRequest } from "./textos";
@@ -52,9 +62,17 @@ export function SituacaoExclusao({ request }: { request: DeletionRequest }) {
  * Excluir a própria conta (R-EXC-01): mostra os efeitos antes, pede a senha de novo e confirma.
  * A resposta traz o protocolo completo UMA vez (também vai por e-mail).
  */
-export function ExcluirConta({ onRequested }: { onRequested: (r: DeletionRequest) => void }) {
+export function ExcluirConta({
+  onRequested,
+  hasPassword = true,
+}: {
+  onRequested: (r: DeletionRequest) => void;
+  /** Conta só com Google não tem senha: confirma com um código enviado ao e-mail. */
+  hasPassword?: boolean;
+}) {
   const [understood, setUnderstood] = useState(false);
   const [password, setPassword] = useState("");
+  const [codeSent, setCodeSent] = useState<string | null>(null);
   const [reauthError, setReauthError] = useState<string | null>(null);
   const [tried, setTried] = useState(false);
   const cmd = useCommand();
@@ -64,7 +82,11 @@ export function ExcluirConta({ onRequested }: { onRequested: (r: DeletionRequest
     setTried(true);
     if (!understood || password === "") return;
     setReauthError(null);
-    const re = await call(() => api.POST("/v1/auth/reauthenticate", { body: { password } }));
+    const re = await call(() =>
+      api.POST("/v1/auth/reauthenticate", {
+        body: hasPassword ? { password } : { email_code: password.trim() },
+      }),
+    );
     if (!re.ok) {
       setReauthError(problemMessage(re.problem, re.offline));
       return;
@@ -109,16 +131,57 @@ export function ExcluirConta({ onRequested }: { onRequested: (r: DeletionRequest
         onChange={(e) => setUnderstood(e.target.checked)}
         label="Li e entendi os efeitos da exclusão"
       />
-      <PasswordField
-        label="Sua senha (confirmação)"
-        autoComplete="current-password"
-        required
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-      />
+      {hasPassword ? (
+        <PasswordField
+          label="Sua senha (confirmação)"
+          autoComplete="current-password"
+          required
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+      ) : (
+        <div className="grid gap-2">
+          <p className="m-0 text-sm">
+            Sua conta entra com o Google e não tem senha. Para confirmar que é você, enviamos um código de 8
+            dígitos para o seu e-mail.
+          </p>
+          <div>
+            <Button
+              variant="secondary"
+              onClick={() =>
+                void call(() => api.POST("/v1/auth/reauthenticate/email-code")).then((o) =>
+                  setCodeSent(
+                    o.ok
+                      ? "Código enviado. Confira seu e-mail (vale 10 minutos)."
+                      : problemMessage(o.problem, o.offline),
+                  ),
+                )
+              }
+            >
+              Enviar código por e-mail
+            </Button>
+          </div>
+          {codeSent && (
+            <p className="m-0 text-sm" role="status">
+              {codeSent}
+            </p>
+          )}
+          <Field
+            label="Código do e-mail"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={8}
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value.replace(/\D/g, ""))}
+          />
+        </div>
+      )}
       {tried && (!understood || password === "") && (
         <p role="alert" className="m-0 text-sm font-semibold text-danger">
-          Marque que entendeu os efeitos e digite sua senha para confirmar.
+          {hasPassword
+            ? "Marque que entendeu os efeitos e digite sua senha para confirmar."
+            : "Marque que entendeu os efeitos e digite o código enviado ao seu e-mail."}
         </p>
       )}
       <div className="flex flex-wrap gap-2">

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Mail, Pencil, Plus, UserCheck, UserRound, UserX, X } from "lucide-react";
+import { Mail, Pencil, Plus, UserCheck, UserRound, UserX, X, ImageOff } from "lucide-react";
 import { api } from "../../api/client";
 import { call, fieldErrors, problemMessage } from "../../api/problem";
 import type { components } from "../../api/schema.gen";
@@ -205,7 +205,7 @@ function ProfissionalCard({
   onDone: () => Promise<void>;
 }) {
   const cmd = useCommand();
-  const panel = useInlinePanel<"nome" | "desativar" | "convite">();
+  const panel = useInlinePanel<"nome" | "desativar" | "convite" | "foto">();
   const mode = panel.open;
   const [name, setName] = useState(p.display_name);
   const [reason, setReason] = useState("");
@@ -237,7 +237,11 @@ function ProfissionalCard({
   return (
     <li className="grid gap-3 rounded-xl border border-line bg-surface p-4">
       <div className="flex flex-wrap items-center gap-3">
-        <Avatar name={p.display_name} />
+        <Avatar
+          name={p.display_name}
+          image={p.photo}
+          label={p.photo ? `Foto pública de ${p.display_name}` : undefined}
+        />
         <div className="grid min-w-0 flex-1 gap-1">
           <h2 className="m-0 text-base font-semibold">{p.display_name}</h2>
           <div className="flex flex-wrap items-center gap-2 text-sm text-fg-muted">
@@ -294,6 +298,11 @@ function ProfissionalCard({
               }}
             >
               Cancelar convite
+            </Button>
+          )}
+          {p.photo && (
+            <Button variant="ghost" icon={ImageOff} onClick={() => panel.show("foto")}>
+              Retirar foto pública
             </Button>
           )}
           {p.status === "active" ? (
@@ -381,6 +390,45 @@ function ProfissionalCard({
           />
           <div className="flex flex-wrap gap-2">
             <Submit busy={cmd.busy !== null}>Enviar convite</Submit>
+            <Button variant="secondary" onClick={panel.hide}>
+              Cancelar
+            </Button>
+          </div>
+        </form>
+      )}
+      {mode === "foto" && (
+        <form
+          id={panel.panelId}
+          onKeyDown={panel.onKeyDown}
+          noValidate
+          aria-label={`Retirar a foto pública de ${p.display_name}`}
+          className={formBox}
+          onSubmit={(e) => {
+            e.preventDefault();
+            void act(`retirar-foto:${p.id}:${p.version}`, (key) =>
+              api.POST("/v1/establishments/{establishmentId}/professionals/{professionalId}/photo/remove", {
+                params: { path: base, header: { "Idempotency-Key": key } },
+                body: { expected_version: p.version, reason },
+              }),
+            );
+          }}
+        >
+          <p className="m-0 text-sm">
+            A foto sai da página da loja (fica registrado na auditoria). A foto pessoal da conta do
+            profissional não é alterada; ele pode publicar outra depois.
+          </p>
+          <TextArea
+            label="Motivo"
+            required
+            minLength={3}
+            maxLength={500}
+            rows={2}
+            value={reason}
+            error={errors.reason}
+            onChange={(e) => setReason(e.target.value)}
+          />
+          <div className="flex flex-wrap gap-2">
+            <Submit busy={cmd.busy !== null}>Retirar foto</Submit>
             <Button variant="secondary" onClick={panel.hide}>
               Cancelar
             </Button>

@@ -222,7 +222,7 @@ describe("Abas da gestão", () => {
       ["Profissionais", "profissionais"],
       ["Comandas", "comandas"],
       ["Serviços", "servicos"],
-      ["Loja", "loja"],
+      ["Configurações da loja", "loja"],
       ["Filas", "filas"],
     ] as const) {
       // Lateral (computador) e inferior (celular) existem no DOM; o CSS mostra uma por largura.

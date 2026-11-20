@@ -21,6 +21,23 @@ function logged(name = "Maria") {
   };
 }
 
+function profile(name: string, version = 1) {
+  return {
+    data: {
+      id: "a1",
+      name,
+      email: "maria@exemplo.com",
+      status: "active",
+      email_verified: true,
+      appearance: "system",
+      avatar: null,
+      has_password: true,
+      google: { linked: false, email: null },
+      version,
+    },
+  };
+}
+
 function renderConta() {
   return render(
     <MemoryRouter>
@@ -38,18 +55,21 @@ describe("Minha conta", () => {
     const bodies: unknown[] = [];
     const { requests } = fakeApi({
       "GET /v1/session": () => Response.json(logged(name)),
+      "GET /v1/me": () => Response.json(profile(name)),
       "PATCH /v1/me": (_r, body) => {
         bodies.push(body);
         name = "Maria Souza";
-        return Response.json({ data: { id: "a1", name, email: "maria@exemplo.com", status: "active" } });
+        return Response.json(profile(name, 2));
       },
     });
     renderConta();
     const field = await screen.findByLabelText("Nome exibido");
+    // Espera o perfil (versão) chegar: a alteração vai condicionada à versão lida.
+    await screen.findByText("verificado");
     fireEvent.change(field, { target: { value: "  Maria Souza " } });
     fireEvent.click(screen.getByRole("button", { name: "Salvar nome" }));
     expect(await screen.findByText("Nome atualizado.")).toBeInTheDocument();
-    expect(bodies).toEqual([{ name: "Maria Souza" }]);
+    expect(bodies).toEqual([{ name: "Maria Souza", expected_version: 1 }]);
     expect(requests.find((r) => r.method === "PATCH")?.headers.get("Idempotency-Key")).toBeTruthy();
     await waitFor(() => expect(screen.getByText("Maria Souza", { selector: "dd" })).toBeInTheDocument());
   });
