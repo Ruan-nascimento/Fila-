@@ -34,6 +34,8 @@ func (s *Service) Routes() []hs.Route {
 		{Operation: "closeQueue", Method: http.MethodPost, Path: est + "/queues/{queueId}/close", Grants: owner, Handler: s.closeQueue},
 		{Operation: "signalAvailability", Method: http.MethodPost, Path: est + "/queues/{queueId}/availability-signal",
 			Grants: []hs.Grant{{Actor: "professional", Scope: "own_queue"}}, Handler: s.signalAvailability},
+		{Operation: "listPublicEstablishments", Method: http.MethodGet, Path: "/v1/public/establishments",
+			Grants: []hs.Grant{hs.GrantPublic}, Handler: s.listPublicEstablishments},
 		{Operation: "listPublicQueues", Method: http.MethodGet, Path: "/v1/public/establishments/{establishmentId}/queues",
 			Grants: []hs.Grant{hs.GrantPublic}, Handler: s.listPublicQueues},
 	}

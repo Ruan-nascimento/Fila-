@@ -112,6 +112,7 @@ Não edite à mão: rode `python docs/tools/verificar_contrato.py --write`. Cél
 | `completeService` | `POST /v1/establishments/{establishmentId}/participations/{participationId}/complete` | — | — | — | own_queue | establishment | — | — | T-P-08, T-O-04 |
 | `getCustomerAvatar` | `GET /v1/establishments/{establishmentId}/participations/{participationId}/customer-avatar/{size}` | — | — | — | own_queue | establishment | — | — | — |
 | `interruptService` | `POST /v1/establishments/{establishmentId}/participations/{participationId}/interrupt` | — | — | — | own_queue | establishment | — | — | T-P-09, T-O-06, T-CR-04 |
+| `noticeLate` | `POST /v1/establishments/{establishmentId}/participations/{participationId}/late-notice` | — | visit_owner | visit_owner | — | — | — | — | T-P-12 |
 | `moveParticipation` | `POST /v1/establishments/{establishmentId}/participations/{participationId}/move` | — | — | — | own_queue | establishment | — | — | T-P-11 |
 | `markNoShow` | `POST /v1/establishments/{establishmentId}/participations/{participationId}/no-show` | — | — | — | own_queue | establishment | — | — | T-P-06, T-O-05, T-CR-04 |
 | `startService` | `POST /v1/establishments/{establishmentId}/participations/{participationId}/start` | — | — | — | own_queue | establishment | — | — | T-P-03 |
@@ -159,7 +160,9 @@ Não edite à mão: rode `python docs/tools/verificar_contrato.py --write`. Cél
 | `listMyLoyaltyLedger` | `GET /v1/me/loyalty/{establishmentId}/ledger` | — | — | self | — | — | — | — | — |
 | `uploadMedia` | `POST /v1/media/uploads` | — | — | self | establishment_member | establishment | — | — | — |
 | `getMediaUpload` | `GET /v1/media/uploads/{assetId}` | — | — | self | self | self | — | — | — |
+| `listMyVisits` | `GET /v1/my-visits` | — | self | self | — | — | — | — | — |
 | `getPublicConfig` | `GET /v1/public/config` | sim | — | — | — | — | — | — | — |
+| `listPublicEstablishments` | `GET /v1/public/establishments` | sim | — | — | — | — | — | — | — |
 | `listPublicQueues` | `GET /v1/public/establishments/{establishmentId}/queues` | sim | — | — | — | — | — | — | — |
 | `listPublicServices` | `GET /v1/public/establishments/{establishmentId}/services` | sim | — | — | — | — | — | — | — |
 | `getPublicMedia` | `GET /v1/public/media/{assetId}/{size}` | sim | — | — | — | — | — | — | — |

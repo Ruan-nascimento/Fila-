@@ -128,6 +128,8 @@ Imagens de teste geradas (gradiente + formas + ruído), não fotos reais; tamanh
 - Prévia isolada na própria tela; a loja publicada só muda depois de salvar. Conflito entre abas mostra aviso e mantém o que foi digitado. A tela avisa antes de fechar com alterações não salvas.
 - A cor vale na página da loja, no login/cadastro que vem da loja e na gestão daquela loja. Login global, Minha conta e outras lojas usam a identidade padrão; ao sair ou trocar de loja os tokens são limpos.
 
+- **Localização no mapa** (opcional, seção própria): "Usar a localização deste aparelho" (estando na barbearia) ou latitude/longitude digitadas; "Conferir no mapa" abre o OpenStreetMap; vazio remove. Com ela, a loja aparece em "Mais perto" no painel do cliente ([ADR-0031](adr/0031-painel-do-cliente-e-diretorio-de-barbearias.md)).
+
 ### 5.1 Paletas e contraste (WCAG 2.2 AA, medido em `src/features/configuracoes.test.tsx`)
 
 Claro: botão na cor base com texto branco; destaque (links, selecionado) na cor base sobre zinc-50/branco/zinc-100. Escuro: botão no tom 400 com texto zinc-950; destaque no tom 300 sobre zinc-950/900/800. O teste confere também hover, anel de foco (≥ 3:1) e texto sobre o fundo de seleção, nas três superfícies de cada tema.

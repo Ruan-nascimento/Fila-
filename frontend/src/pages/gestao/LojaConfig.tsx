@@ -1,6 +1,6 @@
 import { useEffect, useId, useState, type FormEvent } from "react";
 import { Link } from "react-router";
-import { Gift, Store, UsersRound } from "lucide-react";
+import { Gift, LocateFixed, MapPin, Store, UsersRound } from "lucide-react";
 import { api } from "../../api/client";
 import { call, fieldErrors, problemMessage } from "../../api/problem";
 import type { components } from "../../api/schema.gen";
@@ -53,7 +53,32 @@ type Form = {
   public_description: string;
   public_address: string;
   public_phone: string;
+  latitude: string;
+  longitude: string;
 };
+
+/** Coordenada digitada (aceita vírgula decimal). "" = vazio; NaN = inválida. */
+function coord(v: string): number {
+  const t = v.trim().replace(",", ".");
+  return t === "" ? NaN : Number(t);
+}
+
+/** Localização do formulário para o pedido: vazia = remover; incompleta/fora da faixa = erro. */
+function locationOf(
+  f: Form,
+): { ok: true; value: { latitude: number; longitude: number } | null } | { ok: false } {
+  if (f.latitude.trim() === "" && f.longitude.trim() === "") return { ok: true, value: null };
+  const latitude = coord(f.latitude);
+  const longitude = coord(f.longitude);
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude) ||
+    Math.abs(latitude) > 90 ||
+    Math.abs(longitude) > 180
+  )
+    return { ok: false };
+  return { ok: true, value: { latitude, longitude } };
+}
 
 function formOf(e: Establishment): Form {
   return {
@@ -64,6 +89,8 @@ function formOf(e: Establishment): Form {
     public_description: e.public_description ?? "",
     public_address: e.public_address ?? "",
     public_phone: e.public_phone ?? "",
+    latitude: e.location ? String(e.location.latitude) : "",
+    longitude: e.location ? String(e.location.longitude) : "",
   };
 }
 
@@ -100,6 +127,8 @@ export function LojaConfig({ ctx }: { ctx: StaffContext }) {
   const [conflict, setConflict] = useState(false);
   // O link acompanha o nome até o dono editar o link à mão.
   const [slugManual, setSlugManual] = useState(false);
+  const [locErro, setLocErro] = useState<string | null>(null);
+  const [gps, setGps] = useState<string | null>(null);
   const listId = useId();
   const cfg = usePublicConfig();
 
@@ -134,7 +163,16 @@ export function LojaConfig({ ctx }: { ctx: StaffContext }) {
     if (!est || !form) return;
     setSaved(null);
     setConflict(false);
-    const body = { expected_version: est.version, ...form };
+    const loc = locationOf(form);
+    if (!loc.ok) {
+      setLocErro("Informe latitude (−90 a 90) e longitude (−180 a 180), ou deixe as duas vazias.");
+      return;
+    }
+    setLocErro(null);
+    const { latitude: _lat, longitude: _lng, ...campos } = form;
+    void _lat;
+    void _lng;
+    const body = { expected_version: est.version, ...campos, location: loc.value };
     const out = await cmd.run(`loja:${JSON.stringify(body)}`, (key) =>
       api.PATCH("/v1/establishments/{establishmentId}", {
         params: { path: { establishmentId: ctx.estId }, header: { "Idempotency-Key": key } },
@@ -337,6 +375,92 @@ export function LojaConfig({ ctx }: { ctx: StaffContext }) {
                 <option key={tz} value={tz} />
               ))}
             </datalist>
+          </div>
+        </Section>
+
+        <Section
+          title="Localização no mapa"
+          description="Opcional. Com ela, a barbearia aparece para quem procura as mais perto. É pública, como o endereço."
+        >
+          <div className="grid max-w-xl gap-4">
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="secondary"
+                icon={LocateFixed}
+                onClick={() => {
+                  if (!("geolocation" in navigator)) {
+                    setGps("Este aparelho não informa a localização. Digite as coordenadas.");
+                    return;
+                  }
+                  setGps("Pedindo a localização deste aparelho…");
+                  navigator.geolocation.getCurrentPosition(
+                    (p) => {
+                      setGps("Localização preenchida. Confira no mapa e salve.");
+                      set({
+                        latitude: p.coords.latitude.toFixed(6),
+                        longitude: p.coords.longitude.toFixed(6),
+                      });
+                    },
+                    (e) =>
+                      setGps(
+                        e.code === 1
+                          ? "Localização bloqueada no navegador. Libere nas configurações do site ou digite as coordenadas."
+                          : "Não foi possível obter a localização agora. Tente de novo ou digite as coordenadas.",
+                      ),
+                    { enableHighAccuracy: true, timeout: 15_000 },
+                  );
+                }}
+              >
+                Usar a localização deste aparelho
+              </Button>
+              {(form.latitude || form.longitude) && (
+                <Button variant="ghost" onClick={() => set({ latitude: "", longitude: "" })}>
+                  Remover localização
+                </Button>
+              )}
+            </div>
+            <p className="m-0 text-sm text-fg-muted">
+              Use o botão estando <strong>na barbearia</strong>. Ou copie as coordenadas do mapa (no Google
+              Maps, toque e segure no local).
+            </p>
+            {gps && (
+              <p role="status" className="m-0 text-sm">
+                {gps}
+              </p>
+            )}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field
+                label="Latitude"
+                inputMode="decimal"
+                autoComplete="off"
+                hint="Ex.: -23.550520"
+                value={form.latitude}
+                error={locErro ?? errors.location}
+                onChange={(e) => set({ latitude: e.target.value })}
+              />
+              <Field
+                label="Longitude"
+                inputMode="decimal"
+                autoComplete="off"
+                hint="Ex.: -46.633308"
+                value={form.longitude}
+                onChange={(e) => set({ longitude: e.target.value })}
+              />
+            </div>
+            {(() => {
+              const l = locationOf(form);
+              return l.ok && l.value ? (
+                <a
+                  href={`https://www.openstreetmap.org/?mlat=${l.value.latitude}&mlon=${l.value.longitude}#map=18/${l.value.latitude}/${l.value.longitude}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex min-h-11 w-fit items-center gap-1 text-sm font-semibold"
+                >
+                  <MapPin aria-hidden="true" className="size-4" />
+                  Conferir no mapa (abre em outra aba)
+                </a>
+              ) : null;
+            })()}
           </div>
         </Section>
 

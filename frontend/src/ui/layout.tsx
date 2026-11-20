@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Link, NavLink } from "react-router";
-import { KeyRound, LogIn, Scissors, Search, Store, UserPlus, UserRound } from "lucide-react";
+import { House, KeyRound, LogIn, Scissors, Search, Store, UserPlus, UserRound } from "lucide-react";
 import type { components } from "../api/schema.gen";
 import { useSession } from "../session/context";
 import { AvisosGerais } from "./estados";
@@ -73,6 +73,16 @@ function HeaderAccount() {
   const { account, session } = state.session;
   return (
     <nav aria-label="Principal" className="flex items-center gap-1">
+      {session?.kind !== "staff" && (
+        <NavLink
+          to="/"
+          end
+          className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm font-semibold text-fg no-underline hover:bg-surface-2 aria-[current=page]:text-accent"
+        >
+          <House aria-hidden="true" className="size-5" />
+          <span className="max-sm:sr-only">Início</span>
+        </NavLink>
+      )}
       {session?.kind === "staff" && (
         <NavLink
           to="/gestao"
@@ -110,12 +120,15 @@ export function PublicShell({
   children,
   context,
   store,
+  actions,
   width = "normal",
 }: {
   children: ReactNode;
   context?: ReactNode;
   /** Loja aberta: o canto superior esquerdo mostra a logo e o nome dela, com link para a loja. */
   store?: (StoreMark & { slug: string }) | null | undefined;
+  /** Botões extras no cabeçalho, antes da conta (ex.: sino de notificações). */
+  actions?: ReactNode;
   width?: "narrow" | "normal" | "wide";
 }) {
   return (
@@ -132,7 +145,10 @@ export function PublicShell({
               </>
             )}
           </div>
-          <HeaderAccount />
+          <div className="flex items-center gap-1">
+            {actions}
+            <HeaderAccount />
+          </div>
         </div>
       </header>
       <main

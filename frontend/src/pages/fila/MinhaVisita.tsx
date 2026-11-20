@@ -4,6 +4,7 @@ import {
   CircleCheck,
   CircleSlash,
   Clock,
+  Hourglass,
   LogOut,
   RefreshCw,
   Scissors,
@@ -13,6 +14,8 @@ import {
 import { api } from "../../api/client";
 import { call, problemMessage } from "../../api/problem";
 import type { components } from "../../api/schema.gen";
+import { espera } from "../../tempo";
+import { ConviteNotificacoes } from "../../features/notificacoes/Notificacoes";
 import { useStale, useStreamMessages } from "../../stream/context";
 import { Badge, Button, Card, ConfirmPanel, LoadError, Loading, Notice } from "../../ui/ui";
 import { cx } from "../../ui/cx";
@@ -245,7 +248,7 @@ function Destaque({
           <div className="rounded-lg bg-surface-2 px-3 py-2">
             <dt className="text-xs text-fg-muted">Espera (estimativa)</dt>
             <dd className="m-0 text-xl font-bold tabular-nums">
-              {p.estimated_wait ? `~${p.estimated_wait.minutes} min` : "—"}
+              {p.estimated_wait ? `~${espera(p.estimated_wait.minutes)}` : "—"}
             </dd>
           </div>
         </dl>
@@ -352,6 +355,7 @@ function Acompanhar({
   onReload: () => Promise<void>;
 }) {
   const cmd = useCommand();
+  const late = useCommand();
   const leave = useInlinePanel();
   const stale = useStale();
   const { queues } = useStoreData();
@@ -378,6 +382,21 @@ function Acompanhar({
     } else if (out.problem?.status === 409) await onReload();
   }
 
+  // Avisa a barbearia pelo app; a equipe é notificada e decide (o lugar na fila não muda sozinho).
+  async function atrasar() {
+    const out = await late.run(`atraso:${p.id}:${p.version}`, (key) =>
+      api.POST("/v1/establishments/{establishmentId}/participations/{participationId}/late-notice", {
+        params: {
+          path: { establishmentId: shopId, participationId: p.id },
+          header: { "Idempotency-Key": key },
+        },
+        body: { expected_version: p.version },
+      }),
+    );
+    if (out.ok) onChange(out.data.data);
+    else if (out.problem?.status === 409) await onReload();
+  }
+
   const showOrder = p.status !== "waiting" || o.items.length > 0;
   return (
     <section
@@ -392,9 +411,43 @@ function Acompanhar({
         {statusText[p.status]}
         {p.status === "waiting" && p.position ? ` — você é o ${p.position}º da fila.` : "."}
       </p>
-      <Card className={cx("p-5 sm:p-6", p.status === "called" && "border-primary ring-2 ring-primary/30")}>
-        <Destaque visit={visit} professional={professional} stale={stale} />
-      </Card>
+      <div className="grid gap-3">
+        <Card className={cx("p-5 sm:p-6", p.status === "called" && "border-primary ring-2 ring-primary/30")}>
+          <Destaque visit={visit} professional={professional} stale={stale} />
+        </Card>
+        {active && (
+          <ConviteNotificacoes texto="Quer ser avisado quando a fila andar e quando chegar a sua vez, mesmo usando outro app? Ative as notificações." />
+        )}
+        {/* Avisar atraso só quando a vez está perto (chamado ou até o 3º): antes disso não muda nada. */}
+        {active &&
+          (p.status === "called" || (p.position != null && p.position <= 3)) &&
+          (p.late_notice_at ? (
+            <p
+              role="status"
+              className="m-0 flex items-center gap-2 rounded-lg bg-surface-2 px-3 py-2 text-sm"
+            >
+              <Hourglass aria-hidden="true" className="size-4 text-accent" />
+              Você avisou a barbearia que vai se atrasar às {time.format(new Date(p.late_notice_at))}. Seu
+              lugar continua guardado até {professional ?? "o profissional"} decidir.
+            </p>
+          ) : (
+            <div className="grid gap-1">
+              <Button
+                variant="secondary"
+                icon={Hourglass}
+                disabled={late.busy !== null}
+                onClick={() => void atrasar()}
+              >
+                Vou me atrasar
+              </Button>
+              <p className="m-0 text-sm text-fg-muted">
+                Avisa {professional ?? "o profissional"} na hora. Se for preciso, ele chama o próximo e você
+                continua logo em seguida.
+              </p>
+              <CommandError problem={late.problem} offline={late.offline} />
+            </div>
+          ))}
+      </div>
 
       <div className="grid gap-4">
         {showOrder && (

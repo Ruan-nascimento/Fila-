@@ -119,6 +119,7 @@ A coluna **Referências** cita operações do OpenAPI (`operationId`), eventos, 
 | R-FILA-16 | Previsão de espera é sempre identificada como estimativa. | `Estimate` |
 | R-FILA-17 | O dono pode cancelar participação aguardando/chamada com motivo (ex.: antes de fechar a fila). | `cancelParticipation`, T-P-05 |
 | R-FILA-18 | O MVP não tem limite de vagas por fila; a disputa concorrente é pela posição, pela cadeira e pelo estado da fila. _(detalhe da etapa 00 — o anexo não define capacidade)_ | `createParticipation` |
+| R-FILA-19 | O cliente pode avisar pelo app que vai se atrasar (aguardando ou chamado). O aviso não muda estado, posição nem tolerância; a equipe vê e é notificada, e decide o que fazer (por exemplo, descer a pessoa uma posição). Nova chamada limpa o aviso. | `noticeLate`, T-P-12 |
 
 ## 7. Serviços, comanda e atendimento
 
@@ -215,6 +216,9 @@ A coluna **Referências** cita operações do OpenAPI (`operationId`), eventos, 
 | R-WEB-03 | Toda tela tem carregamento, vazio, erro e reconexão. Offline: dados marcados como desatualizados, sem falsa confirmação, sem reenviar comando financeiro antigo; ao voltar à aba, sincroniza antes de permitir ação. | [contrato/eventos-sse.md](contrato/eventos-sse.md) §7 |
 | R-WEB-04 | Testar Chrome, Firefox, Edge e Safari atuais disponíveis e navegador móvel real quando possível; registrar versões e o que não foi testado. | — |
 | R-WEB-05 | Jornadas por papel — cliente: acesso, seleção, confirmação, posição/chamada, comanda, pagamento, histórico, pontos, perfil; profissional: fila, chamada, serviços, conclusão, recebimentos; dono: catálogo/equipe, operação, pendências, estornos, fidelidade, exclusões. | `listPendencies` |
+| R-WEB-06 | Notificações: cliente é avisado do que a barbearia fez na visita dele (posição, chamada, início, fim, cancelamento, transferência, pedido de mudança aceito/recusado, pagamento, pontos); equipe (profissional da fila e dono, mesmas notificações) é avisada do que os clientes fizeram (entrada, saída, aviso de atraso, pedido de mudança). Notificação do sistema só com permissão pedida por um gesto da pessoa e desligável por aparelho; sem permissão, aviso dentro da página. Derivadas dos eventos SSE já autorizados (nenhum dado novo é exposto). | `openEventStream`, `noticeLate` |
+| R-WEB-07 | Painel do cliente: a pessoa vê, numa tela só, as filas em que está em qualquer barbearia (conta e visitantes deste navegador), com situação, senha, posição e espera, e vai direto para a loja. Nada de outra pessoa aparece. | `listMyVisits` |
+| R-WEB-08 | Encontrar barbearias: busca por nome ou endereço (sem diferenciar acentos), paginada; com a localização permitida, mais perto primeiro (lojas sem localização no fim); sem localização, abertas agora primeiro ou A–Z. A localização do cliente só é pedida por um gesto, vai só na consulta e nunca é gravada nem registrada em log. A localização da loja é informada pelo dono e é pública, como o endereço. | `listPublicEstablishments`, `updateEstablishment` |
 
 ## 13. Segurança, qualidade e recuperação
 

@@ -2,7 +2,9 @@ package estabelecimento
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"math"
 	"net/http"
 	"regexp"
 	"strings"
@@ -46,6 +48,8 @@ type establishmentView struct {
 	Logo              *midia.ImageRef `json:"logo"`
 	// PublicURL: link canônico da loja (origem pública configurada + slug), usado no QR Code.
 	PublicURL string `json:"public_url"`
+	// Location: onde fica a barbearia (opcional), para o cliente achar as mais próximas.
+	Location *Location `json:"location"`
 
 	logoID *uuid.UUID
 }
@@ -55,14 +59,19 @@ func (s *Service) loadEstablishment(ctx context.Context, q database.Querier, id 
 }
 
 func loadEstablishmentWith(ctx context.Context, q database.Querier, id uuid.UUID, lock bool, base string) (establishmentView, error) {
-	sql := `SELECT id, name, slug, timezone, version, palette, public_description, public_address, public_phone, logo_asset_id
+	sql := `SELECT id, name, slug, timezone, version, palette, public_description, public_address, public_phone, logo_asset_id,
+		       latitude, longitude
 		FROM establishment WHERE id = $1 AND status = 'active'`
 	if lock {
 		sql += ` FOR UPDATE`
 	}
 	var v establishmentView
+	var lat, lng *float64
 	err := q.QueryRow(ctx, sql, id).Scan(&v.ID, &v.Name, &v.Slug, &v.Timezone, &v.Version, &v.Palette,
-		&v.PublicDescription, &v.PublicAddress, &v.PublicPhone, &v.logoID)
+		&v.PublicDescription, &v.PublicAddress, &v.PublicPhone, &v.logoID, &lat, &lng)
+	if lat != nil && lng != nil {
+		v.Location = &Location{Latitude: *lat, Longitude: *lng}
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return v, httpserver.ErrNotFound()
 	}
@@ -108,6 +117,39 @@ type updateEstablishmentRequest struct {
 	PublicDescription *string `json:"public_description"`
 	PublicAddress     *string `json:"public_address"`
 	PublicPhone       *string `json:"public_phone"`
+	// Location: ausente = não muda; null = remove; objeto = grava.
+	Location optionalLocation `json:"location"`
+}
+
+// Location é a posição da barbearia (graus decimais, WGS 84).
+type Location struct {
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
+}
+
+type optionalLocation struct {
+	set bool
+	val *Location
+}
+
+func (o *optionalLocation) UnmarshalJSON(b []byte) error {
+	o.set = true
+	if string(b) == "null" {
+		o.val = nil
+		return nil
+	}
+	var v struct {
+		Latitude  *float64 `json:"latitude"`
+		Longitude *float64 `json:"longitude"`
+	}
+	if err := json.Unmarshal(b, &v); err != nil {
+		return err
+	}
+	if v.Latitude == nil || v.Longitude == nil {
+		return errors.New("location: informe latitude e longitude")
+	}
+	o.val = &Location{Latitude: *v.Latitude, Longitude: *v.Longitude}
+	return nil
 }
 
 // updateEstablishment (T-ES-01): dono; nome, slug e fuso; versão esperada.
@@ -153,6 +195,11 @@ func (s *Service) updateEstablishment(w http.ResponseWriter, r *http.Request) er
 		phone, fe = NormalizePhone("/public_phone", *req.PublicPhone)
 		v.Add(fe)
 	}
+	if l := req.Location.val; l != nil && (math.IsNaN(l.Latitude) || math.IsNaN(l.Longitude) ||
+		l.Latitude < -90 || l.Latitude > 90 || l.Longitude < -180 || l.Longitude > 180) {
+		v.Add(&httpserver.FieldError{Field: "/location", Code: httpserver.FieldOutOfRange,
+			Message: "latitude de -90 a 90 e longitude de -180 a 180"})
+	}
 	if err := v.Err(); err != nil {
 		return err
 	}
@@ -196,6 +243,10 @@ func (s *Service) updateEstablishment(w http.ResponseWriter, r *http.Request) er
 			next.PublicPhone = phone
 			changed = append(changed, "public_phone")
 		}
+		if req.Location.set && !sameLocation(req.Location.val, cur.Location) {
+			next.Location = req.Location.val
+			changed = append(changed, "location")
+		}
 		now := s.Clock.Now()
 		if next.Slug != cur.Slug {
 			used, err := slugUsedByOther(ctx, tx, next.Slug, estID)
@@ -221,9 +272,9 @@ func (s *Service) updateEstablishment(w http.ResponseWriter, r *http.Request) er
 		}
 		err = tx.QueryRow(ctx, `
 			UPDATE establishment SET name = $2, slug = $3, timezone = $4, palette = $5, public_description = $6,
-			       public_address = $7, public_phone = $8, version = version + 1, updated_at = $9
+			       public_address = $7, public_phone = $8, latitude = $10, longitude = $11, version = version + 1, updated_at = $9
 			WHERE id = $1 RETURNING version`, estID, next.Name, next.Slug, next.Timezone, next.Palette,
-			next.PublicDescription, next.PublicAddress, next.PublicPhone, now).Scan(&next.Version)
+			next.PublicDescription, next.PublicAddress, next.PublicPhone, now, lat(next.Location), lng(next.Location)).Scan(&next.Version)
 		if database.IsUniqueViolation(err, "establishment_slug_key") {
 			return idempotency.Result{}, &httpserver.Error{Status: 409, Code: "slug_taken", Title: "Endereço já usado",
 				Detail: "Outra loja já usa esse endereço. Escolha outro.", Current: cur}
@@ -247,4 +298,25 @@ func (s *Service) updateEstablishment(w http.ResponseWriter, r *http.Request) er
 		}
 		return idempotency.Result{Status: http.StatusOK, Body: httpserver.Data[establishmentView]{Data: next}}, nil
 	})
+}
+
+func sameLocation(a, b *Location) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
+func lat(l *Location) *float64 {
+	if l == nil {
+		return nil
+	}
+	return &l.Latitude
+}
+
+func lng(l *Location) *float64 {
+	if l == nil {
+		return nil
+	}
+	return &l.Longitude
 }

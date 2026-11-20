@@ -328,6 +328,55 @@ Então Lia passa à frente de Maria
 E um cliente que tenta `moveParticipation` recebe `401`/`404`
 E quem está em atendimento recebe `409 invalid_transition`.
 
+### C-FILA-15 — Cliente avisa que vai atrasar
+- Regras: R-FILA-19 · Transições: T-P-12 · Contrato: `noticeLate` · Tipo: integração
+
+Dado Maria chamada na fila de Beto
+Quando Maria toca em "Vou me atrasar"
+Então a fila de Beto mostra "Avisou que vai atrasar" e Beto é notificado
+E Maria continua chamada, com a mesma tolerância
+Quando Maria avisa de novo
+Então recebe `409 invalid_transition`
+E Beto (equipe) não pode usar `noticeLate`
+Quando Beto chama Maria de novo depois de descê-la
+Então o aviso é limpo.
+
+### C-WEB-05 — Notificações de cliente e equipe
+- Regras: R-WEB-06 · Contrato: `openEventStream` · Tipo: unitário (regras de notificação) + componente
+
+Dado Maria aguardando em 3º e com notificações permitidas
+Quando as duas pessoas à frente saem
+Então Maria é avisada "Falta 1 pessoa na sua frente" e depois "Chegou a sua vez"
+E recebe "Seu atendimento começou", "Seu atendimento terminou" e "Você ganhou 10 pontos"
+Quando Beto aceita ou recusa o pedido de mudança
+Então Maria é avisada da decisão
+Dado Beto e Dona Ana com a gestão aberta
+Quando João entra na fila, Maria avisa atraso, Lia desiste ou João pede mudança
+Então os dois recebem a mesma notificação
+E a ação feita pela própria equipe (chamar, iniciar) não gera notificação para a equipe
+E o mesmo evento repetido (reconexão) não notifica duas vezes.
+
+### C-CLI-01 — Encontrar barbearias por distância, busca e páginas
+- Regras: R-WEB-08 · Contrato: `listPublicEstablishments`, `updateEstablishment` · Tipo: integração + componente
+
+Dado barbearias no centro de São Paulo, na Paulista, em Campinas e uma sem localização
+Quando Maria, na Sé, permite a localização
+Então a lista vem centro, Paulista, Campinas e por último a sem localização, com a distância de cada uma
+Quando Maria não permite
+Então a lista vem com as abertas agora primeiro, ou A–Z se ela escolher
+Quando Maria busca "alvaro"
+Então encontra "Corte Álvaro" (sem diferenciar acento)
+E a lista vem em páginas, sem repetir lojas, e um cursor de outra busca é recusado
+E a posição de Maria não é gravada.
+
+### C-CLI-02 — Painel com as filas em que estou
+- Regras: R-WEB-07 · Contrato: `listMyVisits` · Tipo: integração + componente
+
+Dado Lia na fila de duas barbearias (como visitante, no mesmo celular), chamada em uma delas
+Quando abre o painel
+Então vê as duas, a chamada primeiro, com profissional, senha e situação, e vai direto para a loja
+E outra pessoa não vê nada disso.
+
 ### C-FILA-07 — Duas chamadas simultâneas não ocupam a cadeira duas vezes
 - Regras: R-FILA-14, R-FILA-05 · Transições: T-P-02 · Contrato: `callNext` · Tipo: concorrência
 

@@ -1,4 +1,5 @@
 import type { components } from "../../api/schema.gen";
+import { espera } from "../../tempo";
 
 export type PublicQueue = components["schemas"]["PublicQueue"];
 export type PublicService = components["schemas"]["PublicService"];
@@ -9,7 +10,7 @@ export function queueLine(q: PublicQueue): string {
   if (q.status === "paused") return "Fila pausada";
   if (q.status === "closed") return "Fila fechada";
   if (q.waiting_count === 0) return "Aberta · ninguém aguardando";
-  return `Aberta · ${q.waiting_count} aguardando · estimativa de ${q.estimated_wait.minutes} min`;
+  return `Aberta · ${q.waiting_count} aguardando · estimativa de ${espera(q.estimated_wait.minutes)}`;
 }
 
 /** Serviços que o profissional da fila faz. */

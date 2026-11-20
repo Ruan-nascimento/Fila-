@@ -774,6 +774,67 @@ paths:
         default: { $ref: '#/components/responses/Unexpected' }
 
   # ---------------------------------------------------------------- público
+  /v1/public/establishments:
+    get:
+      operationId: listPublicEstablishments
+      tags: [publico]
+      summary: Diretório de barbearias (busca, ordem por distância ou abertas agora, paginado).
+      description: |
+        Só dados públicos da loja e o resumo das filas abertas. `sort`: `distance` (mais perto primeiro,
+        lojas sem localização no fim; exige `lat` e `lng`), `open` (com fila aberta primeiro, depois nome;
+        padrão sem localização) ou `name` (A–Z). Sem `sort`, usa `distance` quando há `lat`/`lng`.
+        A localização do cliente vai só nesta consulta: não é gravada nem registrada em log.
+        Distância em linha reta (não é rota). Busca sem diferenciar acentos/maiúsculas no nome e no endereço.
+        O cursor vale só para a mesma busca (outra busca/ordem → 400).
+      security: []
+      x-authz: [{ actor: public, scope: none }]
+      parameters:
+        - { name: q, in: query, required: false, schema: { type: string, maxLength: 80 }, description: Nome ou endereço. }
+        - { name: lat, in: query, required: false, schema: { type: number, minimum: -90, maximum: 90 } }
+        - { name: lng, in: query, required: false, schema: { type: number, minimum: -180, maximum: 180 } }
+        - { name: sort, in: query, required: false, schema: { type: string, enum: [distance, open, name] } }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Uma página de barbearias.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, page]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/DirectoryEstablishment' }
+                  page: { $ref: '#/components/schemas/PageInfo' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/my-visits:
+    get:
+      operationId: listMyVisits
+      tags: [cliente]
+      summary: Painel do cliente — visitas em andamento em todas as lojas (conta e visitantes deste navegador).
+      description: |
+        Mesmo critério de `getCurrentVisit`, loja por loja: participação ativa, comanda ainda não encerrada
+        ou (visitante) encerrada há menos de 24 h. Ordem: chamado, em atendimento, aguardando, depois o resto.
+        Conta: até as 20 lojas mais recentes. Sem conta e sem visitante → 401.
+      security: [{ visitorSession: [] }, { accountSession: [] }]
+      x-authz: [{ actor: visitor, scope: self }, { actor: customer, scope: self }]
+      responses:
+        '200':
+          description: Visitas em andamento (pode ser vazia).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/MyVisit' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        default: { $ref: '#/components/responses/Unexpected' }
   /v1/public/slugs/{slug}:
     get:
       operationId: getPublicEstablishmentBySlug
@@ -1028,6 +1089,39 @@ paths:
       x-authz: [{ actor: professional, scope: own_queue }, { actor: owner, scope: establishment }]
       x-transitions: [T-P-06, T-O-05, T-CR-04]
       x-events: [participation.updated, order.updated, payment.updated, change_request.updated, queue.public.updated, queue.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/ParticipationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/VisitOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/participations/{participationId}/late-notice:
+    post:
+      operationId: noticeLate
+      tags: [fila]
+      summary: O cliente avisa que vai se atrasar (aguardando ou chamado). Não muda estado nem posição.
+      description: |
+        Grava `late_notice_at`; a equipe vê o aviso na fila e recebe uma notificação. A pessoa continua no
+        mesmo lugar até a equipe decidir (por exemplo, `moveParticipation`). Uma nova chamada limpa o aviso.
+        Avisar de novo enquanto o aviso está ativo devolve `409 invalid_transition`.
+      security: [{ visitorSession: [], csrfToken: [] }, { accountSession: [], csrfToken: [] }]
+      x-authz:
+        - { actor: visitor, scope: visit_owner }
+        - { actor: customer, scope: visit_owner }
+      x-transitions: [T-P-12]
+      x-events: [participation.updated, queue.public.updated, queue.updated]
       parameters:
         - $ref: '#/components/parameters/EstablishmentId'
         - $ref: '#/components/parameters/ParticipationId'
@@ -4460,6 +4554,54 @@ components:
         public_description: { type: string, maxLength: 280, description: Texto simples; vazio remove. }
         public_address: { type: string, maxLength: 200, description: Texto simples; vazio remove. }
         public_phone: { type: string, maxLength: 30, description: 'Telefone/WhatsApp público (será publicado); normalizado para E.164; vazio remove.' }
+        location:
+          description: Localização da barbearia (para o cliente achar as mais próximas). `null` remove.
+          oneOf:
+            - $ref: '#/components/schemas/Location'
+            - type: 'null'
+    Location:
+      type: object
+      additionalProperties: false
+      required: [latitude, longitude]
+      description: Posição da barbearia em graus decimais (WGS 84). Pública, como o endereço.
+      properties:
+        latitude: { type: number, minimum: -90, maximum: 90 }
+        longitude: { type: number, minimum: -180, maximum: 180 }
+    DirectoryEstablishment:
+      type: object
+      required: [id, slug, name, palette, public_address, logo, distance_meters, open_queues, waiting_count, shortest_wait_minutes]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        slug: { type: string }
+        name: { type: string }
+        palette: { $ref: '#/components/schemas/Palette' }
+        public_address: { type: [string, 'null'] }
+        logo:
+          oneOf:
+            - $ref: '#/components/schemas/ImageRef'
+            - type: 'null'
+        distance_meters: { type: [integer, 'null'], minimum: 0, description: Em linha reta; nulo sem localização do cliente ou da loja. }
+        open_queues: { type: integer, minimum: 0, description: Filas abertas agora (profissional ativo). }
+        waiting_count: { type: integer, minimum: 0, description: Pessoas aguardando nas filas abertas. }
+        shortest_wait_minutes: { type: [integer, 'null'], minimum: 0, description: Menor espera estimada entre as filas abertas; nulo sem fila aberta. }
+    MyVisit:
+      type: object
+      required: [establishment, professional_name, visit]
+      properties:
+        establishment:
+          type: object
+          required: [id, slug, name, palette, logo]
+          properties:
+            id: { $ref: '#/components/schemas/Id' }
+            slug: { type: string }
+            name: { type: string }
+            palette: { $ref: '#/components/schemas/Palette' }
+            logo:
+              oneOf:
+                - $ref: '#/components/schemas/ImageRef'
+                - type: 'null'
+        professional_name: { type: string }
+        visit: { $ref: '#/components/schemas/Visit' }
     Palette:
       type: string
       enum: [purple, violet, indigo, blue, sky, cyan, teal, emerald, green, lime, amber, orange, red, rose, pink, fuchsia]
@@ -4822,6 +4964,9 @@ components:
         version: { $ref: '#/components/schemas/Version' }
         order_id: { $ref: '#/components/schemas/Id' }
         created_at: { $ref: '#/components/schemas/Timestamp' }
+        late_notice_at:
+          description: O cliente avisou pelo app que vai se atrasar (T-P-12). Nova chamada limpa.
+          oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }]
     Order:
       type: object
       required: [id, establishment_id, participation_id, status, version, items, total, payment, created_at]
@@ -5044,6 +5189,9 @@ components:
               called_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
               tolerance_ends_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
               has_pending_change_request: { type: boolean }
+              late_notice_at:
+                description: O cliente avisou pelo app que vai se atrasar (T-P-12).
+                oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }]
               version: { $ref: '#/components/schemas/Version' }
               customer_avatar:
                 description: Foto pessoal do cliente com conta, só para a equipe e só com a participação ativa (URL reautorizada a cada pedido).
@@ -5068,6 +5216,10 @@ components:
             - $ref: '#/components/schemas/ImageRef'
             - type: 'null'
         public_url: { type: string, description: Link canônico da loja (origem pública configurada + slug). Base do QR Code. }
+        location:
+          oneOf:
+            - $ref: '#/components/schemas/Location'
+            - type: 'null'
     Professional:
       type: object
       required: [id, display_name, queue_id, queue_letter, status, has_access, version]

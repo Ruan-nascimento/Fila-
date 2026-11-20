@@ -17,6 +17,7 @@ import { call, problemMessage } from "../api/problem";
 import type { components } from "../api/schema.gen";
 import { useSession } from "../session/context";
 import { StreamProvider, StreamStatusNotice } from "../stream/StreamProvider";
+import { NotificacoesProvider, Sino } from "../features/notificacoes/Notificacoes";
 import { PublicShell } from "../ui/layout";
 import { ButtonLink, EmptyState, LoadError, Loading, Notice } from "../ui/ui";
 import { cx } from "../ui/cx";
@@ -98,18 +99,32 @@ export function Loja() {
     state.status === "ready" &&
     (account !== null || state.session.visitors.some((v) => v.establishment_id === shop.id));
   return (
-    <PublicShell width="wide" store={shop}>
-      <StreamProvider
-        estId={shop.id}
-        channels={
-          account !== null ? ["public", "visit", "account"] : identified ? ["public", "visit"] : ["public"]
-        }
+    <StreamProvider
+      estId={shop.id}
+      channels={
+        account !== null ? ["public", "visit", "account"] : identified ? ["public", "visit"] : ["public"]
+      }
+    >
+      {/* Notificações do cliente: vêm do mesmo fluxo da página (posição, chamada, atendimento…). */}
+      <NotificacoesProvider
+        papel="cliente"
+        escopo={`cliente:${shop.id}:${
+          account?.id ??
+          (state.status === "ready"
+            ? state.session.visitors.find((v) => v.establishment_id === shop.id)?.id
+            : null) ??
+          "anonimo"
+        }`}
+        destino={(n) => (n.aba === "pontos" ? `/loja/${shop.slug}/pontos` : `/loja/${shop.slug}`)}
+        icon={shop.logo?.variants[0]?.url}
       >
-        <StoreDataProvider shopId={shop.id}>
-          <LojaConteudo shop={shop} />
-        </StoreDataProvider>
-      </StreamProvider>
-    </PublicShell>
+        <PublicShell width="wide" store={shop} actions={identified ? <Sino /> : undefined}>
+          <StoreDataProvider shopId={shop.id}>
+            <LojaConteudo shop={shop} />
+          </StoreDataProvider>
+        </PublicShell>
+      </NotificacoesProvider>
+    </StreamProvider>
   );
 }
 

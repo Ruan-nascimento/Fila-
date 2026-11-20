@@ -71,6 +71,8 @@ stateDiagram-v2
   [*] --> waiting: T-P-01
   waiting --> waiting: T-P-07 transferência / T-P-11 mudar de lugar
   called --> waiting: T-P-11 descer (troca com o próximo)
+  waiting --> waiting: T-P-12 aviso de atraso
+  called --> called: T-P-12 aviso de atraso
   waiting --> called: T-P-02
   called --> in_service: T-P-03
   waiting --> cancelled: T-P-04/05/10
@@ -93,6 +95,7 @@ stateDiagram-v2
 | T-P-09 | in_service → interrupted | profissional (own_queue) / dono | Motivo; resultado de cada item (`fully_performed`/`partially_performed`/`not_started`) | Libera cadeira; comanda → `pending_review` (T-O-06); solicitação pendente → `voided`; **sem pontos** | IK + VE (ambas) | A+M | `validation_failed`, `version_conflict` | `interruptService` |
 | T-P-10 | waiting/called → cancelled | sistema (exclusão de conta) | Exclusão solicitada pelo titular (T-AC-03) | Igual a T-P-04 com `closure_reason = cancelled_by_account_deletion` | ÚNICA-VEZ(exclusão, participação) | A | — | `requestAccountDeletion` |
 | T-P-11 | waiting ↔ waiting; called ↔ waiting (mesma fila) | profissional (own_queue) / dono | Participação `waiting` ou `called`; existe vizinha na direção pedida (`up`: a que aguarda logo à frente ou, para a primeira que aguarda, a `called`; `down`: a que aguarda logo atrás); troca com a `called` exige fila `open`; `in_service` nunca se move | As duas trocam de posição; se uma estava `called`, ela volta a `waiting` (sem `called_at`) e a outra passa a `called` com nova tolerância de 10 min | IK + VE (da pessoa movida; a vizinha é travada pelo bloqueio da fila) | A (as duas) | `invalid_transition`, `queue_not_open`, `version_conflict` | `moveParticipation` |
+| T-P-12 | waiting → waiting; called → called (aviso de atraso) | visitante / cliente (visit_owner) | Participação `waiting` ou `called`; sem aviso ativo (`late_notice_at` nulo) | Grava `late_notice_at`; estado, posição e tolerância não mudam; a equipe vê o aviso e é notificada; nova chamada (T-P-02 ou T-P-11) limpa o aviso | IK + VE | A | `invalid_transition`, `version_conflict` | `noticeLate` |
 
 Invariantes no banco:
 - Índice único parcial: `(establishment_id, identity_id) WHERE status IN ('waiting','called','in_service')`.

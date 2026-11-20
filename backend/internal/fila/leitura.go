@@ -133,6 +133,7 @@ func (s *Service) StaffEntries(ctx context.Context, q database.Querier, queueIDs
 				ServiceNames: names, CalledAt: e.CalledAt, ToleranceEndsAt: e.ToleranceEndsAt, Version: e.Version,
 				HasPendingChangeRequest: e.summary.HasPendingChangeRequest,
 				CustomerAvatar:          avatars[e.ID],
+				LateNoticeAt:            e.LateNoticeAt,
 			})
 		}
 	}
@@ -263,6 +264,8 @@ type participationView struct {
 	Version         int64          `json:"version"`
 	OrderID         uuid.UUID      `json:"order_id"`
 	CreatedAt       time.Time      `json:"created_at"`
+	// LateNoticeAt: o cliente avisou pelo app que vai se atrasar (T-P-12); nova chamada limpa.
+	LateNoticeAt *time.Time `json:"late_notice_at"`
 }
 
 type visitView struct {
@@ -279,7 +282,7 @@ func (s *Service) visit(ctx context.Context, q database.Querier, p row, forStaff
 	pv := participationView{ID: p.ID, EstablishmentID: p.EstablishmentID, QueueID: p.QueueID, ProfessionalID: qi.ProfessionalID,
 		TicketCode: p.TicketCode, Status: p.Status, Nick: p.Nick, LoyaltyEligible: p.LoyaltyEligible, CalledAt: p.CalledAt,
 		ToleranceEndsAt: p.ToleranceEndsAt, StartedAt: p.StartedAt, FinishedAt: p.FinishedAt, EndReason: p.EndReason,
-		Version: p.Version, OrderID: p.OrderID, CreatedAt: p.CreatedAt, Transfers: []transferView{}}
+		Version: p.Version, OrderID: p.OrderID, CreatedAt: p.CreatedAt, Transfers: []transferView{}, LateNoticeAt: p.LateNoticeAt}
 	if forStaff {
 		pv.IdentityKind = acesso.IdentityVisitor
 		if p.AccountID != nil {
@@ -477,4 +480,119 @@ func (s *Service) StaffQueues(ctx context.Context, q database.Querier, estID uui
 
 func (s *Service) PublicQueues(ctx context.Context, q database.Querier, estID uuid.UUID, now time.Time) (any, error) {
 	return estabelecimento.PublicQueues(ctx, q, s, estID, now)
+}
+
+// ---------------------------------------------------------------------------------------------
+// listMyVisits: painel do cliente — as visitas em andamento em TODAS as lojas, com a identidade
+// deste navegador (conta e/ou visitantes de cada loja). Mesmo critério de getCurrentVisit:
+// participação ativa, comanda ainda não encerrada ou (visitante) encerrada há menos de 24 h.
+
+type myVisitStore struct {
+	ID      uuid.UUID       `json:"id"`
+	Slug    string          `json:"slug"`
+	Name    string          `json:"name"`
+	Palette string          `json:"palette"`
+	Logo    *midia.ImageRef `json:"logo"`
+}
+
+type myVisitView struct {
+	Establishment    myVisitStore `json:"establishment"`
+	ProfessionalName string       `json:"professional_name"`
+	Visit            visitView    `json:"visit"`
+}
+
+// maxMyVisitStores limita quantas lojas de uma conta são consultadas (as mais recentes).
+const maxMyVisitStores = 20
+
+func (s *Service) listMyVisits(w http.ResponseWriter, r *http.Request) error {
+	account, visitors := s.Customers.AllCustomerIdentities(r)
+	if account == nil && len(visitors) == 0 {
+		return hs.ErrUnauthenticated()
+	}
+	ctx := r.Context()
+	out := []myVisitView{}
+	err := database.InSnapshot(ctx, s.Pool, func(tx pgx.Tx) error {
+		stores := map[uuid.UUID]bool{}
+		var order []uuid.UUID
+		add := func(id uuid.UUID) {
+			if !stores[id] {
+				stores[id] = true
+				order = append(order, id)
+			}
+		}
+		if account != nil {
+			rows, err := tx.Query(ctx, `SELECT establishment_id FROM participation WHERE account_id = $1
+				GROUP BY establishment_id ORDER BY max(created_at) DESC LIMIT $2`, account.AccountID, maxMyVisitStores)
+			if err != nil {
+				return err
+			}
+			ids, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+			if err != nil {
+				return err
+			}
+			for _, id := range ids {
+				add(id)
+			}
+		}
+		for id := range visitors {
+			add(id)
+		}
+		for _, estID := range order {
+			v, err := s.currentVisit(ctx, tx, estID, account, nil)
+			if err != nil {
+				return err
+			}
+			if v == nil && visitors[estID] != nil {
+				if v, err = s.currentVisit(ctx, tx, estID, nil, visitors[estID]); err != nil {
+					return err
+				}
+			}
+			if v == nil {
+				continue
+			}
+			e, err := estabelecimento.ActiveByID(ctx, tx, estID)
+			if errors.Is(err, estabelecimento.ErrNotFound) {
+				continue // loja encerrada: some do painel
+			}
+			if err != nil {
+				return err
+			}
+			item := myVisitView{Establishment: myVisitStore{ID: e.ID, Slug: e.Slug, Name: e.Name, Palette: e.Palette}, Visit: *v}
+			logo, err := midia.AttachedOne(ctx, tx, e.LogoAssetID, "public")
+			if err != nil {
+				return err
+			}
+			if logo != nil {
+				item.Establishment.Logo = logo.PublicRef()
+			}
+			if qi, err := estabelecimento.GetQueue(ctx, tx, estID, v.Participation.QueueID); err == nil {
+				item.ProfessionalName = qi.ProfessionalName
+			} else if !errors.Is(err, estabelecimento.ErrNotFound) {
+				return err
+			}
+			out = append(out, item)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	// Primeiro o que pede atenção: chamado, em atendimento, aguardando; depois comandas pendentes.
+	rank := map[string]int{Called: 0, InService: 1, Waiting: 2}
+	slices.SortStableFunc(out, func(a, b myVisitView) int {
+		ra, ok := rank[a.Visit.Participation.Status]
+		if !ok {
+			ra = 3
+		}
+		rb, ok := rank[b.Visit.Participation.Status]
+		if !ok {
+			rb = 3
+		}
+		return ra - rb
+	})
+	w.Header().Set("Cache-Control", "no-store")
+	hs.WriteJSON(w, http.StatusOK, struct {
+		Data []myVisitView `json:"data"`
+	}{Data: out})
+	return nil
 }

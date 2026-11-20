@@ -60,6 +60,9 @@ type Customers interface {
 	// CustomerIdentities devolve a conta (se houver sessão de conta) e o visitante desta loja
 	// (se houver credencial de visitante válida). Ambos podem ser nil.
 	CustomerIdentities(r *http.Request, establishmentID uuid.UUID) (account, visitor *Identity)
+	// AllCustomerIdentities devolve a conta (se houver) e TODAS as credenciais de visitante
+	// válidas deste navegador, por loja. Usado pelo painel do cliente ("minhas filas").
+	AllCustomerIdentities(r *http.Request) (account *Identity, visitors map[uuid.UUID]*Identity)
 }
 
 // Authorizer autoriza pedidos de equipe. Regras comuns (R-PERM-01/05):

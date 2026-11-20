@@ -156,6 +156,34 @@ describe("Minha visita", () => {
   });
 });
 
+describe("Aviso de atraso", () => {
+  // Cenários: C-FILA-15.
+  it("cliente chamado avisa que vai atrasar; a tela confirma e não oferece de novo", async () => {
+    const bodies: unknown[] = [];
+    const chamada = visit("called", 6);
+    fakeApi({
+      ...publicData,
+      [`GET /v1/establishments/${EST}/my-visit`]: () => Response.json({ data: chamada, cursor: null }),
+      [`POST /v1/establishments/${EST}/participations/${PART}/late-notice`]: (_r, body) => {
+        bodies.push(body);
+        const v = visit("called", 7);
+        return Response.json({
+          data: { ...v, participation: { ...v.participation, late_notice_at: "2026-11-12T12:05:00Z" } },
+        });
+      },
+    });
+    render(
+      <StoreDataProvider shopId={EST}>
+        <MinhaVisita shopId={EST} />
+      </StoreDataProvider>,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Vou me atrasar" }));
+    expect(await screen.findByText(/Você avisou a barbearia que vai se atrasar/)).toBeInTheDocument();
+    expect(bodies).toEqual([{ expected_version: 6 }]);
+    expect(screen.queryByRole("button", { name: "Vou me atrasar" })).toBeNull();
+  });
+});
+
 describe("Fila da equipe", () => {
   const ctx = { estId: EST, estName: "Loja", isOwner: true, professionalId: null };
   const tolerance = "2026-11-12T12:10:00Z";
