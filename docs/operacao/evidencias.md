@@ -158,3 +158,16 @@ Executado **localmente** (Linux, Go 1.27.4, Node 26, PostgreSQL 18.6 descartáve
 | Ensaio de restauração do backup real | Baixado do R2 com a credencial de backup, decifrado e restaurado em PostgreSQL descartável; conciliação concluída (época nova, links invalidados), worker liberado, nenhum alerta; ~15 s por passo |
 
 Erros encontrados e corrigidos nesta etapa: import do middleware sem extensão `.js` (500 `MIDDLEWARE_INVOCATION_FAILED` na Vercel), arquivo `.env.local` com token OIDC criado pelo `vercel link` (apagado e ignorado), dono do arquivo do dump no workflow de backup.
+
+### Pix sandbox (AbacatePay, homologação, 20/11/2026)
+
+Loja de teste `Barbearia Teste HML` (`teste-hml11202052`), criada com `fila-admin bootstrap`; dona, profissional e cliente com endereços `delivered+…@resend.dev`; serviço de teste de R$ 5,00. Chave `abc_dev_` (nada cobrado).
+
+| Passo | Resultado |
+|---|---|
+| Cliente gera Pix pelo site | `pending`, R$ 5,00, copia-e-cola presente, `test_mode=true` |
+| `simulate-payment` (sandbox) | Webhook `transparent.completed` autenticado (secret e assinatura), `devMode=true`, aplicado; 1 recibo com evidência `provider_webhook`; comanda em `awaiting_confirmation` |
+| Conferência pelo profissional | 200; comanda `settled` |
+| Estorno pedido pela dona (com reautenticação) | 202; worker pediu à AbacatePay; webhook `transparent.refunded` aplicado; estorno `confirmed` com evidência `provider` em ~1 s; consulta à AbacatePay mostra `REFUNDED`; 1 estorno só |
+| Webhook sem secret ou com secret errado (pelo site) | 401; nada gravado |
+| Reenvio do mesmo webhook pelo painel | **pendente** (ação no painel) |
