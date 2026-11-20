@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"fila/internal/midia"
 	"fila/internal/platform/clock"
 	"fila/internal/platform/database"
 	"fila/internal/platform/httpserver"
@@ -51,6 +52,8 @@ type Config struct {
 	CookieSecure      bool
 	PublicBaseURL     string
 	TrustForwardedFor bool
+	// Google: login com Google só para clientes (ADR-0028). Vazio = desligado.
+	Google GoogleSettings
 }
 
 // Service concentra as regras de identidade, sessões e acesso.
@@ -66,6 +69,9 @@ type Service struct {
 	cfg     Config
 	// activeVisit é nil até existirem fila e comanda (etapas 04/05).
 	activeVisit ActiveVisitFunc
+	// media entrega o avatar privado (nil = fotos desligadas).
+	media  *midia.Service
+	google googleClient
 }
 
 // Deps são as dependências do serviço.
@@ -79,6 +85,9 @@ type Deps struct {
 	// ActiveVisit (opcional) informa se o visitante tem visita ativa ou comanda pendente.
 	ActiveVisit ActiveVisitFunc
 }
+
+// SetMedia liga a entrega de fotos (módulo midia), montada depois do serviço de identidade.
+func (s *Service) SetMedia(m *midia.Service) { s.media = m }
 
 // New cria o serviço.
 func New(d Deps) *Service {
@@ -146,6 +155,9 @@ type AccountSession struct {
 	// OwnerHolder: esta sessão ocupa a vaga de dono da conta (ADR-0027). Só ela exerce
 	// privilégios de dono; outra sessão de equipe da mesma conta age, no máximo, como profissional.
 	OwnerHolder bool
+	// AuthMethod: como a sessão foi aberta ("password" ou "google"). Sessão do Google é sempre de
+	// cliente (o banco recusa sessão de equipe que não seja por senha).
+	AuthMethod string
 }
 
 // VisitorCredential é uma credencial de visitante válida (uma por loja no navegador).
@@ -291,12 +303,13 @@ func (s *Service) loadSession(ctx context.Context, q database.Querier, tokenHash
 	err := q.QueryRow(ctx, `
 		SELECT s.id, s.account_id, s.kind, s.created_at, s.last_used_at, s.absolute_expires_at,
 		       s.idle_timeout_seconds, s.reauth_valid_until, a.name, a.email, a.status, a.email_normalized,
-		       EXISTS (SELECT 1 FROM owner_session_slot o WHERE o.account_id = s.account_id AND o.session_id = s.id)
+		       EXISTS (SELECT 1 FROM owner_session_slot o WHERE o.account_id = s.account_id AND o.session_id = s.id),
+		       s.auth_method
 		FROM account_session s JOIN account a ON a.id = s.account_id
 		WHERE s.token_hash = $1 AND s.revoked_at IS NULL AND a.status = 'active'`, tokenHash).
 		Scan(&sess.ID, &sess.AccountID, &sess.Kind, &sess.CreatedAt, &lastUsed, &absolute, &idle,
 			&sess.ReauthValidUntil, &sess.AccountName, &sess.AccountEmail, &sess.AccountStatus, &sess.EmailNormalized,
-			&sess.OwnerHolder)
+			&sess.OwnerHolder, &sess.AuthMethod)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}

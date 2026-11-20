@@ -11,6 +11,7 @@ import (
 	"fila/internal/acesso"
 	"fila/internal/auditoria"
 	"fila/internal/estabelecimento"
+	"fila/internal/midia"
 	"fila/internal/platform/database"
 	"fila/internal/platform/httpserver"
 	"fila/internal/platform/validate"
@@ -72,6 +73,14 @@ func (s *Service) login(w http.ResponseWriter, r *http.Request) error {
 	}
 	if a == nil || (a.Status != "active" && a.Status != "pending_verification") {
 		s.hasher.Burn(ctx, *req.Password) // mesmo custo de uma conta existente
+		if err := s.hit(ctx, limits...); err != nil {
+			return err
+		}
+		return errInvalidCredentials
+	}
+	if a.PasswordHash == "" {
+		// Conta só com Google: senha nenhuma confere (mesmo custo e mesma resposta de senha errada).
+		s.hasher.Burn(ctx, *req.Password)
 		if err := s.hit(ctx, limits...); err != nil {
 			return err
 		}
@@ -260,7 +269,8 @@ func (s *Service) logout(w http.ResponseWriter, r *http.Request) error {
 // reauthenticate (T-SS-06)
 
 type reauthRequest struct {
-	Password *string `json:"password"`
+	Password  *string `json:"password"`
+	EmailCode *string `json:"email_code"`
 }
 
 func (s *Service) reauthenticate(w http.ResponseWriter, r *http.Request) error {
@@ -272,15 +282,30 @@ func (s *Service) reauthenticate(w http.ResponseWriter, r *http.Request) error {
 	if _, err := httpserver.DecodeJSON(r, &req); err != nil {
 		return err
 	}
-	if req.Password == nil || *req.Password == "" {
-		return httpserver.ErrValidation(httpserver.FieldError{Field: "/password", Code: httpserver.FieldRequired})
-	}
-	if len([]rune(*req.Password)) > MaxPasswordLen {
-		return httpserver.ErrValidation(httpserver.FieldError{Field: "/password", Code: httpserver.FieldTooLong})
-	}
 	ctx := r.Context()
-	if err := s.checkPassword(ctx, r, sess.AccountID, sess.EmailNormalized, *req.Password); err != nil {
-		return err
+	switch {
+	case req.EmailCode != nil && req.Password == nil:
+		// Conta sem senha (só Google): código enviado ao e-mail verificado, preso a esta sessão.
+		if !codePattern.MatchString(*req.EmailCode) {
+			return httpserver.ErrValidation(httpserver.FieldError{Field: "/email_code", Code: httpserver.FieldInvalidFormat,
+				Message: "8 dígitos"})
+		}
+		if err := s.checkReauthCode(ctx, sess, *req.EmailCode); err != nil {
+			return err
+		}
+	case req.EmailCode != nil:
+		return httpserver.ErrValidation(httpserver.FieldError{Field: "/email_code", Code: httpserver.FieldNotAllowed,
+			Message: "envie a senha OU o código"})
+	default:
+		if req.Password == nil || *req.Password == "" {
+			return httpserver.ErrValidation(httpserver.FieldError{Field: "/password", Code: httpserver.FieldRequired})
+		}
+		if len([]rune(*req.Password)) > MaxPasswordLen {
+			return httpserver.ErrValidation(httpserver.FieldError{Field: "/password", Code: httpserver.FieldTooLong})
+		}
+		if err := s.checkPassword(ctx, r, sess.AccountID, sess.EmailNormalized, *req.Password); err != nil {
+			return err
+		}
 	}
 	now := s.clock.Now()
 	until := now.Add(ReauthWindow)
@@ -324,8 +349,33 @@ func (s *Service) publicEstablishment(w http.ResponseWriter, r *http.Request) er
 	if err != nil {
 		return err
 	}
-	httpserver.WriteJSON(w, http.StatusOK, httpserver.Data[publicEstablishmentView]{Data: publicEstablishmentView{
-		ID: e.ID, Slug: e.Slug, Name: e.Name, Timezone: e.Timezone}})
+	view := publicEstablishmentView{ID: e.ID, Slug: e.Slug, Name: e.Name, Timezone: e.Timezone, Palette: e.Palette,
+		Description: e.Description, Address: e.Address, Phone: e.Phone}
+	logo, err := midia.AttachedOne(r.Context(), s.pool, e.LogoAssetID, "public")
+	if err != nil {
+		return err
+	}
+	if logo != nil {
+		view.Logo = logo.PublicRef()
+	}
+	// Dados públicos: cache curto (troca de logo/paleta aparece em até 1 minuto).
+	w.Header().Set("Cache-Control", "public, max-age=60")
+	httpserver.WriteJSON(w, http.StatusOK, httpserver.Data[publicEstablishmentView]{Data: view})
+	return nil
+}
+
+type publicConfigView struct {
+	GoogleLogin   bool   `json:"google_login"`
+	MediaUploads  bool   `json:"media_uploads"`
+	PublicBaseURL string `json:"public_base_url"`
+}
+
+// getPublicConfig informa à interface o que está ligado e a origem pública canônica (usada nos
+// links e QR Codes). Nenhum segredo: só booleanos e o endereço público do site.
+func (s *Service) getPublicConfig(w http.ResponseWriter, _ *http.Request) error {
+	w.Header().Set("Cache-Control", "public, max-age=300")
+	httpserver.WriteJSON(w, http.StatusOK, httpserver.Data[publicConfigView]{Data: publicConfigView{
+		GoogleLogin: s.cfg.Google.enabled(), MediaUploads: s.media.Enabled(), PublicBaseURL: s.cfg.PublicBaseURL}})
 	return nil
 }
 

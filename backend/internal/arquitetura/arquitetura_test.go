@@ -77,7 +77,8 @@ func TestNoPackageImportsExecutables(t *testing.T) {
 var tableOwners = map[string][]string{
 	"identidade": {"account", "account_token", "account_session", "invite", "visitor", "visitor_browser", "visitor_credential",
 		"owner_session_slot", "owner_session_challenge", "desktop_activation_code", "desktop_installation", "desktop_link_ticket",
-		"desktop_binding", "desktop_proof_seen"},
+		"desktop_binding", "desktop_proof_seen", "external_identity", "oidc_transaction"},
+	"midia":                {"media_asset"},
 	"estabelecimento":      {"establishment", "professional", "staff_membership", "queue"},
 	"catalogo":             {"service", "service_professional", "service_revision"},
 	"fila":                 {"participation", "participation_transfer", "queue_counter"},

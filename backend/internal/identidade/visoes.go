@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"fila/internal/estabelecimento"
+	"fila/internal/midia"
 	"fila/internal/platform/database"
 )
 
@@ -27,6 +28,8 @@ type sessionInfo struct {
 	ReauthValidUntil *time.Time `json:"reauth_valid_until"`
 	// OwnerAuthority: esta sessão ocupa a vaga de dono da conta (ADR-0027).
 	OwnerAuthority bool `json:"owner_authority"`
+	// AuthMethod: senha ou Google (o Google só abre sessão de cliente).
+	AuthMethod string `json:"auth_method"`
 }
 
 type membershipView struct {
@@ -62,10 +65,15 @@ type inviteView struct {
 }
 
 type publicEstablishmentView struct {
-	ID       uuid.UUID `json:"id"`
-	Slug     string    `json:"slug"`
-	Name     string    `json:"name"`
-	Timezone string    `json:"timezone"`
+	ID          uuid.UUID       `json:"id"`
+	Slug        string          `json:"slug"`
+	Name        string          `json:"name"`
+	Timezone    string          `json:"timezone"`
+	Palette     string          `json:"palette"`
+	Description *string         `json:"description"`
+	Address     *string         `json:"address"`
+	Phone       *string         `json:"phone"`
+	Logo        *midia.ImageRef `json:"logo"`
 }
 
 type messageView struct {
@@ -78,7 +86,8 @@ func (s *Service) buildSessionView(ctx context.Context, q database.Querier, p *P
 	if p.Session != nil {
 		v.Account = &accountView{ID: p.Session.AccountID, Name: p.Session.AccountName,
 			Email: p.Session.AccountEmail, Status: p.Session.AccountStatus}
-		v.Session = &sessionInfo{Kind: p.Session.Kind, ExpiresAt: p.Session.ExpiresAt, OwnerAuthority: p.Session.OwnerHolder}
+		v.Session = &sessionInfo{Kind: p.Session.Kind, ExpiresAt: p.Session.ExpiresAt, OwnerAuthority: p.Session.OwnerHolder,
+			AuthMethod: p.Session.AuthMethod}
 		if r := p.Session.ReauthValidUntil; r != nil && r.After(s.clock.Now()) {
 			v.Session.ReauthValidUntil = r
 		}

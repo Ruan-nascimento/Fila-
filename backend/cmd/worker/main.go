@@ -30,6 +30,7 @@ import (
 	"fila/internal/fidelidade"
 	"fila/internal/fila"
 	"fila/internal/identidade"
+	"fila/internal/midia"
 	"fila/internal/operacao"
 	"fila/internal/pagamento"
 	"fila/internal/painel"
@@ -165,6 +166,29 @@ func runJobs(ctx context.Context, rt *app.Runtime, ring *keys.Ring, clk clock.Cl
 
 	// Fidelidade: vence reservas de prêmio (24 h) e libera pontos e unidade uma vez (T-RW-03).
 	wg.Go(func() { loyalty.Run(ctx, 30*time.Second) })
+
+	// Fotos e logos (ADR-0028): processa os envios com concorrência limitada e limpa os arquivos
+	// não associados ou removidos. Desligado sem FILA_MEDIA_STORAGE.
+	if store := api.MediaStore(cfg.Media, nil); store != nil {
+		media := midia.New(midia.Deps{Pool: rt.Pool, Clock: clk, Log: log.With("tarefa", "imagens"), Store: store})
+		wg.Go(func() { media.Run(ctx, cfg.Media.Workers, 2*time.Second) })
+		log.Info("processamento de imagens ligado", "simultaneas", cfg.Media.Workers)
+	}
+	// Transações vencidas do login com Google.
+	wg.Go(func() {
+		t := time.NewTicker(10 * time.Minute)
+		defer t.Stop()
+		for {
+			if _, err := identidade.PruneOIDC(ctx, rt.Pool, clk.Now()); err != nil && ctx.Err() == nil {
+				log.Warn("limpeza das transações do Google falhou", "error", err.Error())
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+			}
+		}
+	})
 
 	// Pagamentos: reconsulta cobranças Pix pendentes ou de resultado desconhecido (R-PAG-09/16).
 	if prov != nil {

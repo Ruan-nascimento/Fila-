@@ -77,3 +77,20 @@ func normalizeRecoveryCode(s string) (string, bool) {
 	}
 	return out.String(), true
 }
+
+// newNumericCode gera um código de n dígitos sem viés (reautenticação por e-mail).
+func newNumericCode(n int) (string, error) {
+	out := make([]byte, n)
+	buf := make([]byte, 1)
+	for i := 0; i < n; {
+		if _, err := rand.Read(buf); err != nil {
+			return "", err
+		}
+		if buf[0] >= 250 { // 250 = 25 × 10: descarta o resto para não favorecer dígitos
+			continue
+		}
+		out[i] = '0' + buf[0]%10
+		i++
+	}
+	return string(out), nil
+}

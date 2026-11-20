@@ -197,6 +197,27 @@ func (e AnalyticsValueStatus) Valid() bool {
 	}
 }
 
+// Defines values for Appearance.
+const (
+	AppearanceDark   Appearance = "dark"
+	AppearanceLight  Appearance = "light"
+	AppearanceSystem Appearance = "system"
+)
+
+// Valid indicates whether the value is a known member of the Appearance enum.
+func (e Appearance) Valid() bool {
+	switch e {
+	case AppearanceDark:
+		return true
+	case AppearanceLight:
+		return true
+	case AppearanceSystem:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AudienceKind.
 const (
 	AudienceKindAccount      AudienceKind = "account"
@@ -438,16 +459,25 @@ const (
 	ErrorCodeDuplicateService                    ErrorCode = "duplicate_service"
 	ErrorCodeEmailNotVerified                    ErrorCode = "email_not_verified"
 	ErrorCodeForbidden                           ErrorCode = "forbidden"
+	ErrorCodeGoogleUnavailable                   ErrorCode = "google_unavailable"
 	ErrorCodeIdempotencyInProgress               ErrorCode = "idempotency_in_progress"
 	ErrorCodeIdempotencyKeyMissing               ErrorCode = "idempotency_key_missing"
 	ErrorCodeIdempotencyKeyReused                ErrorCode = "idempotency_key_reused"
+	ErrorCodeIdentityAlreadyLinked               ErrorCode = "identity_already_linked"
+	ErrorCodeImageDimensions                     ErrorCode = "image_dimensions"
+	ErrorCodeImageInvalid                        ErrorCode = "image_invalid"
+	ErrorCodeImageUnsupported                    ErrorCode = "image_unsupported"
 	ErrorCodeInsufficientPoints                  ErrorCode = "insufficient_points"
 	ErrorCodeInternalError                       ErrorCode = "internal_error"
 	ErrorCodeInvalidCredentials                  ErrorCode = "invalid_credentials"
 	ErrorCodeInvalidTransition                   ErrorCode = "invalid_transition"
 	ErrorCodeInviteInvalid                       ErrorCode = "invite_invalid"
 	ErrorCodeItemAlreadyPerformed                ErrorCode = "item_already_performed"
+	ErrorCodeLastAccessMethod                    ErrorCode = "last_access_method"
 	ErrorCodeLoyaltyProgramDisabled              ErrorCode = "loyalty_program_disabled"
+	ErrorCodeMediaDisabled                       ErrorCode = "media_disabled"
+	ErrorCodeMediaNotAttachable                  ErrorCode = "media_not_attachable"
+	ErrorCodeNoPassword                          ErrorCode = "no_password"
 	ErrorCodeNoWaitingParticipant                ErrorCode = "no_waiting_participant"
 	ErrorCodeNotFound                            ErrorCode = "not_found"
 	ErrorCodeOrderNotEditable                    ErrorCode = "order_not_editable"
@@ -458,6 +488,7 @@ const (
 	ErrorCodeOwnerSessionChallengeInvalid        ErrorCode = "owner_session_challenge_invalid"
 	ErrorCodeOwnerSessionReplaced                ErrorCode = "owner_session_replaced"
 	ErrorCodeOwnerSessionRequired                ErrorCode = "owner_session_required"
+	ErrorCodePasswordAvailable                   ErrorCode = "password_available"
 	ErrorCodePayloadTooLarge                     ErrorCode = "payload_too_large"
 	ErrorCodePaymentAmountMismatch               ErrorCode = "payment_amount_mismatch"
 	ErrorCodePaymentMethodNotAllowed             ErrorCode = "payment_method_not_allowed"
@@ -472,6 +503,7 @@ const (
 	ErrorCodeQueueHasPendingParticipants         ErrorCode = "queue_has_pending_participants"
 	ErrorCodeQueueNotOpen                        ErrorCode = "queue_not_open"
 	ErrorCodeRateLimited                         ErrorCode = "rate_limited"
+	ErrorCodeReauthCodeInvalid                   ErrorCode = "reauth_code_invalid"
 	ErrorCodeReauthenticationRequired            ErrorCode = "reauthentication_required"
 	ErrorCodeRecoveryCodeInvalid                 ErrorCode = "recovery_code_invalid"
 	ErrorCodeRefundExceedsAvailable              ErrorCode = "refund_exceeds_available"
@@ -528,11 +560,21 @@ func (e ErrorCode) Valid() bool {
 		return true
 	case ErrorCodeForbidden:
 		return true
+	case ErrorCodeGoogleUnavailable:
+		return true
 	case ErrorCodeIdempotencyInProgress:
 		return true
 	case ErrorCodeIdempotencyKeyMissing:
 		return true
 	case ErrorCodeIdempotencyKeyReused:
+		return true
+	case ErrorCodeIdentityAlreadyLinked:
+		return true
+	case ErrorCodeImageDimensions:
+		return true
+	case ErrorCodeImageInvalid:
+		return true
+	case ErrorCodeImageUnsupported:
 		return true
 	case ErrorCodeInsufficientPoints:
 		return true
@@ -546,7 +588,15 @@ func (e ErrorCode) Valid() bool {
 		return true
 	case ErrorCodeItemAlreadyPerformed:
 		return true
+	case ErrorCodeLastAccessMethod:
+		return true
 	case ErrorCodeLoyaltyProgramDisabled:
+		return true
+	case ErrorCodeMediaDisabled:
+		return true
+	case ErrorCodeMediaNotAttachable:
+		return true
+	case ErrorCodeNoPassword:
 		return true
 	case ErrorCodeNoWaitingParticipant:
 		return true
@@ -567,6 +617,8 @@ func (e ErrorCode) Valid() bool {
 	case ErrorCodeOwnerSessionReplaced:
 		return true
 	case ErrorCodeOwnerSessionRequired:
+		return true
+	case ErrorCodePasswordAvailable:
 		return true
 	case ErrorCodePayloadTooLarge:
 		return true
@@ -595,6 +647,8 @@ func (e ErrorCode) Valid() bool {
 	case ErrorCodeQueueNotOpen:
 		return true
 	case ErrorCodeRateLimited:
+		return true
+	case ErrorCodeReauthCodeInvalid:
 		return true
 	case ErrorCodeReauthenticationRequired:
 		return true
@@ -863,6 +917,24 @@ func (e FinancialIssueStatus) Valid() bool {
 	}
 }
 
+// Defines values for GoogleStartRequestIntent.
+const (
+	Link  GoogleStartRequestIntent = "link"
+	Login GoogleStartRequestIntent = "login"
+)
+
+// Valid indicates whether the value is a known member of the GoogleStartRequestIntent enum.
+func (e GoogleStartRequestIntent) Valid() bool {
+	switch e {
+	case Link:
+		return true
+	case Login:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for InterruptServiceRequestItemsOutcome.
 const (
 	InterruptServiceRequestItemsOutcomeFullyPerformed     InterruptServiceRequestItemsOutcome = "fully_performed"
@@ -956,6 +1028,78 @@ func (e LedgerEntryKind) Valid() bool {
 	case Hold:
 		return true
 	case HoldRelease:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MediaPurpose.
+const (
+	Avatar            MediaPurpose = "avatar"
+	Logo              MediaPurpose = "logo"
+	ProfessionalPhoto MediaPurpose = "professional_photo"
+)
+
+// Valid indicates whether the value is a known member of the MediaPurpose enum.
+func (e MediaPurpose) Valid() bool {
+	switch e {
+	case Avatar:
+		return true
+	case Logo:
+		return true
+	case ProfessionalPhoto:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MediaUploadFailureReason.
+const (
+	MediaUploadFailureReasonDimensions        MediaUploadFailureReason = "dimensions"
+	MediaUploadFailureReasonInvalidImage      MediaUploadFailureReason = "invalid_image"
+	MediaUploadFailureReasonLessThannil       MediaUploadFailureReason = "<nil>"
+	MediaUploadFailureReasonProcessingError   MediaUploadFailureReason = "processing_error"
+	MediaUploadFailureReasonUnsupportedFormat MediaUploadFailureReason = "unsupported_format"
+)
+
+// Valid indicates whether the value is a known member of the MediaUploadFailureReason enum.
+func (e MediaUploadFailureReason) Valid() bool {
+	switch e {
+	case MediaUploadFailureReasonDimensions:
+		return true
+	case MediaUploadFailureReasonInvalidImage:
+		return true
+	case MediaUploadFailureReasonLessThannil:
+		return true
+	case MediaUploadFailureReasonProcessingError:
+		return true
+	case MediaUploadFailureReasonUnsupportedFormat:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MediaUploadStatus.
+const (
+	MediaUploadStatusAttached   MediaUploadStatus = "attached"
+	MediaUploadStatusFailed     MediaUploadStatus = "failed"
+	MediaUploadStatusProcessing MediaUploadStatus = "processing"
+	MediaUploadStatusReady      MediaUploadStatus = "ready"
+)
+
+// Valid indicates whether the value is a known member of the MediaUploadStatus enum.
+func (e MediaUploadStatus) Valid() bool {
+	switch e {
+	case MediaUploadStatusAttached:
+		return true
+	case MediaUploadStatusFailed:
+		return true
+	case MediaUploadStatusProcessing:
+		return true
+	case MediaUploadStatusReady:
 		return true
 	default:
 		return false
@@ -1067,6 +1211,66 @@ func (e OwnerSessionConflictOtherSessionChannel) Valid() bool {
 	case OwnerSessionConflictOtherSessionChannelDesktopAuthorized:
 		return true
 	case OwnerSessionConflictOtherSessionChannelUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for Palette.
+const (
+	Amber   Palette = "amber"
+	Blue    Palette = "blue"
+	Cyan    Palette = "cyan"
+	Emerald Palette = "emerald"
+	Fuchsia Palette = "fuchsia"
+	Green   Palette = "green"
+	Indigo  Palette = "indigo"
+	Lime    Palette = "lime"
+	Orange  Palette = "orange"
+	Pink    Palette = "pink"
+	Purple  Palette = "purple"
+	Red     Palette = "red"
+	Rose    Palette = "rose"
+	Sky     Palette = "sky"
+	Teal    Palette = "teal"
+	Violet  Palette = "violet"
+)
+
+// Valid indicates whether the value is a known member of the Palette enum.
+func (e Palette) Valid() bool {
+	switch e {
+	case Amber:
+		return true
+	case Blue:
+		return true
+	case Cyan:
+		return true
+	case Emerald:
+		return true
+	case Fuchsia:
+		return true
+	case Green:
+		return true
+	case Indigo:
+		return true
+	case Lime:
+		return true
+	case Orange:
+		return true
+	case Pink:
+		return true
+	case Purple:
+		return true
+	case Red:
+		return true
+	case Rose:
+		return true
+	case Sky:
+		return true
+	case Teal:
+		return true
+	case Violet:
 		return true
 	default:
 		return false
@@ -1517,6 +1721,24 @@ func (e SessionViewEndedReason) Valid() bool {
 	case SessionViewEndedReasonOwnerSessionMigration:
 		return true
 	case SessionViewEndedReasonOwnerSessionReplaced:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionViewSessionAuthMethod.
+const (
+	Google   SessionViewSessionAuthMethod = "google"
+	Password SessionViewSessionAuthMethod = "password"
+)
+
+// Valid indicates whether the value is a known member of the SessionViewSessionAuthMethod enum.
+func (e SessionViewSessionAuthMethod) Valid() bool {
+	switch e {
+	case Google:
+		return true
+	case Password:
 		return true
 	default:
 		return false
@@ -2228,6 +2450,9 @@ type AnalyticsValue struct {
 // AnalyticsValueStatus defines model for AnalyticsValue.Status.
 type AnalyticsValueStatus string
 
+// Appearance Preferência de aparência da pessoa (a cor principal é da loja).
+type Appearance string
+
 // AudienceKind Canal/audiência de eventos SSE.
 type AudienceKind string
 
@@ -2511,10 +2736,20 @@ type ErrorCode string
 // Establishment defines model for Establishment.
 type Establishment struct {
 	// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
-	Id       Id     `json:"id"`
-	Name     string `json:"name"`
-	Slug     string `json:"slug"`
-	Timezone string `json:"timezone"`
+	Id   Id        `json:"id"`
+	Logo *ImageRef `json:"logo"`
+	Name string    `json:"name"`
+
+	// Palette Paleta do catálogo fechado (padrão purple).
+	Palette           Palette `json:"palette"`
+	PublicAddress     *string `json:"public_address"`
+	PublicDescription *string `json:"public_description"`
+	PublicPhone       *string `json:"public_phone"`
+
+	// PublicUrl Link canônico da loja (origem pública configurada + slug). Base do QR Code.
+	PublicUrl string `json:"public_url"`
+	Slug      string `json:"slug"`
+	Timezone  string `json:"timezone"`
 
 	// Version Versão do agregado; incrementa a cada mudança.
 	Version Version `json:"version"`
@@ -2609,6 +2844,18 @@ type FinancialIssueKind string
 // FinancialIssueStatus defines model for FinancialIssueStatus.
 type FinancialIssueStatus string
 
+// GoogleStartRequest defines model for GoogleStartRequest.
+type GoogleStartRequest struct {
+	EstablishmentSlug *string                  `json:"establishment_slug,omitempty"`
+	Intent            GoogleStartRequestIntent `json:"intent"`
+
+	// ReturnTo Rota interna: /conta, /loja/{slug}, /loja/{slug}/historico ou /loja/{slug}/pontos. Qualquer outra → 400.
+	ReturnTo *string `json:"return_to,omitempty"`
+}
+
+// GoogleStartRequestIntent defines model for GoogleStartRequest.Intent.
+type GoogleStartRequestIntent string
+
 // HistoryEntry defines model for HistoryEntry.
 type HistoryEntry struct {
 	Items []struct {
@@ -2633,6 +2880,20 @@ type HistoryEntry struct {
 
 // Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
 type Id = openapi_types.UUID
+
+// ImageRef Variantes prontas (dimensões reais declaradas). Nunca bytes nem chaves de armazenamento.
+type ImageRef struct {
+	Variants []ImageVariant `json:"variants"`
+}
+
+// ImageVariant defines model for ImageVariant.
+type ImageVariant struct {
+	Height int `json:"height"`
+
+	// Url Caminho relativo; muda quando a imagem muda.
+	Url   string `json:"url"`
+	Width int    `json:"width"`
+}
 
 // InterruptServiceRequest defines model for InterruptServiceRequest.
 type InterruptServiceRequest struct {
@@ -2722,6 +2983,25 @@ type LoyaltySummary struct {
 	ProgramEnabled bool `json:"program_enabled"`
 }
 
+// MediaPurpose defines model for MediaPurpose.
+type MediaPurpose string
+
+// MediaUpload defines model for MediaUpload.
+type MediaUpload struct {
+	FailureReason *MediaUploadFailureReason `json:"failure_reason"`
+
+	// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	Id      Id                `json:"id"`
+	Purpose MediaPurpose      `json:"purpose"`
+	Status  MediaUploadStatus `json:"status"`
+}
+
+// MediaUploadFailureReason defines model for MediaUpload.FailureReason.
+type MediaUploadFailureReason string
+
+// MediaUploadStatus defines model for MediaUpload.Status.
+type MediaUploadStatus string
+
 // MembershipView defines model for MembershipView.
 type MembershipView struct {
 	// EstablishmentId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
@@ -2740,6 +3020,48 @@ type Money struct {
 
 // MoneyCurrency defines model for Money.Currency.
 type MoneyCurrency string
+
+// MyProfessionalProfile defines model for MyProfessionalProfile.
+type MyProfessionalProfile struct {
+	DisplayName string `json:"display_name"`
+
+	// EstablishmentId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	EstablishmentId   Id        `json:"establishment_id"`
+	EstablishmentName string    `json:"establishment_name"`
+	Photo             *ImageRef `json:"photo"`
+
+	// ProfessionalId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	ProfessionalId Id `json:"professional_id"`
+
+	// Version Versão do agregado; incrementa a cada mudança.
+	Version Version `json:"version"`
+}
+
+// MyProfile defines model for MyProfile.
+type MyProfile struct {
+	// Appearance Preferência de aparência da pessoa (a cor principal é da loja).
+	Appearance Appearance `json:"appearance"`
+	Avatar     *ImageRef  `json:"avatar"`
+
+	// Email Só leitura (não há troca de e-mail por PATCH).
+	Email         openapi_types.Email `json:"email"`
+	EmailVerified bool                `json:"email_verified"`
+	Google        struct {
+		Email  *string `json:"email"`
+		Linked bool    `json:"linked"`
+	} `json:"google"`
+
+	// HasPassword Falso em conta só com Google (não há senha para trocar ou conferir).
+	HasPassword bool `json:"has_password"`
+
+	// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	Id     Id            `json:"id"`
+	Name   string        `json:"name"`
+	Status AccountStatus `json:"status"`
+
+	// Version Versão do agregado; incrementa a cada mudança.
+	Version Version `json:"version"`
+}
 
 // Nick Texto puro (normalizado NFC, sem caracteres de controle). Exibido sempre como texto, nunca HTML.
 type Nick = string
@@ -2894,6 +3216,9 @@ type PageInfo struct {
 	NextCursor *string `json:"next_cursor"`
 }
 
+// Palette Paleta do catálogo fechado (padrão purple).
+type Palette string
+
 // Participation defines model for Participation.
 type Participation struct {
 	CalledAt *Timestamp `json:"called_at,omitempty"`
@@ -3033,6 +3358,9 @@ type Professional struct {
 	Id            Id      `json:"id"`
 	PendingInvite *Invite `json:"pending_invite,omitempty"`
 
+	// Photo Foto pública publicada pelo profissional (o dono pode retirar a publicação).
+	Photo *ImageRef `json:"photo,omitempty"`
+
 	// QueueId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
 	QueueId     Id                 `json:"queue_id"`
 	QueueLetter string             `json:"queue_letter"`
@@ -3045,13 +3373,32 @@ type Professional struct {
 // ProfessionalStatus defines model for ProfessionalStatus.
 type ProfessionalStatus string
 
+// PublicConfig defines model for PublicConfig.
+type PublicConfig struct {
+	GoogleLogin  bool `json:"google_login"`
+	MediaUploads bool `json:"media_uploads"`
+
+	// PublicBaseUrl Origem pública canônica (FILA_PUBLIC_BASE_URL) usada em links e QR Codes.
+	PublicBaseUrl string `json:"public_base_url"`
+}
+
 // PublicEstablishment defines model for PublicEstablishment.
 type PublicEstablishment struct {
+	Address     *string `json:"address"`
+	Description *string `json:"description"`
+
 	// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
-	Id       Id     `json:"id"`
-	Name     string `json:"name"`
-	Slug     string `json:"slug"`
-	Timezone string `json:"timezone"`
+	Id   Id        `json:"id"`
+	Logo *ImageRef `json:"logo"`
+	Name string    `json:"name"`
+
+	// Palette Paleta do catálogo fechado (padrão purple).
+	Palette Palette `json:"palette"`
+
+	// Phone E.164 publicado pelo dono.
+	Phone    *string `json:"phone"`
+	Slug     string  `json:"slug"`
+	Timezone string  `json:"timezone"`
 }
 
 // PublicQueue Somente dados públicos. Sem nick, serviços, valores ou contatos.
@@ -3062,6 +3409,9 @@ type PublicQueue struct {
 
 		// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
 		Id Id `json:"id"`
+
+		// Photo Só a foto profissional publicada (nunca avatar pessoal nem foto de cliente).
+		Photo *ImageRef `json:"photo"`
 	} `json:"professional"`
 
 	// QueueId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
@@ -3102,9 +3452,10 @@ type ReasonRequest struct {
 	Reason Reason `json:"reason"`
 }
 
-// ReauthenticateRequest defines model for ReauthenticateRequest.
+// ReauthenticateRequest `password` (conta com senha) OU `email_code` (conta só com Google; ver `requestReauthCode`).
 type ReauthenticateRequest struct {
-	Password string `json:"password"`
+	EmailCode *string `json:"email_code,omitempty"`
+	Password  *string `json:"password,omitempty"`
 }
 
 // Receipt defines model for Receipt.
@@ -3332,6 +3683,9 @@ type SessionView struct {
 	// Memberships Vínculos de equipe. Só concedem permissão com sessão de contexto staff.
 	Memberships []MembershipView `json:"memberships"`
 	Session     *struct {
+		// AuthMethod Como a sessão foi aberta. Google só abre sessão de cliente (nunca de equipe).
+		AuthMethod *SessionViewSessionAuthMethod `json:"auth_method,omitempty"`
+
 		// ExpiresAt RFC 3339 em UTC com sufixo Z.
 		ExpiresAt Timestamp   `json:"expires_at"`
 		Kind      SessionKind `json:"kind"`
@@ -3347,6 +3701,28 @@ type SessionView struct {
 
 // SessionViewEndedReason O cookie apresentado deixou de valer porque o dono entrou em outro aparelho (ou pela migração da sessão única).
 type SessionViewEndedReason string
+
+// SessionViewSessionAuthMethod Como a sessão foi aberta. Google só abre sessão de cliente (nunca de equipe).
+type SessionViewSessionAuthMethod string
+
+// SetAssetRequest defines model for SetAssetRequest.
+type SetAssetRequest struct {
+	// AssetId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	AssetId Id `json:"asset_id"`
+
+	// ExpectedVersion Versão do agregado; incrementa a cada mudança.
+	ExpectedVersion Version `json:"expected_version"`
+}
+
+// SetProfessionalPhotoRequest `asset_id` (envio próprio, finalidade professional_photo) OU `from_avatar: true`.
+type SetProfessionalPhotoRequest struct {
+	// AssetId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	AssetId *Id `json:"asset_id,omitempty"`
+
+	// ExpectedVersion Versão do agregado; incrementa a cada mudança.
+	ExpectedVersion Version `json:"expected_version"`
+	FromAvatar      *bool   `json:"from_avatar,omitempty"`
+}
 
 // SetServiceProfessionalsRequest defines model for SetServiceProfessionalsRequest.
 type SetServiceProfessionalsRequest struct {
@@ -3365,8 +3741,11 @@ type SnapshotCursor = StreamCursor
 type StaffQueue struct {
 	// Entries Aguardando (ordem FIFO), chamado e em atendimento.
 	Entries []struct {
-		CalledAt                *Timestamp `json:"called_at,omitempty"`
-		HasPendingChangeRequest *bool      `json:"has_pending_change_request,omitempty"`
+		CalledAt *Timestamp `json:"called_at,omitempty"`
+
+		// CustomerAvatar Foto pessoal do cliente com conta, só para a equipe e só com a participação ativa (URL reautorizada a cada pedido).
+		CustomerAvatar          *ImageRef `json:"customer_avatar,omitempty"`
+		HasPendingChangeRequest *bool     `json:"has_pending_change_request,omitempty"`
 
 		// Nick Texto puro (normalizado NFC, sem caracteres de controle). Exibido sempre como texto, nunca HTML.
 		Nick Nick `json:"nick"`
@@ -3461,7 +3840,19 @@ type UpdateEstablishmentRequest struct {
 	// ExpectedVersion Versão do agregado; incrementa a cada mudança.
 	ExpectedVersion Version `json:"expected_version"`
 	Name            *string `json:"name,omitempty"`
-	Slug            *string `json:"slug,omitempty"`
+
+	// Palette Paleta do catálogo fechado (padrão purple).
+	Palette *Palette `json:"palette,omitempty"`
+
+	// PublicAddress Texto simples; vazio remove.
+	PublicAddress *string `json:"public_address,omitempty"`
+
+	// PublicDescription Texto simples; vazio remove.
+	PublicDescription *string `json:"public_description,omitempty"`
+
+	// PublicPhone Telefone/WhatsApp público (será publicado); normalizado para E.164; vazio remove.
+	PublicPhone *string `json:"public_phone,omitempty"`
+	Slug        *string `json:"slug,omitempty"`
 
 	// Timezone Identificador IANA, ex. America/Sao_Paulo.
 	Timezone *string `json:"timezone,omitempty"`
@@ -3483,9 +3874,14 @@ type UpdateProfessionalRequest struct {
 	ExpectedVersion Version `json:"expected_version"`
 }
 
-// UpdateProfileRequest defines model for UpdateProfileRequest.
+// UpdateProfileRequest Pelo menos `name` ou `appearance`.
 type UpdateProfileRequest struct {
-	Name string `json:"name"`
+	// Appearance Preferência de aparência da pessoa (a cor principal é da loja).
+	Appearance *Appearance `json:"appearance,omitempty"`
+
+	// ExpectedVersion Versão do agregado; incrementa a cada mudança.
+	ExpectedVersion *Version `json:"expected_version,omitempty"`
+	Name            *string  `json:"name,omitempty"`
 }
 
 // UpdateRewardRequest defines model for UpdateRewardRequest.
@@ -3583,6 +3979,9 @@ type AnalyticsService = Id
 // AnalyticsTo defines model for AnalyticsTo.
 type AnalyticsTo = openapi_types.Date
 
+// AssetId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+type AssetId = Id
+
 // ChangeRequestId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
 type ChangeRequestId = Id
 
@@ -3600,6 +3999,9 @@ type EstablishmentId = Id
 
 // IdempotencyKey defines model for IdempotencyKey.
 type IdempotencyKey = string
+
+// ImageSize defines model for ImageSize.
+type ImageSize = int
 
 // InviteId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
 type InviteId = Id
@@ -3680,6 +4082,16 @@ type LoyaltyProgramOk struct {
 	Data LoyaltyProgram `json:"data"`
 }
 
+// MyProfessionalProfileOk defines model for MyProfessionalProfileOk.
+type MyProfessionalProfileOk struct {
+	Data MyProfessionalProfile `json:"data"`
+}
+
+// MyProfileOk defines model for MyProfileOk.
+type MyProfileOk struct {
+	Data MyProfile `json:"data"`
+}
+
 // NotFound RFC 9457 (application/problem+json) com extensões.
 type NotFound = Problem
 
@@ -3733,6 +4145,9 @@ type Unauthorized = Problem
 // Unexpected RFC 9457 (application/problem+json) com extensões.
 type Unexpected = Problem
 
+// UnsupportedMediaType RFC 9457 (application/problem+json) com extensões.
+type UnsupportedMediaType = Problem
+
 // VisitOk defines model for VisitOk.
 type VisitOk struct {
 	Data Visit `json:"data"`
@@ -3743,6 +4158,13 @@ type GetLiveness200JSONResponseBodyStatus string
 
 // GetReadiness200JSONResponseBodyStatus defines parameters for GetReadiness.
 type GetReadiness200JSONResponseBodyStatus string
+
+// GoogleAuthCallbackParams defines parameters for GoogleAuthCallback.
+type GoogleAuthCallbackParams struct {
+	State *string `form:"state,omitempty" json:"state,omitempty"`
+	Code  *string `form:"code,omitempty" json:"code,omitempty"`
+	Error *string `form:"error,omitempty" json:"error,omitempty"`
+}
 
 // GetAnalyticsBreakdownParams defines parameters for GetAnalyticsBreakdown.
 type GetAnalyticsBreakdownParams struct {
@@ -3961,8 +4383,32 @@ type RevokeInviteParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// SetEstablishmentLogoParams defines parameters for SetEstablishmentLogo.
+type SetEstablishmentLogoParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// RemoveEstablishmentLogoParams defines parameters for RemoveEstablishmentLogo.
+type RemoveEstablishmentLogoParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // UpdateLoyaltyProgramParams defines parameters for UpdateLoyaltyProgram.
 type UpdateLoyaltyProgramParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// SetMyProfessionalPhotoParams defines parameters for SetMyProfessionalPhoto.
+type SetMyProfessionalPhotoParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// RemoveMyProfessionalPhotoParams defines parameters for RemoveMyProfessionalPhoto.
+type RemoveMyProfessionalPhotoParams struct {
 	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
@@ -4132,6 +4578,12 @@ type CreateInviteParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// RemoveProfessionalPhotoParams defines parameters for RemoveProfessionalPhoto.
+type RemoveProfessionalPhotoParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // ReactivateProfessionalParams defines parameters for ReactivateProfessional.
 type ReactivateProfessionalParams struct {
 	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
@@ -4255,6 +4707,18 @@ type UpdateMyProfileParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// SetMyAvatarParams defines parameters for SetMyAvatar.
+type SetMyAvatarParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// RemoveMyAvatarParams defines parameters for RemoveMyAvatar.
+type RemoveMyAvatarParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // RequestAccountDeletionParams defines parameters for RequestAccountDeletion.
 type RequestAccountDeletionParams struct {
 	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
@@ -4278,6 +4742,22 @@ type ListMyLoyaltyLedgerParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// UploadMediaParams defines parameters for UploadMedia.
+type UploadMediaParams struct {
+	Purpose MediaPurpose `form:"purpose" json:"purpose"`
+
+	// EstablishmentId Obrigatório para logo e professional_photo.
+	EstablishmentId *Id      `form:"establishment_id,omitempty" json:"establishment_id,omitempty"`
+	CropX           *float32 `form:"crop_x,omitempty" json:"crop_x,omitempty"`
+	CropY           *float32 `form:"crop_y,omitempty" json:"crop_y,omitempty"`
+
+	// CropSize Recorte quadrado normalizado sobre a imagem orientada (x,y relativos a largura/altura; size ao menor lado). Os três juntos ou nenhum.
+	CropSize *float32 `form:"crop_size,omitempty" json:"crop_size,omitempty"`
+
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // OpenEventStreamParams defines parameters for OpenEventStream.
 type OpenEventStreamParams struct {
 	EstablishmentId Id `form:"establishment_id" json:"establishment_id"`
@@ -4296,6 +4776,9 @@ type VerifyEmailJSONRequestBody = TokenRequest
 
 // ResendVerificationJSONRequestBody defines body for ResendVerification for application/json ContentType.
 type ResendVerificationJSONRequestBody = EmailRequest
+
+// StartGoogleAuthJSONRequestBody defines body for StartGoogleAuth for application/json ContentType.
+type StartGoogleAuthJSONRequestBody = GoogleStartRequest
 
 // AcceptInviteJSONRequestBody defines body for AcceptInvite for application/json ContentType.
 type AcceptInviteJSONRequestBody = AcceptInviteRequest
@@ -4342,8 +4825,20 @@ type ResolveFinancialIssueJSONRequestBody = ResolveIssueRequest
 // RevokeInviteJSONRequestBody defines body for RevokeInvite for application/json ContentType.
 type RevokeInviteJSONRequestBody = EmptyRequest
 
+// SetEstablishmentLogoJSONRequestBody defines body for SetEstablishmentLogo for application/json ContentType.
+type SetEstablishmentLogoJSONRequestBody = SetAssetRequest
+
+// RemoveEstablishmentLogoJSONRequestBody defines body for RemoveEstablishmentLogo for application/json ContentType.
+type RemoveEstablishmentLogoJSONRequestBody = VersionedRequest
+
 // UpdateLoyaltyProgramJSONRequestBody defines body for UpdateLoyaltyProgram for application/json ContentType.
 type UpdateLoyaltyProgramJSONRequestBody = UpdateLoyaltyProgramRequest
+
+// SetMyProfessionalPhotoJSONRequestBody defines body for SetMyProfessionalPhoto for application/json ContentType.
+type SetMyProfessionalPhotoJSONRequestBody = SetProfessionalPhotoRequest
+
+// RemoveMyProfessionalPhotoJSONRequestBody defines body for RemoveMyProfessionalPhoto for application/json ContentType.
+type RemoveMyProfessionalPhotoJSONRequestBody = VersionedRequest
 
 // AdjustClosedOrderJSONRequestBody defines body for AdjustClosedOrder for application/json ContentType.
 type AdjustClosedOrderJSONRequestBody = AdjustOrderRequest
@@ -4423,6 +4918,9 @@ type DeactivateProfessionalJSONRequestBody = VersionedReasonRequest
 // CreateInviteJSONRequestBody defines body for CreateInvite for application/json ContentType.
 type CreateInviteJSONRequestBody = CreateInviteRequest
 
+// RemoveProfessionalPhotoJSONRequestBody defines body for RemoveProfessionalPhoto for application/json ContentType.
+type RemoveProfessionalPhotoJSONRequestBody = VersionedReasonRequiredRequest
+
 // ReactivateProfessionalJSONRequestBody defines body for ReactivateProfessional for application/json ContentType.
 type ReactivateProfessionalJSONRequestBody = VersionedRequest
 
@@ -4485,6 +4983,12 @@ type RecoverVisitorSessionJSONRequestBody = RecoverVisitorSessionRequest
 
 // UpdateMyProfileJSONRequestBody defines body for UpdateMyProfile for application/json ContentType.
 type UpdateMyProfileJSONRequestBody = UpdateProfileRequest
+
+// SetMyAvatarJSONRequestBody defines body for SetMyAvatar for application/json ContentType.
+type SetMyAvatarJSONRequestBody = SetAssetRequest
+
+// RemoveMyAvatarJSONRequestBody defines body for RemoveMyAvatar for application/json ContentType.
+type RemoveMyAvatarJSONRequestBody = VersionedRequest
 
 // RequestAccountDeletionJSONRequestBody defines body for RequestAccountDeletion for application/json ContentType.
 type RequestAccountDeletionJSONRequestBody = RequestDeletionRequest

@@ -160,7 +160,7 @@ func TestAuthorizationSweepAllRoutes(t *testing.T) {
 			body["display_name"] = "Invasor"
 		case "setServiceProfessionals":
 			body["professional_ids"] = []string{}
-		case "revertRewardDelivery":
+		case "revertRewardDelivery", "removeProfessionalPhoto":
 			body["reason"] = "teste de autorização"
 		case "resolveFinancialIssue":
 			body = map[string]any{"resolution_note": "teste de autorização"}
