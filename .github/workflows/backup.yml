@@ -79,7 +79,8 @@ jobs:
           set -euo pipefail
           umask 077
           mkdir -p "$RUNNER_TEMP/bk"
-          docker run --rm -e DB -v "$RUNNER_TEMP/bk:/bk" postgres:18.7 \
+          # Mesmo usuário do runner: o dump decifrado precisa ser apagado (shred) logo abaixo.
+          docker run --rm --user "$(id -u):$(id -g)" -e DB -v "$RUNNER_TEMP/bk:/bk" postgres:18.7 \
             sh -c 'pg_dump --format=custom --no-owner --no-privileges --dbname="$DB" --file=/bk/fila.dump && pg_restore --list /bk/fila.dump > /bk/lista.txt'
           n="$(grep -c 'TABLE DATA' "$RUNNER_TEMP/bk/lista.txt" || true)"
           [ "$n" -gt 10 ] || { echo "::error::dump suspeito: só $n tabelas com dados"; exit 1; }
