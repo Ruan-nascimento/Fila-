@@ -1065,6 +1065,48 @@ Dado um dono logado no navegador, então ele acessa a gestão, mas a chamada dir
 
 Dado o movimento controlado de dois dias no fuso da loja, então uma comanda com dois serviços e um recebimento não duplica; recebimento num dia e estorno efetivado no seguinte aparecem nas datas certas e o líquido do intervalo é a diferença; dinheiro com troco soma só o valor devido; Pix pendente e estorno em análise não entram; chamada ausente fica fora da espera; evento às 23:30 locais conta no dia local; gráfico, tabela e registros paginados mostram o mesmo total; antes da coleta, base zero e filtro inaplicável têm estados próprios; resposta atrasada da loja A não aparece sob a loja B.
 
+## Configurações, fotos, Google e QR (ADR-0028)
+
+### C-CFG-01 — Google cria e autentica só cliente, sem elevar privilégio
+- Regras: ADR-0028 · Transições: T-AC-05, T-SS-08 · Contrato: `startGoogleAuth`, `googleAuthCallback` · Tipo: automatizado (TestGoogleLoginCreatesCustomerAndReturnsToShop, TestGoogleSessionOfOwnerNeverUnlocksManagement, TestGoogleConcurrentCallbacks)
+
+Dado o login com Google iniciado pela loja, então a conta nasce só de cliente, volta para a mesma loja e a sessão (`auth_method=google`) não abre a gestão, nem quando a conta tem vínculo de dono; o banco recusa sessão de equipe aberta pelo Google; callbacks simultâneos criam uma conta só.
+
+### C-CFG-02 — Callback recusa state ausente, errado, reutilizado, de outro navegador ou vencido e tokens inválidos
+- Regras: ADR-0028 · Transições: T-SS-08 · Contrato: `googleAuthCallback`, `startGoogleAuth` · Tipo: automatizado (TestGoogleCallbackRejections, TestGoogleStartRejectsUnsafeReturn)
+
+Dado um retorno do Google, então state ausente, errado, reutilizado, de outro navegador ou vencido, nonce, assinatura, emissor, audiência, azp ou expiração errados levam a `/entrar?google=falhou` sem sessão nem identidade; cancelamento leva a `google=cancelado`; destinos absolutos ou ambíguos são recusados no início; nada disso aparece nos logs.
+
+### C-CFG-03 — E-mail igual não vincula; vínculo explícito; último método protegido
+- Regras: ADR-0028 · Transições: T-AC-06, T-AC-07, T-SS-06 · Contrato: `unlinkGoogle`, `requestReauthCode`, `reauthenticate` · Tipo: automatizado (TestGoogleEmailRules, TestGoogleSessionOfOwnerNeverUnlocksManagement, TestGoogleOnlyAccountReauthAndDeletion)
+
+Dado um e-mail que já tem conta local, então o Google não vincula sozinho; e-mail que o Google não controla exige confirmação local; a mesma identidade continua na mesma conta quando o e-mail do Google muda; conectar exige reautenticação; identidade de outra conta é recusada; conta só com Google não desconecta o único método, reautentica por código no e-mail (só na própria sessão) e consegue excluir a conta.
+
+### C-CFG-04 — Convite para conta só com Google exige senha e não dá acesso pelo Google
+- Regras: ADR-0028 · Transições: T-AC-08 · Contrato: `acceptInvite` · Tipo: automatizado (TestGoogleOnlyAccountAcceptsInviteWithPassword)
+
+Dado uma conta só com Google convidada como profissional, então o aceite do convite define a primeira senha; o login de equipe por senha funciona e a sessão do Google continua sendo de cliente.
+
+### C-CFG-05 — Fotos: privadas por padrão, equipe só durante o atendimento
+- Regras: ADR-0028 · Contrato: `uploadMedia`, `getMediaUpload`, `setMyAvatar`, `removeMyAvatar`, `getMyAvatar`, `getCustomerAvatar`, `getPublicMedia` · Tipo: automatizado (TestAvatarLifecycleAndPrivacy, TestCustomerAvatarOnlyForQueueStaff, TestUploadValidation, TestWorkerFailureNeverPublishes; e2e configuracoes.spec.ts)
+
+Dado uma foto pessoal enviada e processada, então só a própria conta e a equipe da fila (com a participação ativa) a veem; o endpoint público e outros clientes não; envio aceito não muda o perfil; foto de outra pessoa ou de outra finalidade não é associada; versão antiga não sobrescreve a nova; SVG disfarçado, tipo falso, arquivo grande demais e imagem inválida são recusados; o worker nunca publica arquivo incompleto; a limpeza não apaga o que está associado.
+
+### C-CFG-06 — Foto profissional: publicação explícita e retirada pelo dono
+- Regras: ADR-0028 · Transições: T-PR-05, T-PR-06 · Contrato: `getMyProfessionalProfile`, `setMyProfessionalPhoto`, `removeMyProfessionalPhoto`, `removeProfessionalPhoto` · Tipo: automatizado (TestProfessionalPhotoPublication; e2e configuracoes.spec.ts)
+
+Dado um profissional que publica uma cópia da foto pessoal, então ela aparece no cartão público com URL própria; o dono retira a publicação com motivo auditado e o avatar pessoal continua.
+
+### C-CFG-07 — Identidade da loja: catálogo, versão, escopo e público sem dado privado
+- Regras: ADR-0028 · Transições: T-ES-01 · Contrato: `updateEstablishment`, `setEstablishmentLogo`, `removeEstablishmentLogo`, `getPublicEstablishmentBySlug`, `getPublicConfig` · Tipo: automatizado (TestStoreBranding, TestMyProfileSettings, configuracoes.test.tsx; e2e configuracoes.spec.ts)
+
+Dado o dono, então paleta fora do catálogo, texto longo, telefone inválido e campo desconhecido são recusados; duas abas produzem conflito visível; dono de outra loja e profissional não alteram; a página pública mostra paleta, descrição, telefone e logo sem dados privados; as 16 paletas passam AA em claro e escuro; a cor não vaza para outra loja nem para o login global.
+
+### C-CFG-08 — QR e entrada sem conta
+- Regras: ADR-0028 · Contrato: `getPublicConfig`, `createVisitorSession` · Tipo: automatizado (configuracoes.test.tsx; e2e configuracoes.spec.ts)
+
+Dado o painel do QR, então os três destinos geram exatamente o link esperado (decodificado por biblioteca independente), sem segredo; abrir o QR não cria visita; cliente logado que abre o QR de visitante não é desconectado; o login de cliente mostra "Entrar sem conta" mesmo sem Google; loja inexistente mostra indisponibilidade.
+
 ## Critérios de pronto do anexo (§15) → cenários
 
 | Critério do anexo | Cenários |

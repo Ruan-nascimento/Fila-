@@ -48,7 +48,10 @@ Não edite à mão: rode `python docs/tools/verificar_contrato.py --write`. Cél
 | `getReadiness` | `GET /healthz/ready` | sim | — | — | — | — | — | — | — |
 | `verifyEmail` | `POST /v1/auth/email-verification/confirm` | sim | — | — | — | — | — | — | T-AC-02 |
 | `resendVerification` | `POST /v1/auth/email-verification/resend` | sim | — | — | — | — | — | — | — |
-| `acceptInvite` | `POST /v1/auth/invites/accept` | sim | — | — | — | — | — | — | T-IN-02 |
+| `googleAuthCallback` | `GET /v1/auth/google/callback` | sim | — | — | — | — | — | — | T-AC-05, T-AC-06, T-SS-08 |
+| `startGoogleAuth` | `POST /v1/auth/google/start` | sim | — | — | — | — | — | — | T-AC-06 |
+| `unlinkGoogle` | `POST /v1/auth/google/unlink` | — | — | self | self | self | — | sim | T-AC-07 |
+| `acceptInvite` | `POST /v1/auth/invites/accept` | sim | — | — | — | — | — | — | T-IN-02, T-AC-08 |
 | `login` | `POST /v1/auth/login` | sim | — | — | — | — | — | — | T-SS-01 |
 | `logout` | `POST /v1/auth/logout` | — | — | self | self | self | — | — | T-SS-02 |
 | `cancelOwnerTakeover` | `POST /v1/auth/owner-session/cancel` | sim | — | — | — | — | — | — | — |
@@ -57,6 +60,7 @@ Não edite à mão: rode `python docs/tools/verificar_contrato.py --write`. Cél
 | `requestPasswordReset` | `POST /v1/auth/password-reset/request` | sim | — | — | — | — | — | — | T-PW-01 |
 | `changePassword` | `POST /v1/auth/password/change` | — | — | self | self | self | — | — | T-SS-03 |
 | `reauthenticate` | `POST /v1/auth/reauthenticate` | — | — | self | self | self | — | — | T-SS-06 |
+| `requestReauthCode` | `POST /v1/auth/reauthenticate/email-code` | — | — | self | self | self | — | — | T-SS-06 |
 | `registerAccount` | `POST /v1/auth/register` | sim | — | — | — | — | — | — | T-AC-01 |
 | `getDeletionRequestStatus` | `POST /v1/deletion-requests/status` | protocol_holder | — | — | — | — | — | — | — |
 | `getAnalyticsBreakdown` | `GET /v1/desktop/analytics/establishments/{establishmentId}/breakdowns/{dimension}` | — | — | — | — | — | — | — | — |
@@ -76,8 +80,13 @@ Não edite à mão: rode `python docs/tools/verificar_contrato.py --write`. Cél
 | `listFinancialIssues` | `GET /v1/establishments/{establishmentId}/financial-issues` | — | — | — | — | establishment | — | — | — |
 | `resolveFinancialIssue` | `POST /v1/establishments/{establishmentId}/financial-issues/{issueId}/resolve` | — | — | — | — | establishment | — | — | T-FI-02 |
 | `revokeInvite` | `POST /v1/establishments/{establishmentId}/invites/{inviteId}/revoke` | — | — | — | — | establishment | — | — | T-IN-03 |
+| `setEstablishmentLogo` | `PUT /v1/establishments/{establishmentId}/logo` | — | — | — | — | establishment | — | — | T-ES-01 |
+| `removeEstablishmentLogo` | `POST /v1/establishments/{establishmentId}/logo/remove` | — | — | — | — | establishment | — | — | T-ES-01 |
 | `getLoyaltyProgram` | `GET /v1/establishments/{establishmentId}/loyalty-program` | — | — | — | — | establishment | — | — | — |
 | `updateLoyaltyProgram` | `PUT /v1/establishments/{establishmentId}/loyalty-program` | — | — | — | — | establishment | — | — | T-LP-01, T-LP-02 |
+| `getMyProfessionalProfile` | `GET /v1/establishments/{establishmentId}/my-professional-profile` | — | — | — | self | self | — | — | — |
+| `setMyProfessionalPhoto` | `PUT /v1/establishments/{establishmentId}/my-professional-profile/photo` | — | — | — | self | self | — | — | T-PR-05 |
+| `removeMyProfessionalPhoto` | `POST /v1/establishments/{establishmentId}/my-professional-profile/photo/remove` | — | — | — | self | self | — | — | T-PR-05 |
 | `getCurrentVisit` | `GET /v1/establishments/{establishmentId}/my-visit` | — | visit_owner | visit_owner | — | — | — | — | — |
 | `listOrders` | `GET /v1/establishments/{establishmentId}/orders` | — | — | — | own_attendance | establishment | — | — | — |
 | `getOrder` | `GET /v1/establishments/{establishmentId}/orders/{orderId}` | — | visit_owner | visit_owner | own_attendance | establishment | — | — | — |
@@ -101,6 +110,7 @@ Não edite à mão: rode `python docs/tools/verificar_contrato.py --write`. Cél
 | `getParticipation` | `GET /v1/establishments/{establishmentId}/participations/{participationId}` | — | visit_owner | visit_owner | own_queue | establishment | — | — | — |
 | `cancelParticipation` | `POST /v1/establishments/{establishmentId}/participations/{participationId}/cancel` | — | visit_owner | visit_owner | — | establishment | — | — | T-P-04, T-P-05, T-O-05, T-CR-04 |
 | `completeService` | `POST /v1/establishments/{establishmentId}/participations/{participationId}/complete` | — | — | — | own_queue | establishment | — | — | T-P-08, T-O-04 |
+| `getCustomerAvatar` | `GET /v1/establishments/{establishmentId}/participations/{participationId}/customer-avatar/{size}` | — | — | — | own_queue | establishment | — | — | — |
 | `interruptService` | `POST /v1/establishments/{establishmentId}/participations/{participationId}/interrupt` | — | — | — | own_queue | establishment | — | — | T-P-09, T-O-06, T-CR-04 |
 | `markNoShow` | `POST /v1/establishments/{establishmentId}/participations/{participationId}/no-show` | — | — | — | own_queue | establishment | — | — | T-P-06, T-O-05, T-CR-04 |
 | `startService` | `POST /v1/establishments/{establishmentId}/participations/{participationId}/start` | — | — | — | own_queue | establishment | — | — | T-P-03 |
@@ -111,6 +121,7 @@ Não edite à mão: rode `python docs/tools/verificar_contrato.py --write`. Cél
 | `updateProfessional` | `PATCH /v1/establishments/{establishmentId}/professionals/{professionalId}` | — | — | — | — | establishment | — | — | T-PR-04 |
 | `deactivateProfessional` | `POST /v1/establishments/{establishmentId}/professionals/{professionalId}/deactivate` | — | — | — | — | establishment | — | sim | T-PR-02 |
 | `createInvite` | `POST /v1/establishments/{establishmentId}/professionals/{professionalId}/invites` | — | — | — | — | establishment | — | sim | T-IN-01 |
+| `removeProfessionalPhoto` | `POST /v1/establishments/{establishmentId}/professionals/{professionalId}/photo/remove` | — | — | — | — | establishment | — | — | T-PR-06 |
 | `reactivateProfessional` | `POST /v1/establishments/{establishmentId}/professionals/{professionalId}/reactivate` | — | — | — | — | establishment | — | sim | T-PR-03 |
 | `listStaffQueues` | `GET /v1/establishments/{establishmentId}/queues` | — | — | — | own_queue | establishment | — | — | — |
 | `signalAvailability` | `POST /v1/establishments/{establishmentId}/queues/{queueId}/availability-signal` | — | — | — | own_queue | — | — | — | T-Q-05 |
@@ -136,13 +147,21 @@ Não edite à mão: rode `python docs/tools/verificar_contrato.py --write`. Cél
 | `reactivateService` | `POST /v1/establishments/{establishmentId}/services/{serviceId}/reactivate` | — | — | — | — | establishment | — | — | T-SV-04 |
 | `createVisitorSession` | `POST /v1/establishments/{establishmentId}/visitor-sessions` | sim | — | — | — | — | — | — | T-VS-01 |
 | `recoverVisitorSession` | `POST /v1/establishments/{establishmentId}/visitor-sessions/recover` | sim | — | — | — | — | — | — | T-VS-02 |
+| `getMyProfile` | `GET /v1/me` | — | — | self | self | self | — | — | — |
 | `updateMyProfile` | `PATCH /v1/me` | — | — | self | self | self | — | — | — |
+| `setMyAvatar` | `PUT /v1/me/avatar` | — | — | self | self | self | — | — | — |
+| `removeMyAvatar` | `POST /v1/me/avatar/remove` | — | — | self | self | self | — | — | — |
+| `getMyAvatar` | `GET /v1/me/avatar/{size}` | — | — | self | self | self | — | — | — |
 | `requestAccountDeletion` | `POST /v1/me/deletion-request` | — | — | self | self | self | — | sim | T-AC-03, T-P-10, T-O-05, T-RW-06, T-LG-03 |
 | `listMyHistory` | `GET /v1/me/history` | — | — | self | — | — | — | — | — |
 | `getMyLoyalty` | `GET /v1/me/loyalty/{establishmentId}` | — | — | self | — | — | — | — | — |
 | `listMyLoyaltyLedger` | `GET /v1/me/loyalty/{establishmentId}/ledger` | — | — | self | — | — | — | — | — |
+| `uploadMedia` | `POST /v1/media/uploads` | — | — | self | establishment_member | establishment | — | — | — |
+| `getMediaUpload` | `GET /v1/media/uploads/{assetId}` | — | — | self | self | self | — | — | — |
+| `getPublicConfig` | `GET /v1/public/config` | sim | — | — | — | — | — | — | — |
 | `listPublicQueues` | `GET /v1/public/establishments/{establishmentId}/queues` | sim | — | — | — | — | — | — | — |
 | `listPublicServices` | `GET /v1/public/establishments/{establishmentId}/services` | sim | — | — | — | — | — | — | — |
+| `getPublicMedia` | `GET /v1/public/media/{assetId}/{size}` | sim | — | — | — | — | — | — | — |
 | `getPublicEstablishmentBySlug` | `GET /v1/public/slugs/{slug}` | sim | — | — | — | — | — | — | — |
 | `getSession` | `GET /v1/session` | sim | — | — | — | — | — | — | — |
 | `openEventStream` | `GET /v1/stream` | sim | visit_owner | self | own_queue | establishment | — | — | — |

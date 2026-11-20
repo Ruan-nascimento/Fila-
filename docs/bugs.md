@@ -28,6 +28,16 @@ Defeitos achados pelos testes e exercícios, com gravidade, como reproduzir e si
 | B-11-03 | Baixa | Erro antigo ficava ao lado do QR do Pix depois de a rede voltar | Rede caindo na geração do Pix | **Corrigido** (etapa 11), com teste |
 | B-11-04 | Baixa | Cliente que saía no meio de um pedido virava "erro 500" no log | Fechar a aba durante uma requisição | **Corrigido** (etapa 11): 499 informativo |
 
+### Configurações, fotos, Google e QR (ADR-0028)
+
+| Id | Gravidade | Defeito | Como reproduzir | Situação |
+|---|---|---|---|---|
+| B-28-01 | Média (acessibilidade/layout) | Em 320 px, "Minha conta" tinha rolagem horizontal: o campo de arquivo tem largura própria maior que a coluna | Celular 320 px → `/conta` com fotos ligadas → `scrollWidth` 443 > 320 | **Corrigido** (`w-full min-w-0` no campo). Teste e2e `320 px: sem rolagem horizontal nas telas novas` e varredura 320–1440 px |
+| B-28-02 | Média (layout) | Em 768 px, a prévia de identidade e o cartão do QR ficavam lado a lado e estouravam a coluna da gestão | Tablet 768 px → Configurações da loja → `scrollWidth` 771 | **Corrigido**: lado a lado só a partir de 1280 px. `e2e/telas.spec.ts` deixou de acusar a tela |
+| B-28-03 | Média (desempenho) | Foto 12 MP com EXIF de rotação: o worker girava a imagem inteira pixel a pixel (5,6 s e ~137 MiB por imagem) | `MEDIA_FOTO=foto-12mp.jpg go test ./internal/midia -run Measured -v` | **Corrigido**: recorte e redução no original e rotação só da variante; variantes menores a partir da maior (1,4 s, ~42 MiB). Teste de correção das 8 orientações: `TestProcessAppliesOrientationEveryCase` |
+| B-28-04 | Baixa (anterior a este trabalho) | Página da loja no celular desloca o layout ao carregar filas e serviços (CLS ≈ 0,17–0,20), com ou sem imagens | Build de produção, 390 px, `PerformanceObserver('layout-shift')` | **Aberto**: não faz parte deste escopo. As imagens não contribuem (medido: 0). Sugestão: reservar a altura das áreas de filas e serviços enquanto carregam |
+| B-28-05 | Baixa (testes, anterior a este trabalho) | Na suíte e2e existente, 5 testes falham também na revisão de partida neste ambiente: 3 dependem do simulador de Pix (`E2E_PIX_CONTROL`), `telas do cliente` procura "Seus pontos nesta loja" na aba Fila (o redesign moveu para a aba Pontos) e `telas da dona` esgota o tempo nas capturas | Rodar `e2e/telas.spec.ts` e `e2e/jornadas.spec.ts` sem simulador de Pix, na revisão `5bc96f0` | **Aberto**: mesmas falhas antes e depois (comparado lado a lado) |
+
 ## Defeitos dos próprios testes (etapa 13 e revisão)
 
 | Id | Defeito | Situação |

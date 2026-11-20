@@ -254,7 +254,25 @@ Resumo: automatizado: 126 · parcial: 0 · sem teste: 1 · sem cenário: 0 · au
 | C-OPS-02 — Implantação não perde fila | `frontend/e2e/operacao.spec.ts: implantação com gente na fila: nada se perde, ninguém vê erro e as telas voltam sozinhas` |
 | C-OPS-03 — Worker retoma depois de cair | `backend/cmd/worker/main_test.go: TestWorkerHeldDoesNothingUntilReleased`<br>`frontend/e2e/operacao.spec.ts: worker morto no meio do trabalho: ao voltar, faz tudo o que ficou parado (uma vez)` |
 | C-OPS-04 — Produção não ativa com integração financeira simulada | `backend/internal/platform/config/config_test.go: TestProductionPixOnlyOfficialHost`<br>`backend/internal/platform/config/config_test.go: TestStagingIsHardenedButNeverCharges` |
+| C-DON-01 — Outra sessão de dono ativa: cancelar mantém, confirmar transfere | **nenhum** |
+| C-DON-02 — Disputas concorrentes pela vaga | **nenhum** |
+| C-DON-03 — Escopo por conta, abas e migração | **nenhum** |
+| C-DON-04 — Dashboard só com instalação autorizada, sessão de dono e vínculo com a loja | **nenhum** |
+| C-DON-05 — Cálculos reconciliam com os registros | **nenhum** |
+| C-CFG-01 — Google cria e autentica só cliente, sem elevar privilégio | `backend/internal/api/google_test.go: TestGoogleConcurrentCallbacks`<br>`backend/internal/api/google_test.go: TestGoogleLoginCreatesCustomerAndReturnsToShop`<br>`backend/internal/api/google_test.go: TestGoogleSessionOfOwnerNeverUnlocksManagement` |
+| C-CFG-02 — Callback recusa state ausente, errado, reutilizado, de outro navegador ou vencido e tokens inválidos | `backend/internal/api/google_test.go: TestGoogleCallbackRejections`<br>`backend/internal/api/google_test.go: TestGoogleStartRejectsUnsafeReturn` |
+| C-CFG-03 — E-mail igual não vincula; vínculo explícito; último método protegido | `backend/internal/api/google_test.go: TestGoogleEmailRules`<br>`backend/internal/api/google_test.go: TestGoogleOnlyAccountReauthAndDeletion`<br>`backend/internal/api/google_test.go: TestGoogleSessionOfOwnerNeverUnlocksManagement` |
+| C-CFG-04 — Convite para conta só com Google exige senha e não dá acesso pelo Google | `backend/internal/api/google_test.go: TestGoogleOnlyAccountAcceptsInviteWithPassword` |
+| C-CFG-05 — Fotos: privadas por padrão, equipe só durante o atendimento | `backend/internal/api/midia_test.go: TestAvatarLifecycleAndPrivacy`<br>`backend/internal/api/midia_test.go: TestCustomerAvatarOnlyForQueueStaff`<br>`backend/internal/api/midia_test.go: TestUploadValidation`<br>`backend/internal/api/midia_test.go: TestWorkerFailureNeverPublishes`<br>`frontend/e2e/configuracoes.spec.ts: cliente envia foto; equipe da fila vê durante o atendimento; outro cliente não vê` |
+| C-CFG-06 — Foto profissional: publicação explícita e retirada pelo dono | `backend/internal/api/midia_test.go: TestProfessionalPhotoPublication`<br>`frontend/e2e/configuracoes.spec.ts: profissional publica a foto pública; ela aparece na escolha de profissional` |
+| C-CFG-07 — Identidade da loja: catálogo, versão, escopo e público sem dado privado | `backend/internal/api/midia_test.go: TestMyProfileSettings`<br>`backend/internal/api/midia_test.go: TestStoreBranding`<br>`frontend/e2e/configuracoes.spec.ts: dono muda paleta, logo e informações; visitante anônimo vê a identidade nova`<br>`frontend/src/features/configuracoes.test.tsx: catálogo fechado de 16 identificadores, iguais ao contrato, padrão purple` |
+| C-CFG-08 — QR e entrada sem conta | `backend/internal/api/google_test.go: TestGoogleDisabledKeepsPasswordLogin`<br>`frontend/e2e/configuracoes.spec.ts: QR sem conta: identificação por apelido, sem visita automática; cliente logado não é desconectado`<br>`frontend/src/features/configuracoes.test.tsx: três destinos tipados, montados com URL/URLSearchParams, sem segredo` |
 
 ## 3. Cenários sem teste automatizado
 
 - C-WEB-04 — Navegadores registrados (tipo declarado: manual)
+- C-DON-01 — Outra sessão de dono ativa: cancelar mantém, confirmar transfere (tipo declarado: automatizado (TestOwnerSessionConflictThenCancel, TestOwnerSessionTakeover, TestDesktopFollowsOwnerSession, frontend/src/pages/dono/sessao-unica.test.tsx, desktop-dono/testes/janela.mjs dashboard))
+- C-DON-02 — Disputas concorrentes pela vaga (tipo declarado: automatizado (TestOwnerConcurrentLogins, TestOwnerTakeoverRaceAndStaleChallenge, TestOwnerTakeoverWaitsForInFlightMutation))
+- C-DON-03 — Escopo por conta, abas e migração (tipo declarado: automatizado (TestOwnerSlotIsPerAccount, TestOwnerSameCookieAndChallengeBinding, TestOwnerSlotLifecycle, TestUpgradeKeepsOneOwnerSessionPerAccount))
+- C-DON-04 — Dashboard só com instalação autorizada, sessão de dono e vínculo com a loja (tipo declarado: automatizado (TestDesktopActivationAndProof, TestDesktopStoreScope, desktop-dono/testes/janela.mjs dashboard))
+- C-DON-05 — Cálculos reconciliam com os registros (tipo declarado: automatizado (TestAnalyticsCalculations, desktop-dono/dashboard/src/dashboard.test.tsx))

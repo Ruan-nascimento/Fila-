@@ -54,6 +54,8 @@ tags:
     description: Instalações do programa do dono (ativação, vínculo à sessão de dono, prova DPoP).
   - name: analitico
     description: Dashboard analítico exclusivo do programa desktop do dono.
+  - name: midia
+    description: Fotos de perfil, foto pública do profissional e logo da loja (ADR-0028).
 
 paths:
   /healthz/live:
@@ -351,6 +353,106 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
         default: { $ref: '#/components/responses/Unexpected' }
+  /v1/auth/reauthenticate/email-code:
+    post:
+      operationId: requestReauthCode
+      tags: [sessao]
+      summary: Envia um código de 8 dígitos ao e-mail verificado para reautenticar conta sem senha (só Google).
+      description: |
+        O código vale 10 minutos, só nesta sessão, e é usado em `reauthenticate` (`email_code`).
+        Conta com senha recebe `409 password_available` (use a senha).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: customer, scope: self }, { actor: professional, scope: self }, { actor: owner, scope: self }]
+      x-transitions: [T-SS-06]
+      responses:
+        '202': { $ref: '#/components/responses/AcceptedGeneric' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/auth/google/start:
+    post:
+      operationId: startGoogleAuth
+      tags: [sessao]
+      summary: Inicia o login (ou o vínculo) com Google — só jornada de cliente (ADR-0028).
+      description: |
+        OpenID Connect com Authorization Code e PKCE S256 no backend. Cria uma transação de uso único
+        (10 min) presa a este navegador (cookie HttpOnly de correlação), à intenção, ao retorno
+        validado (lista fechada de rotas internas) e à loja resolvida. Responde a URL do Google.
+        `link` exige sessão de conta com reautenticação recente. Loja inexistente → 404 (não inicia).
+        Sessão aberta pelo Google é sempre de cliente: nunca dá acesso à gestão.
+      security: [{}, { accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: public, scope: none }]
+      x-transitions: [T-AC-06]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GoogleStartRequest' }
+      responses:
+        '200':
+          description: URL de autorização do Google.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [authorization_url]
+                    properties:
+                      authorization_url: { type: string, format: uri }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/auth/google/callback:
+    get:
+      operationId: googleAuthCallback
+      tags: [sessao]
+      summary: Retorno do Google (redirect URI cadastrada). Sempre redireciona para uma rota interna limpa.
+      description: |
+        Consome a transação (state de uso único, mesmo navegador, dentro do prazo) antes de trocar o
+        código; valida assinatura, emissor, audiência, expiração, nonce e azp do id_token. Não guarda
+        tokens do Google. Destinos: o retorno validado (sucesso), `/entrar?google=<situação>` ou
+        `/conta?google=<situação>` (vínculo). Situações: `cancelado`, `falhou`, `conta_existente`,
+        `verificar_email`, `indisponivel`, `conectado`, `ja_vinculado`.
+      security: []
+      x-authz: [{ actor: public, scope: none }]
+      x-transitions: [T-AC-05, T-AC-06, T-SS-08]
+      parameters:
+        - { name: state, in: query, required: false, schema: { type: string, maxLength: 64 } }
+        - { name: code, in: query, required: false, schema: { type: string, maxLength: 2048 } }
+        - { name: error, in: query, required: false, schema: { type: string, maxLength: 100 } }
+      responses:
+        '303':
+          description: Redireciona para a rota interna (com a sessão de cliente, quando liberada).
+          headers:
+            Location: { schema: { type: string } }
+            Set-Cookie: { $ref: '#/components/headers/SetSessionCookie' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/auth/google/unlink:
+    post:
+      operationId: unlinkGoogle
+      tags: [sessao]
+      summary: Desconecta o Google da conta (exige reautenticação e outro método de acesso).
+      description: Conta só com Google recebe `409 last_access_method` (nunca fica sem acesso).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: customer, scope: self }, { actor: professional, scope: self }, { actor: owner, scope: self }]
+      x-transitions: [T-AC-07]
+      x-reauth: true
+      responses:
+        '204': { description: Desconectado (ou já estava). }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/Unexpected' }
   /v1/auth/invites/accept:
     post:
       operationId: acceptInvite
@@ -362,7 +464,7 @@ paths:
         ela passa a usar a senha informada. Convite usado, revogado, vencido ou inexistente → 409 `invite_invalid` (mesma mensagem).
       security: []
       x-authz: [{ actor: public, scope: none }]
-      x-transitions: [T-IN-02]
+      x-transitions: [T-IN-02, T-AC-08]
       requestBody:
         required: true
         content:
@@ -377,10 +479,24 @@ paths:
         '429': { $ref: '#/components/responses/TooManyRequests' }
         default: { $ref: '#/components/responses/Unexpected' }
   /v1/me:
+    get:
+      operationId: getMyProfile
+      tags: [cliente]
+      summary: Perfil da própria conta (não depende de loja selecionada). E-mail só leitura.
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: customer, scope: self }, { actor: professional, scope: self }, { actor: owner, scope: self }]
+      responses:
+        '200': { $ref: '#/components/responses/MyProfileOk' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        default: { $ref: '#/components/responses/Unexpected' }
     patch:
       operationId: updateMyProfile
       tags: [cliente]
-      summary: Altera o nome exibido da própria conta.
+      summary: Altera o nome exibido e/ou a aparência da própria conta.
+      description: |
+        Só `name`, `appearance` e `expected_version` (opcional; com ele a alteração é condicional e
+        versão diferente → `409 version_conflict` com o perfil atual). E-mail, papel, vínculo ou
+        verificação no corpo são recusados (campo desconhecido).
       security: [{ accountSession: [], csrfToken: [] }]
       x-authz: [{ actor: customer, scope: self }, { actor: professional, scope: self }, { actor: owner, scope: self }]
       parameters:
@@ -399,11 +515,175 @@ paths:
                 type: object
                 required: [data]
                 properties:
-                  data: { $ref: '#/components/schemas/AccountView' }
+                  data: { $ref: '#/components/schemas/MyProfile' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/me/avatar:
+    put:
+      operationId: setMyAvatar
+      tags: [cliente]
+      summary: Associa uma foto pessoal já processada (envio próprio, finalidade avatar).
+      description: A foto antiga continua até esta troca confirmar. Versão esperada obrigatória (troca antiga não sobrescreve a nova).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: customer, scope: self }, { actor: professional, scope: self }, { actor: owner, scope: self }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetAssetRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/MyProfileOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/me/avatar/remove:
+    post:
+      operationId: removeMyAvatar
+      tags: [cliente]
+      summary: Remove a foto pessoal (referência retirada na hora; arquivos apagados após a retenção).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: customer, scope: self }, { actor: professional, scope: self }, { actor: owner, scope: self }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/MyProfileOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/me/avatar/{size}:
+    get:
+      operationId: getMyAvatar
+      tags: [midia]
+      summary: Foto pessoal da própria conta (privada; autorização refeita a cada pedido, inclusive antes do 304).
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: customer, scope: self }, { actor: professional, scope: self }, { actor: owner, scope: self }]
+      parameters:
+        - $ref: '#/components/parameters/ImageSize'
+      responses:
+        '200': { $ref: '#/components/responses/PrivateImage' }
+        '304': { description: Não modificada (depois de autorizar). }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/media/uploads:
+    post:
+      operationId: uploadMedia
+      tags: [midia]
+      summary: Envia uma imagem (JPEG, PNG ou WebP estático, até 5 MiB, 12 MP, 8.192 px por eixo).
+      description: |
+        Rota própria (o limite de corpo das demais rotas não muda). O formato real é conferido pela
+        assinatura; SVG, GIF, animação, HEIC e desconhecidos são recusados. A imagem é processada
+        depois (worker) e o envio NÃO altera o perfil: associe com `setMyAvatar`,
+        `setEstablishmentLogo` ou `setMyProfessionalPhoto`. `avatar`: qualquer conta (privado);
+        `logo`: dono da loja; `professional_photo`: quem atende na loja (públicas). Limites: 5
+        envios/min e 20/dia por conta (configuráveis) e no máximo 10 envios pendentes.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: customer, scope: self }, { actor: professional, scope: self }, { actor: owner, scope: self },
+                { actor: professional, scope: establishment_member }, { actor: owner, scope: establishment }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - { name: purpose, in: query, required: true, schema: { $ref: '#/components/schemas/MediaPurpose' } }
+        - { name: establishment_id, in: query, required: false, description: Obrigatório para logo e professional_photo., schema: { $ref: '#/components/schemas/Id' } }
+        - { name: crop_x, in: query, required: false, schema: { type: number, minimum: 0, exclusiveMaximum: 1 } }
+        - { name: crop_y, in: query, required: false, schema: { type: number, minimum: 0, exclusiveMaximum: 1 } }
+        - { name: crop_size, in: query, required: false, description: 'Recorte quadrado normalizado sobre a imagem orientada (x,y relativos a largura/altura; size ao menor lado). Os três juntos ou nenhum.', schema: { type: number, exclusiveMinimum: 0, maximum: 1 } }
+      requestBody:
+        required: true
+        content:
+          image/jpeg: { schema: { type: string, format: binary } }
+          image/png: { schema: { type: string, format: binary } }
+          image/webp: { schema: { type: string, format: binary } }
+      responses:
+        '202':
+          description: Recebida; processamento pendente (a foto antiga continua até associar a nova).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/MediaUpload' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/media/uploads/{assetId}:
+    get:
+      operationId: getMediaUpload
+      tags: [midia]
+      summary: Situação do processamento de um envio próprio (consulta curta enquanto o envio está ativo).
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: customer, scope: self }, { actor: professional, scope: self }, { actor: owner, scope: self }]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      responses:
+        '200':
+          description: Situação.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/MediaUpload' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/public/media/{assetId}/{size}:
+    get:
+      operationId: getPublicMedia
+      tags: [midia, publico]
+      summary: Variante pública (logo ou foto profissional publicada). URL versionada pelo id; cache de 5 min.
+      security: []
+      x-authz: [{ actor: public, scope: none }]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+        - $ref: '#/components/parameters/ImageSize'
+      responses:
+        '200': { $ref: '#/components/responses/PublicImage' }
+        '304': { description: Não modificada. }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/public/config:
+    get:
+      operationId: getPublicConfig
+      tags: [publico]
+      summary: O que está ligado (Google, fotos) e a origem pública canônica (links e QR Code). Sem segredos.
+      security: []
+      x-authz: [{ actor: public, scope: none }]
+      responses:
+        '200':
+          description: Configuração pública.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/PublicConfig' }
         default: { $ref: '#/components/responses/Unexpected' }
 
   # ---------------------------------------------------------------- visitante
@@ -629,6 +909,27 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/IdempotencyMismatch' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/participations/{participationId}/customer-avatar/{size}:
+    get:
+      operationId: getCustomerAvatar
+      tags: [midia, fila]
+      summary: Foto pessoal do cliente com conta, para a equipe da fila, SÓ enquanto a participação está ativa.
+      description: |
+        Dono da loja ou o profissional da fila. Participação encerrada, visitante ou outra loja → 404.
+        A autorização é refeita a cada pedido (inclusive antes do 304); nunca vai para cache compartilhado.
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: professional, scope: own_queue }, { actor: owner, scope: establishment }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/ParticipationId'
+        - $ref: '#/components/parameters/ImageSize'
+      responses:
+        '200': { $ref: '#/components/responses/PrivateImage' }
+        '304': { description: Não modificada (depois de autorizar). }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
         default: { $ref: '#/components/responses/Unexpected' }
   /v1/establishments/{establishmentId}/participations/{participationId}:
     get:
@@ -1919,7 +2220,11 @@ paths:
     patch:
       operationId: updateEstablishment
       tags: [administracao]
-      summary: Altera nome, slug e fuso da loja.
+      summary: Altera nome, slug, fuso, paleta e informações públicas da loja.
+      description: |
+        `palette` é um identificador do catálogo de 16 paletas (nunca CSS ou hexadecimal). Textos
+        públicos são texto simples; string vazia remove. O telefone é normalizado para E.164 e será
+        publicado. A auditoria guarda os nomes dos campos alterados, nunca os valores.
       security: [{ accountSession: [], csrfToken: [] }]
       x-authz: [{ actor: owner, scope: establishment }]
       x-transitions: [T-ES-01]
@@ -1933,6 +2238,150 @@ paths:
             schema: { $ref: '#/components/schemas/UpdateEstablishmentRequest' }
       responses:
         '200': { $ref: '#/components/responses/EstablishmentOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/logo:
+    put:
+      operationId: setEstablishmentLogo
+      tags: [administracao]
+      summary: Associa a logo (envio do próprio dono, finalidade logo, desta loja). Pública.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-ES-01]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetAssetRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/EstablishmentOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/logo/remove:
+    post:
+      operationId: removeEstablishmentLogo
+      tags: [administracao]
+      summary: Remove a logo (a loja passa a mostrar o nome).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-ES-01]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/EstablishmentOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/my-professional-profile:
+    get:
+      operationId: getMyProfessionalProfile
+      tags: [administracao]
+      summary: Meu perfil na barbearia (quem atende nesta loja). Nome só leitura (quem renomeia é o dono).
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: professional, scope: self }, { actor: owner, scope: self }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      responses:
+        '200': { $ref: '#/components/responses/MyProfessionalProfileOk' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/my-professional-profile/photo:
+    put:
+      operationId: setMyProfessionalPhoto
+      tags: [administracao]
+      summary: Publica a foto pública do profissional (envio próprio ou cópia explícita da foto pessoal).
+      description: Com `from_avatar`, as variantes da foto pessoal são COPIADAS para uma imagem pública nova; o avatar continua privado.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: professional, scope: self }, { actor: owner, scope: self }]
+      x-transitions: [T-PR-05]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetProfessionalPhotoRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/MyProfessionalProfileOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/my-professional-profile/photo/remove:
+    post:
+      operationId: removeMyProfessionalPhoto
+      tags: [administracao]
+      summary: Despublica a foto pública (o avatar pessoal não muda).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: professional, scope: self }, { actor: owner, scope: self }]
+      x-transitions: [T-PR-05]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/MyProfessionalProfileOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/professionals/{professionalId}/photo/remove:
+    post:
+      operationId: removeProfessionalPhoto
+      tags: [administracao]
+      summary: O dono retira a publicação de uma foto profissional inadequada (motivo + auditoria).
+      description: Não altera o avatar pessoal da conta do profissional (continua privado).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-PR-06]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/ProfessionalId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedReasonRequiredRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/ProfessionalOk' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -3087,6 +3536,17 @@ components:
       in: path
       required: true
       schema: { $ref: '#/components/schemas/Id' }
+    AssetId:
+      name: assetId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    ImageSize:
+      name: size
+      in: path
+      required: true
+      description: Lado desejado em px; entrega a variante desse tamanho, a menor maior que ele ou a maior.
+      schema: { type: integer, minimum: 16, maximum: 1024 }
     ServiceId:
       name: serviceId
       in: path
@@ -3202,6 +3662,41 @@ components:
             required: [data]
             properties:
               data: { $ref: '#/components/schemas/Establishment' }
+    MyProfileOk:
+      description: Perfil da própria conta.
+      headers:
+        Idempotent-Replayed: { $ref: '#/components/headers/IdempotentReplayed' }
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: { $ref: '#/components/schemas/MyProfile' }
+    MyProfessionalProfileOk:
+      description: Meu perfil na barbearia.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: { $ref: '#/components/schemas/MyProfessionalProfile' }
+    PrivateImage:
+      description: 'Imagem privada. Cache-Control: private, no-cache, must-revalidate; ETag; X-Content-Type-Options: nosniff.'
+      content:
+        image/jpeg: { schema: { type: string, format: binary } }
+        image/png: { schema: { type: string, format: binary } }
+    PublicImage:
+      description: 'Imagem pública. Cache-Control: public, max-age=300; ETag; X-Content-Type-Options: nosniff.'
+      content:
+        image/jpeg: { schema: { type: string, format: binary } }
+        image/png: { schema: { type: string, format: binary } }
+    UnsupportedMediaType:
+      description: Formato não aceito (`unsupported_media_type`, `image_unsupported`).
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
     ProfessionalOk:
       description: Profissional.
       content:
@@ -3473,6 +3968,18 @@ components:
         - desktop_access_invalid
         - desktop_installation_invalid
         - analytics_filter_not_applicable
+        # fotos, Google e identidade da loja (ADR-0028)
+        - media_disabled
+        - media_not_attachable
+        - image_unsupported
+        - image_invalid
+        - image_dimensions
+        - google_unavailable
+        - identity_already_linked
+        - last_access_method
+        - no_password
+        - password_available
+        - reauth_code_invalid
 
     # ------------------------------------------------------------ enums de estado
     QueueStatus:
@@ -3618,9 +4125,10 @@ components:
     ReauthenticateRequest:
       type: object
       additionalProperties: false
-      required: [password]
+      description: '`password` (conta com senha) OU `email_code` (conta só com Google; ver `requestReauthCode`).'
       properties:
         password: { type: string, minLength: 1, maxLength: 128 }
+        email_code: { type: string, pattern: '^[0-9]{8}$' }
     AcceptInviteRequest:
       type: object
       additionalProperties: false
@@ -3632,9 +4140,42 @@ components:
     UpdateProfileRequest:
       type: object
       additionalProperties: false
-      required: [name]
+      description: Pelo menos `name` ou `appearance`.
       properties:
         name: { type: string, minLength: 1, maxLength: 80 }
+        appearance: { $ref: '#/components/schemas/Appearance' }
+        expected_version: { $ref: '#/components/schemas/Version' }
+    Appearance:
+      type: string
+      enum: [system, light, dark]
+      description: Preferência de aparência da pessoa (a cor principal é da loja).
+    GoogleStartRequest:
+      type: object
+      additionalProperties: false
+      required: [intent]
+      properties:
+        intent: { type: string, enum: [login, link] }
+        establishment_slug: { type: string, pattern: '^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])$' }
+        return_to:
+          type: string
+          maxLength: 300
+          description: 'Rota interna: /conta, /loja/{slug}, /loja/{slug}/historico ou /loja/{slug}/pontos. Qualquer outra → 400.'
+    SetAssetRequest:
+      type: object
+      additionalProperties: false
+      required: [asset_id, expected_version]
+      properties:
+        asset_id: { $ref: '#/components/schemas/Id' }
+        expected_version: { $ref: '#/components/schemas/Version' }
+    SetProfessionalPhotoRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      description: '`asset_id` (envio próprio, finalidade professional_photo) OU `from_avatar: true`.'
+      properties:
+        asset_id: { $ref: '#/components/schemas/Id' }
+        from_avatar: { type: boolean }
+        expected_version: { $ref: '#/components/schemas/Version' }
     CreateVisitorSessionRequest:
       type: object
       additionalProperties: false
@@ -3868,6 +4409,84 @@ components:
         name: { type: string, minLength: 1, maxLength: 80 }
         slug: { type: string, pattern: '^[a-z0-9](?:[a-z0-9-]{1,48}[a-z0-9])$' }
         timezone: { type: string, maxLength: 64, description: 'Identificador IANA, ex. America/Sao_Paulo.' }
+        palette: { $ref: '#/components/schemas/Palette' }
+        public_description: { type: string, maxLength: 280, description: Texto simples; vazio remove. }
+        public_address: { type: string, maxLength: 200, description: Texto simples; vazio remove. }
+        public_phone: { type: string, maxLength: 30, description: 'Telefone/WhatsApp público (será publicado); normalizado para E.164; vazio remove.' }
+    Palette:
+      type: string
+      enum: [purple, violet, indigo, blue, sky, cyan, teal, emerald, green, lime, amber, orange, red, rose, pink, fuchsia]
+      description: Paleta do catálogo fechado (padrão purple).
+    MediaPurpose:
+      type: string
+      enum: [avatar, professional_photo, logo]
+    ImageVariant:
+      type: object
+      required: [width, height, url]
+      properties:
+        width: { type: integer, minimum: 1 }
+        height: { type: integer, minimum: 1 }
+        url: { type: string, description: Caminho relativo; muda quando a imagem muda. }
+    ImageRef:
+      type: object
+      description: Variantes prontas (dimensões reais declaradas). Nunca bytes nem chaves de armazenamento.
+      required: [variants]
+      properties:
+        variants:
+          type: array
+          items: { $ref: '#/components/schemas/ImageVariant' }
+    MediaUpload:
+      type: object
+      required: [id, purpose, status, failure_reason]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        purpose: { $ref: '#/components/schemas/MediaPurpose' }
+        status: { type: string, enum: [processing, ready, failed, attached] }
+        failure_reason:
+          type: [string, 'null']
+          enum: [invalid_image, unsupported_format, dimensions, processing_error, null]
+    MyProfile:
+      type: object
+      required: [id, name, email, status, email_verified, appearance, avatar, has_password, google, version]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        name: { type: string }
+        email: { type: string, format: email, description: Só leitura (não há troca de e-mail por PATCH). }
+        status: { $ref: '#/components/schemas/AccountStatus' }
+        email_verified: { type: boolean }
+        appearance: { $ref: '#/components/schemas/Appearance' }
+        avatar:
+          oneOf:
+            - $ref: '#/components/schemas/ImageRef'
+            - type: 'null'
+        has_password: { type: boolean, description: Falso em conta só com Google (não há senha para trocar ou conferir). }
+        google:
+          type: object
+          required: [linked, email]
+          properties:
+            linked: { type: boolean }
+            email: { type: [string, 'null'] }
+        version: { $ref: '#/components/schemas/Version' }
+    MyProfessionalProfile:
+      type: object
+      required: [professional_id, establishment_id, establishment_name, display_name, photo, version]
+      properties:
+        professional_id: { $ref: '#/components/schemas/Id' }
+        establishment_id: { $ref: '#/components/schemas/Id' }
+        establishment_name: { type: string }
+        display_name: { type: string }
+        photo:
+          oneOf:
+            - $ref: '#/components/schemas/ImageRef'
+            - type: 'null'
+        version: { $ref: '#/components/schemas/Version' }
+    PublicConfig:
+      type: object
+      required: [google_login, media_uploads, public_base_url]
+      properties:
+        google_login: { type: boolean }
+        media_uploads: { type: boolean }
+        public_base_url: { type: string, description: Origem pública canônica (FILA_PUBLIC_BASE_URL) usada em links e QR Codes. }
     CreateProfessionalRequest:
       type: object
       additionalProperties: false
@@ -4007,6 +4626,10 @@ components:
                 owner_authority:
                   type: boolean
                   description: Esta sessão ocupa a vaga de dono da conta (ADR-0027). Só ela exerce privilégios de dono.
+                auth_method:
+                  type: string
+                  enum: [password, google]
+                  description: Como a sessão foi aberta. Google só abre sessão de cliente (nunca de equipe).
             - type: 'null'
         visitors:
           type: array
@@ -4057,12 +4680,20 @@ components:
         recovery_code_valid_until: { $ref: '#/components/schemas/Timestamp' }
     PublicEstablishment:
       type: object
-      required: [id, slug, name, timezone]
+      required: [id, slug, name, timezone, palette, description, address, phone, logo]
       properties:
         id: { $ref: '#/components/schemas/Id' }
         slug: { type: string }
         name: { type: string }
         timezone: { type: string }
+        palette: { $ref: '#/components/schemas/Palette' }
+        description: { type: [string, 'null'] }
+        address: { type: [string, 'null'] }
+        phone: { type: [string, 'null'], description: E.164 publicado pelo dono. }
+        logo:
+          oneOf:
+            - $ref: '#/components/schemas/ImageRef'
+            - type: 'null'
     PublicService:
       type: object
       required: [id, name, price, duration_minutes, professional_ids]
@@ -4082,10 +4713,15 @@ components:
         queue_id: { $ref: '#/components/schemas/Id' }
         professional:
           type: object
-          required: [id, display_name]
+          required: [id, display_name, photo]
           properties:
             id: { $ref: '#/components/schemas/Id' }
             display_name: { type: string }
+            photo:
+              description: Só a foto profissional publicada (nunca avatar pessoal nem foto de cliente).
+              oneOf:
+                - $ref: '#/components/schemas/ImageRef'
+                - type: 'null'
         status: { $ref: '#/components/schemas/QueueStatus' }
         waiting_count: { type: integer, minimum: 0 }
         tickets:
@@ -4362,15 +4998,29 @@ components:
               tolerance_ends_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
               has_pending_change_request: { type: boolean }
               version: { $ref: '#/components/schemas/Version' }
+              customer_avatar:
+                description: Foto pessoal do cliente com conta, só para a equipe e só com a participação ativa (URL reautorizada a cada pedido).
+                oneOf:
+                  - $ref: '#/components/schemas/ImageRef'
+                  - type: 'null'
     Establishment:
       type: object
-      required: [id, name, slug, timezone, version]
+      required: [id, name, slug, timezone, version, palette, public_description, public_address, public_phone, logo, public_url]
       properties:
         id: { $ref: '#/components/schemas/Id' }
         name: { type: string }
         slug: { type: string }
         timezone: { type: string }
         version: { $ref: '#/components/schemas/Version' }
+        palette: { $ref: '#/components/schemas/Palette' }
+        public_description: { type: [string, 'null'] }
+        public_address: { type: [string, 'null'] }
+        public_phone: { type: [string, 'null'] }
+        logo:
+          oneOf:
+            - $ref: '#/components/schemas/ImageRef'
+            - type: 'null'
+        public_url: { type: string, description: Link canônico da loja (origem pública configurada + slug). Base do QR Code. }
     Professional:
       type: object
       required: [id, display_name, queue_id, queue_letter, status, has_access, version]
@@ -4381,6 +5031,11 @@ components:
         queue_letter: { type: string }
         status: { $ref: '#/components/schemas/ProfessionalStatus' }
         has_access: { type: boolean, description: Conta vinculada e ativa. }
+        photo:
+          description: Foto pública publicada pelo profissional (o dono pode retirar a publicação).
+          oneOf:
+            - $ref: '#/components/schemas/ImageRef'
+            - type: 'null'
         pending_invite:
           oneOf:
             - $ref: '#/components/schemas/Invite'
