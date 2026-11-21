@@ -9,7 +9,7 @@ Topologia: **Vercel** (site + proxy `/v1` e `/healthz`) → **Render** (API Go +
 | Revisão inicial analisada | `a902365` (main, 20/11/2026) |
 | Branch de trabalho | `publicacao-v1` |
 | Última revisão desta preparação | ver `git log -1 publicacao-v1` |
-| Serviços criados nos provedores | **nenhum até agora** |
+| Serviços criados nos provedores | Neon: projeto `fila-homologacao` (20/11/2026, plano gratuito por enquanto). Resend: domínio `mail.fiveline.pro` verificado (20/11/2026). Hostinger: 5 registros DNS acrescentados em `fiveline.pro` (A e `www` intactos). Cloudflare R2: 3 buckets de homologação e 2 credenciais restritas (20/11/2026). **Produção (21/11/2026):** Neon `fila-producao` (PostgreSQL 18.7, 23 migrations, `fila_app` e `fila_backup` só-leitura, chave mestra própria), R2 `fila-prod-*` com credenciais próprias (10/10 verificações; credenciais de um ambiente recusadas no outro), GitHub environment `producao` com revisão obrigatória do responsável e só a branch `main` |
 | Recursos preexistentes reaproveitados | repositório GitHub, workflows `CI` e `Fila Gestão (instaladores)`, comandos `migrate`/`fila-admin` |
 | Próxima ação | ver §8 |
 
@@ -17,19 +17,21 @@ Topologia: **Vercel** (site + proxy `/v1` e `/healthz`) → **Render** (API Go +
 
 | Item | Situação |
 |---|---|
-| E-mail pelo Resend (adaptador, config, worker, dispatcher com reserva curta) | **Implementado e testado** localmente com servidor HTTP simulado. **Aguardando credencial** e DNS para validar com o Resend real |
-| Fotos e logos no R2 (adaptador S3 com assinatura SigV4) | **Implementado e testado** contra servidor S3 real local (SeaweedFS com autenticação) e nos testes ponta a ponta de fotos da API. **Aguardando credencial** do R2 |
+| E-mail pelo Resend (adaptador, config, worker, dispatcher com reserva curta) | **Configurado e validado no ambiente real**: domínio `mail.fiveline.pro` verificado (DKIM, SPF, DMARC `p=none`), rastreamento de abertura e clique desligado, uma chave *Sending access* restrita ao domínio por ambiente (a chave recebe 401 ao tentar administrar), envio real pelo `ResendSender` com idempotência confirmada (reenvio devolve o mesmo id). |
+| Banco de homologação (Neon) | **Configurado e validado no ambiente real**: PostgreSQL 18.7, `uuidv7()`, conexão direta com `sslmode=require`, 23 migrations, papel `fila_app` sem DDL (`permission denied for schema public`), permissões verificadas. Conta ainda no plano gratuito |
+| Fotos e logos no R2 (adaptador S3 com assinatura SigV4) | **Configurado e validado no ambiente real** (homologação, 20/11/2026). Logo enviada pelo site (202 → `ready` → associada), variantes 128 e 256 gravadas no R2 e servidas em `/v1/public/media/…` com cache público de 5 min. Detalhes: buckets privados `fila-hml-midia`, `fila-hml-diario` e `fila-hml-backup` criados por `scripts/r2-preparar.py`; ciclo de vida só em `backup/banco/` (35 dias); credencial da API restrita a mídia e diário, credencial do backup com leitura em mídia e diário e escrita só no backup. Verificado: gravar, ler e apagar com cada credencial; 403 da API no backup; 403 do backup ao gravar em mídia; 400 sem assinatura; testes de integração `internal/midia` (S3) passando contra o R2 real. |
 | Diário de exclusões no bucket + `fila-admin diario baixar` | **Implementado e testado**: a restauração ponta a ponta reconcilia a partir do diário baixado do bucket |
-| IP do cliente atrás de Vercel → Render (proxy autenticado) | **Implementado e testado** (unidade e cadeia HTTP). **Não validado** na Vercel real |
-| `vercel.json` + `middleware.ts` (proxy, SPA, cabeçalhos, CSP em modo relatório) | **Implementado**: build, tipos e testes do proxy passam. **Não validado** na Vercel real |
-| Blueprints do Render (homologação e produção) | **Preparado**, não aplicado (exige contratação) |
-| Workflow `Publicar` (migrations → deploy da mesma revisão → espera a revisão no ar) | **Preparado**, não executado |
-| Workflow `Backup` (dump cifrado + cópia de fotos e diário + sinal de vida) | **Preparado**, não executado. O ciclo dump → age → restauração foi **ensaiado localmente** |
-| Sinal de vida do worker para monitor externo (`FILA_HEARTBEAT_URL`) | **Implementado e testado**. **Aguardando** a escolha do monitor |
+| IP do cliente atrás de Vercel → Render (proxy autenticado) | **Configurado e validado no ambiente real**: IP público real com `proxy_autenticado: true`; `/v1` direto no Render recusado (403) |
+| `vercel.json` + `middleware.ts` (proxy, SPA, cabeçalhos, CSP em modo relatório) | **Configurado e validado no ambiente real** em `teste.fiveline.pro` (projeto Vercel `fila-hml`, plano Hobby; ver evidências) |
+| Blueprints do Render (homologação e produção) | Homologação **configurada e validada no ambiente real** (20/11/2026): Blueprint aplicado (`fila-api-hml` e `fila-worker-hml`, Starter, Virginia, deploy automático desligado). Variáveis preenchidas pela API por `scripts/render-variaveis.py`, sem exibir valores. Deploy de `8aa6637`: `/healthz/live` com `X-Fila-Revision: 8aa663789b03`, `/healthz/ready` 200, 404 em JSON da API, log do worker `worker pronto` e `e-mails serão entregues pelo Resend`. Produção: **preparado**, não aplicado |
+| E-mail ponta a ponta em homologação | **Validado no ambiente real**: cadastro de teste (`delivered+fila-hml-1@resend.dev`) → caixa de saída cifrada → worker no Render → Resend, status `delivered`, com `provider_message_id` gravado e 1 tentativa |
+| Workflow `Publicar` (migrations → deploy da mesma revisão → espera a revisão no ar) | **Validado no ambiente real** (homologação, `a9a689b`): migrations, permissões em transação, deploy hooks, API e worker na mesma revisão, zero erros nos logs durante a publicação. A primeira execução revelou a perda momentânea de permissões (corrigida em `a9a689b`, com teste de regressão) |
+| Workflow `Backup` (dump cifrado + cópia de fotos e diário + sinal de vida) | **Validado no ambiente real** (homologação): execução com sucesso e ensaio de restauração a partir do backup real. Falta o monitor do sinal de vida |
+| Monitoramento (Better Stack) | **Configurado e validado no ambiente real** (homologação): monitor de `https://teste.fiveline.pro/healthz/ready` (3 min); heartbeat do worker (60 s, tolerância 4 min) `up`; heartbeat do backup (24 h, tolerância 2 h). Falha simulada no heartbeat do backup abriu incidente e o ping de sucesso o resolveu (20/11/2026 23:29–23:30 UTC). Alertas por e-mail da conta |
 | Script de ensaio de restauração | **Implementado e executado** localmente (ver §7) |
 | Desktop 1.0.0 (versões, checksums, notas, rascunho de Release) | **Preparado**; resultado do build Linux local em §7. Windows **não testado** |
-| Google (código já existia) | **Aguardando** cliente OAuth |
-| AbacatePay (código já existia) | **Aguardando** chave de teste; sandbox não executado |
+| Login com Google | **Configurado e validado no ambiente real** (homologação, cliente `fila-hml` em modo de teste): início com `openid email profile`, state, nonce e PKCE S256; Google aceitou cliente e retorno; login real do responsável criou conta `active` com e-mail verificado, identidade `https://accounts.google.com` e sessão de cliente (`auth_method=google`, 30 dias, ociosidade 7 dias); cookie `__Host-`, `HttpOnly`, `Secure`, `SameSite=Lax`; início sem Origin ou de outra origem → 403; callback com state forjado → `/entrar?google=falhou`. Produção exige cliente próprio e a tela de consentimento publicada |
+| Pix pela AbacatePay | **Validado no ambiente real em modo teste** (homologação, chave `abc_dev_`): criação pelo site, pagamento simulado confirmado por webhook autenticado, recibo único, conferência, estorno confirmado pelo provedor, webhooks forjados recusados (ver evidências). Falta o reenvio pelo painel e os itens 4–6 da checklist (expiração, falha de rede, `list?externalId`). Produção: **não** ligada; exige chave `abc_prod_`, `FILA_ABACATEPAY_PRODUCTION_VALIDATED=true` e sua autorização para a primeira cobrança real |
 | SSE pela Vercel (> 35 min, reconexão, deploy) | **Não validado**: depende da homologação real |
 | Primeira loja | **Aguardando** e-mail, API, worker e banco em produção |
 
@@ -151,4 +153,4 @@ Ver [evidencias.md](evidencias.md), seção "Preparação da V1 (20/11/2026)".
 
 ## 8. Próxima ação
 
-Escolher o domínio e autorizar os custos de **homologação** (§3). Em seguida: Neon (§4.1) e R2 (§4.2).
+Domínio `fiveline.pro` e custos de homologação autorizados. Neon (§4.1) e Resend (§4.5) prontos, com as chaves em `~/.config/fila-v1/` (fora do Git, permissão 600; entrada por `scripts/segredo.sh`). R2 (§4.2) e Render (§4.3) prontos. Vercel (§4.4) pronta; a API recusa `/v1` sem o proxy. GitHub environment `homologacao` com segredos do `Publicar` e do `Backup` (completo). Chave privada age do backup de homologação em `~/.config/fila-v1/backup-age-homologacao.key` (o responsável deve guardar no gerenciador de senhas). Deploy hooks e monitor prontos. Google pronto. Próximo: AbacatePay sandbox; depois os testes de aceitação de §4.8 (SSE > 35 min, fotos pelo site, cookies). A chave de configuração da Cloudflare (`CLOUDFLARE_SETUP_API_TOKEN`) expira sozinha em 28/11/2026; ela ainda será usada para o R2 de produção. A chave *Full access* do Resend usada na configuração (`RESEND_SETUP_API_KEY`) deve ser apagada no painel quando não for mais necessária.

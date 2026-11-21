@@ -142,3 +142,32 @@ Executado **localmente** (Linux, Go 1.27.4, Node 26, PostgreSQL 18.6 descartáve
 | Desktop: `.deb` 1.0.0 (origem de teste `https://fila-v1-build.test`, **não distribuir**) | gerado: `fila-gestao` 1.0.0, 3,76 MiB |
 
 **Não executado:** nada com Neon, Render, Vercel, R2, Resend, Google ou AbacatePay; SSE pelo percurso Vercel → Render; instalação do `.deb` com `apt`; Windows (nem build nem instalação).
+
+### Homologação real (20/11/2026)
+
+| Verificação | Resultado |
+|---|---|
+| Neon `fila-homologacao` | PostgreSQL 18.7, `uuidv7()` ok, 23 migrations, `fila_app` sem DDL |
+| Resend `mail.fiveline.pro` | Verificado (DKIM, SPF, DMARC `p=none`); rastreamento desligado; chave restrita recebe 401 ao administrar |
+| R2 `fila-hml-*` | 10/10 verificações de `scripts/r2-preparar.py`; testes `internal/midia` (S3) passando contra o R2 real |
+| Render `fila-api-hml` e `fila-worker-hml` | Revisão no ar igual ao commit (`X-Fila-Revision`); `/healthz/ready` 200; worker `pronto`, e-mail pelo Resend |
+| Vercel `fila-hml` em `teste.fiveline.pro` | Certificado ok; `/healthz/ready` JSON da API; `/healthz/client-ip` com o IP público real e `proxy_autenticado: true`; `/v1/nao-existe` 404 da API; `/conta` 200 (SPA); HSTS, `nosniff`, `DENY`, `no-referrer`, CSP em relatório; `/healthz` com `no-store` |
+| Acesso direto a `fila-api-hml.onrender.com` | `/v1/*` → 403 `proxy_required`; `/healthz/ready` → 200 |
+| E-mail ponta a ponta | Cadastro em `teste.fiveline.pro` → caixa de saída → worker → Resend `delivered` (dois testes, endereços `delivered+…@resend.dev`) |
+| Backup (workflow `Backup`, homologação) | Dump com papel só-leitura `fila_backup` (56 tabelas), cifrado com age, enviado a `fila-hml-backup/banco/2026/11/20/`; cópia de mídia e diário. Primeira execução falhou (dump criado como root não podia ser apagado); corrigido em `e4684ba` |
+| Ensaio de restauração do backup real | Baixado do R2 com a credencial de backup, decifrado e restaurado em PostgreSQL descartável; conciliação concluída (época nova, links invalidados), worker liberado, nenhum alerta; ~15 s por passo |
+
+Erros encontrados e corrigidos nesta etapa: import do middleware sem extensão `.js` (500 `MIDDLEWARE_INVOCATION_FAILED` na Vercel), arquivo `.env.local` com token OIDC criado pelo `vercel link` (apagado e ignorado), dono do arquivo do dump no workflow de backup.
+
+### Pix sandbox (AbacatePay, homologação, 20/11/2026)
+
+Loja de teste `Barbearia Teste HML` (`teste-hml11202052`), criada com `fila-admin bootstrap`; dona, profissional e cliente com endereços `delivered+…@resend.dev`; serviço de teste de R$ 5,00. Chave `abc_dev_` (nada cobrado).
+
+| Passo | Resultado |
+|---|---|
+| Cliente gera Pix pelo site | `pending`, R$ 5,00, copia-e-cola presente, `test_mode=true` |
+| `simulate-payment` (sandbox) | Webhook `transparent.completed` autenticado (secret e assinatura), `devMode=true`, aplicado; 1 recibo com evidência `provider_webhook`; comanda em `awaiting_confirmation` |
+| Conferência pelo profissional | 200; comanda `settled` |
+| Estorno pedido pela dona (com reautenticação) | 202; worker pediu à AbacatePay; webhook `transparent.refunded` aplicado; estorno `confirmed` com evidência `provider` em ~1 s; consulta à AbacatePay mostra `REFUNDED`; 1 estorno só |
+| Webhook sem secret ou com secret errado (pelo site) | 401; nada gravado |
+| Reenvio do mesmo webhook pelo painel | **pendente** (ação no painel) |

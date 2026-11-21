@@ -16,7 +16,8 @@ func seen(t *testing.T, p ClientIPPolicy, mutate func(*http.Request)) (ip string
 		ip = ClientIP(r, p.TrustForwardedFor)
 		leaked = r.Header.Get(HeaderProxyAuth) != "" || r.Header.Get(HeaderClientIP) != ""
 	}))
-	r := httptest.NewRequest(http.MethodGet, "/v1/x", nil)
+	// /healthz: rota que continua aberta sem o proxy (em /v1 o pedido sem proxy é recusado antes).
+	r := httptest.NewRequest(http.MethodGet, "/healthz/x", nil)
 	r.RemoteAddr = "10.0.0.5:4000" // balanceador interno da plataforma
 	mutate(r)
 	h.ServeHTTP(httptest.NewRecorder(), r)
@@ -76,6 +77,47 @@ func TestClientIPTopologies(t *testing.T) {
 	ip, _ = seen(t, ClientIPPolicy{}, func(r *http.Request) { r.Header.Set("X-Forwarded-For", "1.2.3.4") })
 	if ip != "10.0.0.5" {
 		t.Fatalf("sem XFF confiável: %s", ip)
+	}
+}
+
+func TestV1RequiresProxyWhenConfigured(t *testing.T) {
+	alcancou := 0
+	h := ResolveClientIP(ClientIPPolicy{TrustForwardedFor: true, ProxySecret: []byte(proxySecret)},
+		http.HandlerFunc(func(http.ResponseWriter, *http.Request) { alcancou++ }))
+	caso := func(path, auth string) int {
+		r := httptest.NewRequest(http.MethodPost, path, nil)
+		if auth != "" {
+			r.Header.Set(HeaderProxyAuth, auth)
+			r.Header.Set(HeaderClientIP, "203.0.113.9")
+		}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if strings.Contains(w.Body.String(), proxySecret) {
+			t.Fatal("segredo na resposta")
+		}
+		return w.Code
+	}
+	if c := caso("/v1/auth/register", ""); c != http.StatusForbidden {
+		t.Fatalf("direto sem proxy: %d", c)
+	}
+	if c := caso("/v1/auth/register", "chute"); c != http.StatusForbidden {
+		t.Fatalf("segredo errado: %d", c)
+	}
+	if alcancou != 0 {
+		t.Fatal("pedido sem proxy chegou ao handler")
+	}
+	if c := caso("/v1/auth/register", proxySecret); c != http.StatusOK || alcancou != 1 {
+		t.Fatalf("via proxy: %d", c)
+	}
+	if c := caso("/healthz/ready", ""); c != http.StatusOK || alcancou != 2 {
+		t.Fatalf("healthz sem proxy deve continuar aberto: %d", c)
+	}
+	// Sem segredo configurado (desenvolvimento, servidor próprio), nada muda.
+	livre := ResolveClientIP(ClientIPPolicy{}, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	w := httptest.NewRecorder()
+	livre.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/v1/auth/register", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("sem proxy configurado: %d", w.Code)
 	}
 }
 

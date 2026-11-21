@@ -56,6 +56,34 @@ func TestAppRoleHasLeastPrivilege(t *testing.T) {
 	u.User = url.UserPassword(role, pw)
 	app := testdb.Pool(t, u.String())
 
+	// Reaplicar as permissões (a cada `Publicar`) não pode tirar o acesso de quem está rodando.
+	parar := make(chan struct{})
+	falhas := make(chan error, 1)
+	go func() {
+		defer close(falhas)
+		for {
+			select {
+			case <-parar:
+				return
+			default:
+			}
+			var n int
+			if err := app.QueryRow(ctx, `SELECT count(*) FROM mail_outbox`).Scan(&n); err != nil {
+				falhas <- err
+				return
+			}
+		}
+	}()
+	for range 15 {
+		if err := database.ApplyGrants(ctx, owner, role); err != nil {
+			t.Fatal(err)
+		}
+	}
+	close(parar)
+	if err := <-falhas; err != nil {
+		t.Fatalf("a aplicação perdeu acesso enquanto as permissões eram reaplicadas: %v", err)
+	}
+
 	allowed := []string{
 		`INSERT INTO audit_event (occurred_at, actor_kind, action, target_type, target_id) VALUES (now(), 'system', 'T-OP-03', 'operation_state', gen_random_uuid())`,
 		`SELECT count(*) FROM audit_event`,

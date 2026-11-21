@@ -129,6 +129,12 @@ func (s *Service) receiveAbacatePayWebhook(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		return err
 	}
+	if duplicate {
+		// Repetição (retentativa do provedor ou reenvio): nada é reaplicado; o registro mostra que chegou.
+		s.Log.Info("webhook repetido ignorado", "evento", env.Event)
+	} else {
+		s.Log.Info("webhook recebido", "evento", env.Event)
+	}
 	hs.WriteJSON(w, http.StatusOK, map[string]any{"received": true, "duplicate": duplicate})
 	return nil
 }
