@@ -189,3 +189,15 @@ Loja de teste `Barbearia Teste HML` (`teste-hml11202052`), criada com `fila-admi
 ### Incidente: zona DNS de `fiveline.pro` zerada (21/11/2026 ~00:45 UTC)
 
 Durante a publicação, a zona na Hostinger voltou ao padrão (`@` → `2.57.91.91`, `www` → raiz), sem os registros da Vercel, do Resend, `teste` e `app`. Os servidores de nome não mudaram e todas as escritas desta preparação usaram `overwrite:false`. Causa não identificada (provável ação no painel da Hostinger). Restaurado pela API às ~00:50 com os valores conhecidos; conferido no servidor autoritativo; o domínio no Resend permaneceu `verified`. Também: `fiveline.pro` e `www` estavam sem projeto na Vercel (`DEPLOYMENT_NOT_FOUND`) e foram religados ao projeto `fiveline` a pedido do responsável.
+
+### Backup de produção e ensaio (21/11/2026)
+
+- Workflow `Backup` em produção, aprovado pelo responsável: dump com o papel só-leitura `fila_backup` (56 tabelas), cifrado com a chave age de produção e enviado a `fila-prod-backup/banco/2026/11/21/`; cópia de mídia e diário; heartbeat do backup `up` no Better Stack.
+- Ensaio de restauração desse dump, isolado (PostgreSQL descartável local, e-mail em arquivo, Pix desligado): decifrado com a chave de produção, restaurado, travado, conciliado e liberado em ~15 s por passo; 1 loja e 1 conta. O alerta `FilaWorkerSemSinal` da cópia é esperado (não há worker no ensaio). Arquivo baixado apagado com `shred` ao final.
+
+### Instaladores 1.0.0 (21/11/2026)
+
+- Windows (NSIS) e Linux (.deb) gerados pelo workflow para `https://app.fiveline.pro`, em rascunho de Release (não público).
+- `.deb` instalado num Ubuntu 24.04 limpo (contêiner): instalou com dependências, sem bibliotecas faltando, com a origem `https://app.fiveline.pro` embutida.
+- Encontrado: o `SHA256SUMS` listava nomes que o GitHub altera ao publicar anexos (espaço e acento). Os hashes conferiam, mas `sha256sum -c` falhava para quem baixa. Corrigido em `722623e` (nomes ASCII e um `SHA256SUMS.txt` conferido com o build).
+- **Windows não testado em máquina real**: o `.exe` é um instalador NSIS sem assinatura de código (o SmartScreen avisa).
