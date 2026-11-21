@@ -107,6 +107,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           v="$(node -p "require('./desktop-dono/package.json').version")"
+          # O GitHub troca espaços e acentos nos nomes dos anexos; com nomes ASCII definidos aqui,
+          # o SHA256SUMS lista exatamente os arquivos que quem baixa recebe (sha256sum -c funciona).
+          mkdir rel
+          cp dist/*.exe "rel/Fila-Gestao_${v}_x64-setup.exe"
+          cp dist/*.deb "rel/Fila-Gestao_${v}_amd64.deb"
+          (cd rel && sha256sum -- * > SHA256SUMS.txt && cat SHA256SUMS.txt)
+          # Confere com as somas geradas em cada build (o arquivo copiado é o mesmo que foi construído).
+          for h in $(cut -d' ' -f1 rel/SHA256SUMS.txt); do grep -q "$h" dist/SHA256SUMS-*.txt; done
           gh release create "desktop-v$v" --draft --target "$GITHUB_SHA" \
-            --title "Fila Gestão $v" --notes-file desktop-dono/NOTAS-DA-VERSAO.md dist/*
+            --title "Fila Gestão $v" --notes-file desktop-dono/NOTAS-DA-VERSAO.md rel/*

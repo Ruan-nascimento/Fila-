@@ -9,14 +9,14 @@ O programa do dono da barbearia para Windows e Linux. Ele abre a gestão do site
 ## Mudanças desde a 0.2.0
 
 - Versão 1.0.0 nos manifestos (`package.json`, `tauri.conf.json`, `Cargo.toml` e lockfiles).
-- O workflow gera os checksums SHA-256 de cada instalador (`SHA256SUMS-*.txt`) e pode criar um rascunho de Release com estas notas.
+- O workflow gera os checksums SHA-256 de cada instalador e o rascunho de Release traz `SHA256SUMS.txt` com os nomes exatos dos anexos e pode criar um rascunho de Release com estas notas.
 - As telas, as regras e a segurança da janela são as mesmas da 0.2.0. As telas vêm do site e se atualizam a cada publicação do site.
 
 ## Como instalar
 
-- **Windows:** execute `Fila Gestão_1.0.0_x64-setup.exe`. Se aparecer "O Windows protegeu o computador", clique em *Mais informações* e depois em *Executar assim mesmo* (o programa não tem assinatura de código).
-- **Linux Mint 22 / Ubuntu 24.04:** `sudo apt install ./fila-gestao_1.0.0_amd64.deb`.
-- **Conferir o arquivo:** compare o resultado de `sha256sum <arquivo>` (no Windows, `Get-FileHash <arquivo>` no PowerShell) com a linha correspondente em `SHA256SUMS-*.txt`.
+- **Windows:** execute `Fila-Gestao_1.0.0_x64-setup.exe`. Se aparecer "O Windows protegeu o computador", clique em *Mais informações* e depois em *Executar assim mesmo* (o programa não tem assinatura de código).
+- **Linux Mint 22 / Ubuntu 24.04:** `sudo apt install ./Fila-Gestao_1.0.0_amd64.deb`.
+- **Conferir o arquivo:** na pasta dos arquivos baixados, `sha256sum -c SHA256SUMS.txt --ignore-missing` (no Windows, `Get-FileHash <arquivo>` no PowerShell e compare com a linha correspondente de `SHA256SUMS.txt`).
 - **Ativar o Dashboard:** o operador gera um código com `fila-admin desktop emitir-codigo -email <dono> -nome "PC do balcão"`. O código vale 15 minutos e serve uma única vez.
 
 ## Limitações
