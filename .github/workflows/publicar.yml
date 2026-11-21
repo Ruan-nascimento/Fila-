@@ -84,6 +84,9 @@ jobs:
           HOOK_API: ${{ secrets.RENDER_DEPLOY_HOOK_API }}
           HOOK_WORKER: ${{ secrets.RENDER_DEPLOY_HOOK_WORKER }}
         run: |
+          # Instante do pedido: a API nova precisa ter subido DEPOIS dele (com o mesmo commit, só
+          # variáveis mudaram, a revisão não muda e a instância antiga ainda responderia).
+          echo "PEDIDO_EM=$(date +%s)" >> "$GITHUB_ENV"
           for hook in "$HOOK_API" "$HOOK_WORKER"; do
             sep='?'; case "$hook" in *\?*) sep='&';; esac
             curl -fsS -X POST -o /dev/null "${hook}${sep}ref=${GITHUB_SHA}"
@@ -93,9 +96,11 @@ jobs:
         run: |
           want="${GITHUB_SHA::12}"
           for i in $(seq 1 90); do
-            rev="$(curl -fsS -D - -o /dev/null "$FILA_PUBLIC_BASE_URL/healthz/live" 2>/dev/null | tr -d '\r' | awk -F': ' 'tolower($1)=="x-fila-revision"{print $2}')"
-            if [ "$rev" = "$want" ] && curl -fsS -o /dev/null "$FILA_PUBLIC_BASE_URL/healthz/ready"; then
-              echo "API no ar com a revisão $want e pronta"; exit 0
+            h="$(curl -fsS -D - -o /dev/null "$FILA_PUBLIC_BASE_URL/healthz/live" 2>/dev/null | tr -d '\r')"
+            rev="$(printf '%s\n' "$h" | awk -F': ' 'tolower($1)=="x-fila-revision"{print $2}')"
+            ini="$(printf '%s\n' "$h" | awk -F': ' 'tolower($1)=="x-fila-started"{print $2}')"
+            if [ "$rev" = "$want" ] && [ "${ini:-0}" -ge "$PEDIDO_EM" ] && curl -fsS -o /dev/null "$FILA_PUBLIC_BASE_URL/healthz/ready"; then
+              echo "API nova no ar (revisão $want, iniciada depois do pedido) e pronta"; exit 0
             fi
             sleep 20
           done

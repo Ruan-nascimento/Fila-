@@ -32,8 +32,8 @@ Topologia: **Vercel** (site + proxy `/v1` e `/healthz`) → **Render** (API Go +
 | Desktop 1.0.0 (versões, checksums, notas, rascunho de Release) | **Preparado**; resultado do build Linux local em §7. Windows **não testado** |
 | Login com Google | **Configurado e validado no ambiente real** (homologação, cliente `fila-hml` em modo de teste): início com `openid email profile`, state, nonce e PKCE S256; Google aceitou cliente e retorno; login real do responsável criou conta `active` com e-mail verificado, identidade `https://accounts.google.com` e sessão de cliente (`auth_method=google`, 30 dias, ociosidade 7 dias); cookie `__Host-`, `HttpOnly`, `Secure`, `SameSite=Lax`; início sem Origin ou de outra origem → 403; callback com state forjado → `/entrar?google=falhou`. Produção exige cliente próprio e a tela de consentimento publicada |
 | Pix pela AbacatePay | **Validado no ambiente real em modo teste** (homologação, chave `abc_dev_`): criação pelo site, pagamento simulado confirmado por webhook autenticado, recibo único, conferência, estorno confirmado pelo provedor, webhooks forjados recusados (ver evidências). Falta o reenvio pelo painel e os itens 4–6 da checklist (expiração, falha de rede, `list?externalId`). Produção: **não** ligada; exige chave `abc_prod_`, `FILA_ABACATEPAY_PRODUCTION_VALIDATED=true` e sua autorização para a primeira cobrança real |
-| SSE pela Vercel (> 35 min, reconexão, deploy) | **Não validado**: depende da homologação real |
-| Primeira loja | **Aguardando** e-mail, API, worker e banco em produção |
+| SSE pela Vercel (> 35 min, reconexão, deploy) | **Validado no ambiente real** (40 min): a Vercel encerra a cada 15 min e o cliente retoma pelo cursor sem perda; atraso típico 1,2 s |
+| Primeira loja | **Criada em produção**: `Barbearia WE` (`app.fiveline.pro/webarbearia`); convite do dono entregue. **Aguardando** o dono aceitar o convite e cadastrar profissionais, serviços e preços reais |
 
 **A V1 não está pronta.** Faltam todas as validações com provedores reais, o SSE pelo percurso real, o Pix em sandbox e o teste do Windows.
 

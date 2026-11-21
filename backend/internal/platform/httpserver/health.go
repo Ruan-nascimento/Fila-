@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"sync/atomic"
 	"time"
 )
@@ -29,6 +30,9 @@ type Health struct {
 	// Revision: revisão do código em execução (cabeçalho X-Fila-Revision do /healthz/live), para o
 	// deploy conferir que a versão nova entrou no ar. Vazio = cabeçalho omitido.
 	Revision string
+	// StartedAt: quando este processo subiu (cabeçalho X-Fila-Started, segundos Unix). Com o mesmo
+	// commit (só variáveis mudaram), a revisão não muda; o deploy confere que a instância é nova.
+	StartedAt time.Time
 }
 
 // NewHealth cria o verificador. timeout limita cada rodada de verificações.
@@ -53,6 +57,9 @@ func (h *Health) live(w http.ResponseWriter, r *http.Request) {
 	RecordRoute(r)
 	if h.Revision != "" {
 		w.Header().Set("X-Fila-Revision", h.Revision)
+	}
+	if !h.StartedAt.IsZero() {
+		w.Header().Set("X-Fila-Started", strconv.FormatInt(h.StartedAt.Unix(), 10))
 	}
 	WriteJSON(w, http.StatusOK, healthBody{Status: "ok"})
 }
