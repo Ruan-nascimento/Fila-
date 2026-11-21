@@ -75,6 +75,7 @@ func run(ctx context.Context, environ []string, stdout, stderr io.Writer, listen
 		httpserver.Check{Name: "migrations", Fn: rt.Migrator.CheckCurrent},
 	)
 	health.Revision = revision(environ)
+	health.StartedAt = time.Now()
 	a, err := api.New(api.Deps{Config: cfg, Pool: rt.Pool, Log: log, Clock: clock.System{}},
 		func(mux *http.ServeMux) { health.Register(mux) })
 	if err != nil {
