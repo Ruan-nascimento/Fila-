@@ -171,3 +171,21 @@ Loja de teste `Barbearia Teste HML` (`teste-hml11202052`), criada com `fila-admi
 | Estorno pedido pela dona (com reautenticação) | 202; worker pediu à AbacatePay; webhook `transparent.refunded` aplicado; estorno `confirmed` com evidência `provider` em ~1 s; consulta à AbacatePay mostra `REFUNDED`; 1 estorno só |
 | Webhook sem secret ou com secret errado (pelo site) | 401; nada gravado |
 | Reenvio do mesmo webhook pelo painel | **pendente** (ação no painel) |
+
+### SSE pela Vercel (homologação, 40 min, 20–21/11/2026)
+
+`/v1/stream` em `teste.fiveline.pro`, evento público gerado a cada 5 min. 3 conexões: a Vercel encerra o fluxo a cada **15 min exatos** (o servidor encerraria em 30); o cliente retoma com `Last-Event-ID` em 1–2 s, sem perder eventos. 17 eventos, 157 batimentos, maior silêncio 15 s (o batimento). Atraso da ação ao evento: 1,0–1,4 s; 5,1 s no evento que coincidiu com a reconexão. Primeiros bytes em 0,3–0,5 s.
+
+### Produção (21/11/2026)
+
+| Verificação | Resultado |
+|---|---|
+| `Publicar` em produção (aprovação do responsável, só `main`) | Sucesso; `X-Fila-Revision: c5cba95f4390` = `main` |
+| `app.fiveline.pro` | `/healthz/ready` 200; IP real com `proxy_autenticado: true`; `/v1` direto no Render → 403 |
+| Isolamento | Nenhum segredo igual entre homologação e produção; credenciais R2 de um ambiente recusadas no outro |
+| Monitoramento | Heartbeat do worker de produção `up`; monitor do site e do backup criados |
+| Primeira loja | `Barbearia WE` (`webarbearia`) criada com `fila-admin bootstrap`; convite do dono enviado pelo worker de produção (Resend `delivered`); página pública 200 |
+
+### Incidente: zona DNS de `fiveline.pro` zerada (21/11/2026 ~00:45 UTC)
+
+Durante a publicação, a zona na Hostinger voltou ao padrão (`@` → `2.57.91.91`, `www` → raiz), sem os registros da Vercel, do Resend, `teste` e `app`. Os servidores de nome não mudaram e todas as escritas desta preparação usaram `overwrite:false`. Causa não identificada (provável ação no painel da Hostinger). Restaurado pela API às ~00:50 com os valores conhecidos; conferido no servidor autoritativo; o domínio no Resend permaneceu `verified`. Também: `fiveline.pro` e `www` estavam sem projeto na Vercel (`DEPLOYMENT_NOT_FOUND`) e foram religados ao projeto `fiveline` a pedido do responsável.
