@@ -28,8 +28,14 @@ func s3FromEnv(t *testing.T, prefix string) *S3Store {
 	}
 	// Bucket descartável já criado (FILA_TEST_S3_BUCKET); cada teste usa um prefixo aleatório.
 	run := "t" + strings.ReplaceAll(uuid.NewString(), "-", "")[:12] + "/"
-	return NewS3Store(&objstore.Client{Endpoint: ep, Region: "auto", Bucket: os.Getenv("FILA_TEST_S3_BUCKET"),
-		AccessKey: os.Getenv("FILA_TEST_S3_ACCESS_KEY"), SecretKey: os.Getenv("FILA_TEST_S3_SECRET_KEY")}, run+prefix)
+	c := &objstore.Client{Endpoint: ep, Region: "auto", Bucket: os.Getenv("FILA_TEST_S3_BUCKET"),
+		AccessKey: os.Getenv("FILA_TEST_S3_ACCESS_KEY"), SecretKey: os.Getenv("FILA_TEST_S3_SECRET_KEY")}
+	// Apaga tudo o que o teste criou sob o prefixo aleatório (o bucket pode ser de um ambiente real).
+	t.Cleanup(func() {
+		ctx := context.Background()
+		_ = c.List(ctx, run, func(o objstore.Object) error { return c.Delete(ctx, o.Key) })
+	})
+	return NewS3Store(c, run+prefix)
 }
 
 func TestS3StoreRoundTrip(t *testing.T) {
