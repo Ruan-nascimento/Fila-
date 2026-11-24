@@ -3,7 +3,7 @@ import { Bell, BellOff, BellRing, CheckCheck, ChevronRight, History, Search, Tra
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router";
 import { useStreamMessages } from "../../stream/context";
-import { Button } from "../../ui/ui";
+import { Button, Choice } from "../../ui/ui";
 import { cx } from "../../ui/cx";
 import { NotificacoesContext, useNotificacoes, type ItemNotificacao, type Papel } from "./contexto";
 import {
@@ -18,7 +18,13 @@ import { RegrasCliente, RegrasEquipe, type Notificacao } from "./regras";
 import {
   alertar,
   conviteDispensado,
+  definirDiscreto,
   definirLigadas,
+  definirSom,
+  discretoLigado,
+  instalarPonteDesktop,
+  noProgramaDesktop,
+  somLigado,
   dispensarConvite,
   ligadas as estaoLigadas,
   mostrarNoSistema,
@@ -130,6 +136,8 @@ export function NotificacoesProvider({
   useStreamMessages((m) => {
     for (const n of regras.current.aplicar(m)) mostrar(n);
   });
+  // Programa Fila Gestão: a bandeja liga/desliga o som (preferência deste aparelho).
+  useEffect(() => instalarPonteDesktop(() => {}), []);
 
   const value = useMemo(() => {
     const lista = visiveisNoPainel(hist);
@@ -227,6 +235,42 @@ function Avisos({
   );
 }
 
+/** Som e conteúdo discreto: preferências DESTE aparelho (nunca da loja nem de outros clientes). */
+function PreferenciasAparelho() {
+  const [som, setSom] = useState(somLigado);
+  const [discreto, setDiscreto] = useState(discretoLigado);
+  return (
+    <div className="grid gap-2" role="group" aria-label="Preferências deste aparelho">
+      {noProgramaDesktop() ? (
+        <p className="m-0 text-sm text-fg-muted">
+          Som: {som ? "ligado" : "desligado"}. No programa, ligue ou desligue pelo ícone do Fila na bandeja.
+        </p>
+      ) : (
+        <Choice
+          type="checkbox"
+          checked={som}
+          onChange={(e) => {
+            definirSom(e.target.checked);
+            setSom(e.target.checked);
+          }}
+          label="Som nos avisos"
+          description="Só neste aparelho."
+        />
+      )}
+      <Choice
+        type="checkbox"
+        checked={discreto}
+        onChange={(e) => {
+          definirDiscreto(e.target.checked);
+          setDiscreto(e.target.checked);
+        }}
+        label="Conteúdo discreto nas notificações"
+        description="A notificação do sistema não mostra nomes, serviços nem valores (bom para a tela bloqueada)."
+      />
+    </div>
+  );
+}
+
 /** Explica a situação da permissão e oferece ligar/desligar neste aparelho. */
 function PreferenciaSistema() {
   const ctx = useNotificacoes();
@@ -256,6 +300,7 @@ function PreferenciaSistema() {
         <Button variant="secondary" icon={BellOff} onClick={desligar}>
           Desligar neste aparelho
         </Button>
+        <PreferenciasAparelho />
       </div>
     );
   return (

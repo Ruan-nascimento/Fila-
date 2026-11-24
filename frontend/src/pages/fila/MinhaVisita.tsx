@@ -358,7 +358,8 @@ function Acompanhar({
   const late = useCommand();
   const leave = useInlinePanel();
   const stale = useStale();
-  const { queues } = useStoreData();
+  const store = useStoreData();
+  const { queues } = store;
   const p = visit.participation;
   const o = visit.order;
   const professional =
@@ -459,7 +460,12 @@ function Acompanhar({
               <OrderBadge order={o} />
             </div>
             <ItensDaComanda order={o} title={false} />
-            <PagamentoCliente shopId={shopId} order={o} onReload={onReload} />
+            <PagamentoCliente
+              shopId={shopId}
+              order={o}
+              onReload={onReload}
+              methods={store.ordering.payment_methods}
+            />
             <Pedido
               shopId={shopId}
               visit={visit}

@@ -22,9 +22,16 @@ const brl = (c: number) => ({ amount_cents: c, currency: "BRL" });
 function item(id: string, service: string, name: string, price: number, extra: object = {}) {
   return {
     id,
+    kind: "service",
     service_id: service,
+    product_id: null,
     name,
     unit_price: brl(price),
+    quantity: 1,
+    performed_quantity: 0,
+    charged_quantity: 0,
+    reported_quantity: null,
+    subtotal: brl(price),
     duration_minutes: 30,
     points: 0,
     status: "accepted",
@@ -129,15 +136,27 @@ describe("Comanda do cliente", () => {
         <MinhaVisita shopId={EST} />
       </StoreDataProvider>,
     );
-    fireEvent.click(await screen.findByRole("button", { name: "Alterar serviços" }));
-    const form = await screen.findByRole("form", { name: "Alterar serviços" });
+    fireEvent.click(await screen.findByRole("button", { name: "Alterar pedido" }));
+    const form = await screen.findByRole("form", { name: "Alterar pedido" });
     // O Corte aceito continua pelo preço aceito (4500), mesmo com o catálogo em 5000.
-    expect(within(form).getByLabelText(/Corte\s*R\$\s*45,00/)).toBeChecked();
-    fireEvent.click(within(form).getByLabelText(/Barba/));
-    expect(within(form).getByText(/Novo total previsto: R\$\s*75,00/)).toBeInTheDocument();
-    fireEvent.click(within(form).getByRole("button", { name: "Salvar serviços" }));
+    expect(within(form).getByRole("group", { name: "Quantidade de Corte" })).toBeInTheDocument();
+    expect(within(form).getAllByText(/R\$\s*45,00/).length).toBeGreaterThan(0);
+    fireEvent.click(within(form).getByRole("button", { name: "Adicionar Barba" }));
+    expect(within(form).getByText(/Novo total previsto:/)).toHaveTextContent(/R\$\s*75,00/);
+    // Três cortes: preço aceito × 3 (o servidor confirma).
+    fireEvent.click(within(form).getByRole("button", { name: "Aumentar quantidade de corte" }));
+    fireEvent.click(within(form).getByRole("button", { name: "Aumentar quantidade de corte" }));
+    expect(within(form).getByText(/3 × R\$\s*45,00 = R\$\s*135,00/)).toBeInTheDocument();
+    expect(within(form).getByText(/Novo total previsto:/)).toHaveTextContent(/R\$\s*165,00/);
+    fireEvent.click(within(form).getByRole("button", { name: "Salvar pedido" }));
     await waitFor(() => expect(bodies).toHaveLength(1));
-    expect(bodies[0]).toEqual({ expected_version: 3, service_ids: [CORTE, BARBA] });
+    expect(bodies[0]).toEqual({
+      expected_version: 3,
+      items: [
+        { service_id: CORTE, quantity: 3 },
+        { service_id: BARBA, quantity: 1 },
+      ],
+    });
     expect(await screen.findByText("R$ 75,00", { exact: false })).toBeInTheDocument();
   });
 
@@ -146,8 +165,18 @@ describe("Comanda do cliente", () => {
     const pending = {
       id: "cr1",
       status: "pending",
-      add: [{ service_id: BARBA, name: "Barba", unit_price: brl(3000) }],
+      add: [
+        {
+          kind: "service",
+          service_id: BARBA,
+          product_id: null,
+          name: "Barba",
+          unit_price: brl(3000),
+          quantity: 1,
+        },
+      ],
       remove_item_ids: [],
+      set_quantities: [],
       created_at: "2026-11-12T12:00:00Z",
       decided_at: null,
       decided_by_role: null,
@@ -172,10 +201,16 @@ describe("Comanda do cliente", () => {
     );
     fireEvent.click(await screen.findByRole("button", { name: "Pedir alteração ao profissional" }));
     const form = await screen.findByRole("form", { name: "Pedir alteração" });
-    fireEvent.click(await within(form).findByLabelText(/Barba/));
+    fireEvent.click(await within(form).findByRole("button", { name: "Adicionar Barba" }));
+    fireEvent.click(within(form).getByRole("button", { name: "Aumentar quantidade de corte" }));
     fireEvent.click(within(form).getByRole("button", { name: "Enviar pedido" }));
     await waitFor(() => expect(bodies).toHaveLength(1));
-    expect(bodies[0]).toEqual({ expected_version: 3, add_service_ids: [BARBA], remove_item_ids: [] });
+    expect(bodies[0]).toEqual({
+      expected_version: 3,
+      add_items: [{ service_id: BARBA, quantity: 1 }],
+      remove_item_ids: [],
+      set_quantities: [{ item_id: I_CORTE, quantity: 2 }],
+    });
     expect(
       await screen.findByText(/Aguardando o profissional\. O total continua R\$\s*45,00/),
     ).toBeInTheDocument();
@@ -256,8 +291,18 @@ describe("Atendimento pela equipe", () => {
     const pending = {
       id: "cr1",
       status: "pending",
-      add: [{ service_id: BARBA, name: "Barba", unit_price: brl(3000) }],
+      add: [
+        {
+          kind: "service",
+          service_id: BARBA,
+          product_id: null,
+          name: "Barba",
+          unit_price: brl(3000),
+          quantity: 1,
+        },
+      ],
       remove_item_ids: [],
+      set_quantities: [],
       created_at: "2026-11-12T12:00:00Z",
     };
     fakeApi({

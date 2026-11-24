@@ -792,7 +792,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Chamado → ausente, somente após 10 minutos da chamada (relógio do servidor). */
+        /** Chamado → ausente, somente depois do prazo gravado na chamada (tolerância da loja, relógio do servidor). */
         post: operations["markNoShow"];
         delete?: never;
         options?: never;
@@ -834,7 +834,7 @@ export interface paths {
         /**
          * Troca a pessoa de lugar com a vizinha de cima ou de baixo na mesma fila (aguardando ou chamada).
          * @description Para baixo, a pessoa chamada volta a ser a primeira a aguardar e a primeira que aguardava passa a
-         *     ser chamada (nova tolerância de 10 minutos). Para cima, a primeira que aguarda troca com a chamada.
+         *     ser chamada (nova chamada com a tolerância vigente da loja). Para cima, a primeira que aguarda troca com a chamada.
          *     Entre duas pessoas aguardando, só as posições mudam. Troca que envolve a pessoa chamada exige fila
          *     aberta. Em atendimento nunca se move.
          */
@@ -2238,6 +2238,380 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/establishments/{establishmentId}/catalog-categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Categorias de serviços e produtos da loja (ativas e inativas). */
+        get: operations["listCategories"];
+        put?: never;
+        /** Cria categoria (serviço ou produto). Nome único por tipo, até 50 por tipo. */
+        post: operations["createCategory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/establishments/{establishmentId}/catalog-categories/{categoryId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Renomeia ou muda a posição; os itens não mudam. */
+        patch: operations["updateCategory"];
+        trace?: never;
+    };
+    "/v1/establishments/{establishmentId}/catalog-categories/{categoryId}/deactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Desativa: sai dos filtros públicos; os itens continuam (sem categoria para o cliente). */
+        post: operations["deactivateCategory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/establishments/{establishmentId}/catalog-categories/{categoryId}/reactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reativa a categoria. */
+        post: operations["reactivateCategory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/public/establishments/{establishmentId}/catalog-categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Categorias ativas da loja. */
+        get: operations["listPublicCategories"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/establishments/{establishmentId}/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Catálogo de produtos completo (até 500), incluindo inativos. */
+        get: operations["listProducts"];
+        put?: never;
+        /** Cria produto simples (sem estoque). */
+        post: operations["createProduct"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/establishments/{establishmentId}/products/{productId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Altera produto; vale só para novas inclusões (comandas guardam o snapshot). */
+        patch: operations["updateProduct"];
+        trace?: never;
+    };
+    "/v1/establishments/{establishmentId}/products/{productId}/deactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Desativa: bloqueia novas inclusões; comandas com o produto continuam. */
+        post: operations["deactivateProduct"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/establishments/{establishmentId}/products/{productId}/reactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reativa o produto. */
+        post: operations["reactivateProduct"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/public/establishments/{establishmentId}/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Produtos ativos (vazio quando a loja não oferece produtos). */
+        get: operations["listPublicProducts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/establishments/{establishmentId}/queues/{queueId}/close-admission": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Fecha a ENTRADA (quem já está continua; a operação segue).
+         * @description Dono em qualquer fila; profissional só na própria e só com `professionals_control_admission` ligada.
+         */
+        post: operations["closeAdmission"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/establishments/{establishmentId}/queues/{queueId}/reopen-admission": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reabre a entrada (não ignora a capacidade).
+         * @description Dono em qualquer fila; profissional só na própria e só com `professionals_control_admission` ligada.
+         */
+        post: operations["reopenAdmission"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/establishments/{establishmentId}/queues/{queueId}/capacity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Define o limite de participações pendentes da fila (1–200) ou volta ao padrão da loja (null). */
+        put: operations["setQueueCapacity"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/establishments/{establishmentId}/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Configurações da loja por seção (catálogo, filas, pagamentos). */
+        get: operations["getEstablishmentSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/establishments/{establishmentId}/settings/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Seção Catálogo.
+         * @description Só os campos enviados mudam; `expected_version` é a versão da SEÇÃO.
+         */
+        patch: operations["updateCatalogSettings"];
+        trace?: never;
+    };
+    "/v1/establishments/{establishmentId}/settings/queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Seção Filas e atendimento (tolerância vale para chamadas futuras).
+         * @description Só os campos enviados mudam; `expected_version` é a versão da SEÇÃO.
+         */
+        patch: operations["updateQueueSettings"];
+        trace?: never;
+    };
+    "/v1/establishments/{establishmentId}/settings/payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Seção Pagamentos (nunca sem meio utilizável).
+         * @description Só os campos enviados mudam; `expected_version` é a versão da SEÇÃO.
+         */
+        patch: operations["updatePaymentSettings"];
+        trace?: never;
+    };
+    "/v1/establishments/{establishmentId}/orders/{orderId}/items/{itemId}/performed-quantity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Registra quantas unidades da linha foram integralmente feitas/entregues (valor absoluto, só cresce). */
+        put: operations["setItemPerformedQuantity"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/establishments/{establishmentId}/payment-fees": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Custos de recebimento estimados (débito, crédito, Pix), com histórico de versões. */
+        get: operations["listPaymentFees"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/establishments/{establishmentId}/payment-fees/{method}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Nova versão do custo de uma modalidade, a partir de agora (recebimentos antigos não mudam). */
+        put: operations["setPaymentFee"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/establishments/{establishmentId}/receipt-costs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Recebimentos, estornos e custos do período, com cobertura dos dados (não é lucro). */
+        get: operations["getReceiptCosts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2453,10 +2827,152 @@ export interface components {
             /** @description Formato XXXX-XXXX-XXXX-XXXX (base32 Crockford, 80 bits). */
             recovery_code: string;
         };
-        /** @description Sem preço, total, papel ou identidade — tudo é derivado no servidor. */
+        /** @description Sem preço, total, papel ou identidade — tudo é derivado no servidor. Envie `items` (com quantidade, serviços e produtos) OU `service_ids` (formato anterior, quantidade 1). Pelo menos um serviço; nunca só produtos. Um pedido ocupa UMA posição na fila, mesmo com várias unidades. */
         CreateParticipationRequest: {
             queue_id: components["schemas"]["Id"];
-            service_ids: components["schemas"]["Id"][];
+            service_ids?: components["schemas"]["Id"][];
+            items?: components["schemas"]["OrderLines"];
+        };
+        /** @description Um item do pedido — exatamente um de `service_id` ou `product_id` — com quantidade (padrão 1). O limite da loja (`ordering.max_service_quantity`, 1–50, padrão 10) vale ao incluir ou aumentar; quantidades já aceitas não são invalidadas. */
+        OrderLineRequest: {
+            service_id?: components["schemas"]["Id"];
+            product_id?: components["schemas"]["Id"];
+            /** @default 1 */
+            quantity: number;
+        };
+        /** @description Até 10 serviços e 10 produtos diferentes; cada item aparece uma vez (a quantidade fica na mesma linha). */
+        OrderLines: components["schemas"]["OrderLineRequest"][];
+        ItemQuantityRequest: {
+            item_id: components["schemas"]["Id"];
+            quantity: number;
+        };
+        SetQueueCapacityRequest: {
+            expected_version: components["schemas"]["Version"];
+            capacity: number | null;
+        };
+        SetPerformedQuantityRequest: {
+            expected_version: components["schemas"]["Version"];
+            performed_quantity: number;
+        };
+        /** @description Configurações da loja (privadas do dono). docs/configuracoes-da-loja.md descreve tipo, padrão, intervalo e efeito de cada uma. */
+        EstablishmentSettings: {
+            catalog: {
+                /** @default 10 */
+                max_service_quantity: number;
+                /** @default true */
+                products_enabled: boolean;
+                version: components["schemas"]["Version"];
+            };
+            queue: {
+                /** @default true */
+                visitors_enabled: boolean;
+                /** @default 10 */
+                call_tolerance_minutes: number;
+                /** @description null = sem limite (padrão). */
+                default_queue_capacity: number | null;
+                /** @default true */
+                professionals_control_admission: boolean;
+                version: components["schemas"]["Version"];
+            };
+            payments: {
+                /** @default true */
+                cash_enabled: boolean;
+                /** @default true */
+                card_enabled: boolean;
+                /** @default true */
+                pix_enabled: boolean;
+                /** @description Integração Pix operacional neste servidor. */
+                pix_available: boolean;
+                version: components["schemas"]["Version"];
+            };
+        };
+        CatalogSettingsRequest: {
+            expected_version: components["schemas"]["Version"];
+            max_service_quantity?: number;
+            products_enabled?: boolean;
+        };
+        QueueSettingsRequest: {
+            expected_version: components["schemas"]["Version"];
+            visitors_enabled?: boolean;
+            call_tolerance_minutes?: number;
+            default_queue_capacity?: number | null;
+            professionals_control_admission?: boolean;
+        };
+        PaymentSettingsRequest: {
+            expected_version: components["schemas"]["Version"];
+            cash_enabled?: boolean;
+            card_enabled?: boolean;
+            pix_enabled?: boolean;
+        };
+        PaymentFeeConfig: {
+            id: components["schemas"]["Id"];
+            /** @enum {string} */
+            method: "debit" | "credit" | "pix";
+            version: number;
+            /** @description Versão que voltou a "não configurado". */
+            cleared: boolean;
+            /** @description 1 pb = 0,01%. */
+            percent_basis_points: number;
+            /** @description Por transação (não por unidade). */
+            fixed_cents: number;
+            effective_from: components["schemas"]["Timestamp"];
+        };
+        /** @description Custo interno ESTIMADO pelo dono para uma modalidade. Nunca aparece para cliente, visitante ou profissional, e não muda o valor cobrado. */
+        PaymentFee: {
+            /** @enum {string} */
+            method: "debit" | "credit" | "pix";
+            /** @description false = não configurado; zero explícito é configurado. */
+            configured: boolean;
+            current: components["schemas"]["PaymentFeeConfig"] | null;
+            /** @description Versão vigente (0 = nunca configurado). */
+            version: number;
+            estimate: boolean;
+            history: components["schemas"]["PaymentFeeConfig"][];
+        };
+        SetPaymentFeeRequest: {
+            /** @description Versão vigente vista pela tela (0 = nunca configurado). */
+            expected_version: number;
+            percent_basis_points?: number;
+            fixed_cents?: number;
+            /** @description Volta a "não configurado" (sem percentual nem fixo). */
+            clear?: boolean;
+        };
+        /** @description Recebimentos − estornos − custos conhecidos ou estimados. NÃO é lucro. `complete` = false quando há recebimento com custo desconhecido ou não configurado. */
+        ReceiptCosts: {
+            from: components["schemas"]["Timestamp"];
+            to: components["schemas"]["Timestamp"];
+            /** Format: int64 */
+            gross_cents: number;
+            receipt_count: number;
+            /** Format: int64 */
+            refunded_cents: number;
+            /** Format: int64 */
+            estimated_fees_cents: number;
+            /** Format: int64 */
+            actual_fees_cents: number;
+            /** Format: int64 */
+            fee_returned_cents: number;
+            /** @description Recebimentos sem custo registrado (anteriores à versão ou cartão sem modalidade). */
+            unknown_fee_count: number;
+            not_configured_count: number;
+            /** @description Estornos de recebimentos com custo cuja devolução de taxa é desconhecida. */
+            refunds_fee_return_unknown: number;
+            /** Format: int64 */
+            after_known_costs_cents: number;
+            complete: boolean;
+            note: string;
+            by_method: {
+                /** @enum {string} */
+                method: "cash" | "pix" | "debit" | "credit" | "card_unspecified";
+                /** Format: int64 */
+                gross_cents: number;
+                count: number;
+                /** Format: int64 */
+                estimated_fees_cents: number;
+                /** Format: int64 */
+                actual_fees_cents: number;
+                unknown_fee_count: number;
+            }[];
         };
         VersionedRequest: {
             expected_version: components["schemas"]["Version"];
@@ -2496,11 +3012,13 @@ export interface components {
         CompleteServiceRequest: {
             expected_version: components["schemas"]["Version"];
             order_expected_version: components["schemas"]["Version"];
-            /** @description Resultado de cada item aceito. Pelo menos um `performed`. `not_performed` exige `reason`. */
+            /** @description Resultado de cada item aceito. Pelo menos uma unidade de serviço `performed`. `not_performed` exige `reason`; `performed` com menos unidades que as pedidas também. Unidade já registrada como feita não pode ser declarada não feita. */
             items: {
                 item_id: components["schemas"]["Id"];
                 /** @enum {string} */
                 outcome: "performed" | "not_performed";
+                /** @description Unidades integralmente feitas (produto: entregues). Ausente: todas para resultado completo; nenhuma para os outros. */
+                quantity?: number;
                 reason?: components["schemas"]["Reason"];
             }[];
         };
@@ -2512,26 +3030,35 @@ export interface components {
                 item_id: components["schemas"]["Id"];
                 /** @enum {string} */
                 outcome: "fully_performed" | "partially_performed" | "not_started";
+                /** @description Unidades integralmente feitas (produto: entregues). Ausente: todas para resultado completo; nenhuma para os outros. */
+                quantity?: number;
             }[];
         };
+        /** @description Conjunto final de itens com quantidade ABSOLUTA (repetir não soma). Envie `items` OU `service_ids` (formato anterior, quantidade 1). Linhas mantidas guardam o preço aceito, também ao aumentar; a quantidade nunca fica abaixo das unidades já realizadas. */
         ReplaceOrderItemsRequest: {
             expected_version: components["schemas"]["Version"];
-            service_ids: components["schemas"]["Id"][];
+            service_ids?: components["schemas"]["Id"][];
+            items?: components["schemas"]["OrderLines"];
             reason?: components["schemas"]["Reason"];
         };
         CreateChangeRequestRequest: {
             expected_version: components["schemas"]["Version"];
             add_service_ids?: components["schemas"]["Id"][];
+            add_items?: components["schemas"]["OrderLines"];
             remove_item_ids?: components["schemas"]["Id"][];
+            /** @description Nova quantidade (absoluta) de linhas que continuam. */
+            set_quantities?: components["schemas"]["ItemQuantityRequest"][];
         };
         CloseInterruptionRequest: {
             expected_version: components["schemas"]["Version"];
             review_note: components["schemas"]["Reason"];
-            /** @description Decisão do dono por item; só `fully_performed` é cobrado pelo preço aceito. */
+            /** @description Decisão do dono por item. Cobra-se `quantity` unidades integralmente feitas pelo preço aceito (`fully_performed` = todas); a unidade parcial e as não iniciadas valem zero. */
             items: {
                 item_id: components["schemas"]["Id"];
                 /** @enum {string} */
                 outcome: "fully_performed" | "partially_performed" | "not_started";
+                /** @description Unidades integralmente feitas (produto: entregues). Ausente: todas para resultado completo; nenhuma para os outros. */
+                quantity?: number;
             }[];
         };
         /** @description Correção por item; não existe valor livre nem desconto. */
@@ -2541,6 +3068,13 @@ export interface components {
             uncharge_item_ids?: components["schemas"]["Id"][];
             /** @description Serviço feito e não registrado; preço atual do catálogo vira snapshot. */
             add_performed_service_ids?: components["schemas"]["Id"][];
+            /** @description Itens feitos/entregues e não registrados, com quantidade (alternativa a `add_performed_service_ids`). */
+            add_performed_items?: components["schemas"]["OrderLines"];
+            /** @description Novas unidades cobradas de linhas existentes (0 = não cobrar a linha). Acima do pedido, a quantidade da linha acompanha. */
+            set_charged_quantities?: {
+                item_id: components["schemas"]["Id"];
+                quantity: number;
+            }[];
         };
         ChoosePaymentMethodRequest: {
             expected_version: components["schemas"]["Version"];
@@ -2567,6 +3101,11 @@ export interface components {
             cash_tendered_cents?: number;
             /** @description Referência opcional da maquininha, sem dados do cartão. */
             card_reference?: string;
+            /**
+             * @description Modalidade do cartão (novos registros). Ausente só para clientes antigos durante a atualização - fica "cartão não especificado", sem custo estimado.
+             * @enum {string}
+             */
+            card_type?: "debit" | "credit";
         };
         ConfirmRefundRequest: {
             evidence_note: components["schemas"]["Reason"];
@@ -2633,7 +3172,7 @@ export interface components {
          */
         Palette: "purple" | "violet" | "indigo" | "blue" | "sky" | "cyan" | "teal" | "emerald" | "green" | "lime" | "amber" | "orange" | "red" | "rose" | "pink" | "fuchsia";
         /** @enum {string} */
-        MediaPurpose: "avatar" | "professional_photo" | "logo";
+        MediaPurpose: "avatar" | "professional_photo" | "logo" | "product_photo";
         ImageVariant: {
             width: number;
             height: number;
@@ -2706,6 +3245,9 @@ export interface components {
             duration_minutes: number;
             points: number;
             professional_ids?: components["schemas"]["Id"][];
+            /** @description Categoria de serviço desta loja (null = sem categoria). */
+            category_id?: components["schemas"]["Id"] | null;
+            display_order?: number;
         };
         UpdateServiceRequest: {
             expected_version: components["schemas"]["Version"];
@@ -2714,6 +3256,9 @@ export interface components {
             price_cents?: number;
             duration_minutes?: number;
             points?: number;
+            /** @description Categoria de serviço desta loja (null = sem categoria). */
+            category_id?: components["schemas"]["Id"] | null;
+            display_order?: number;
         };
         SetServiceProfessionalsRequest: {
             expected_version: components["schemas"]["Version"];
@@ -2822,6 +3367,15 @@ export interface components {
             /** @description E.164 publicado pelo dono. */
             phone: string | null;
             logo: components["schemas"]["ImageRef"] | null;
+            ordering?: components["schemas"]["PublicOrdering"];
+        };
+        /** @description Opções públicas do pedido. Nada financeiro interno (custos, chaves) aparece aqui. */
+        PublicOrdering: {
+            max_service_quantity: number;
+            products_enabled: boolean;
+            visitors_enabled: boolean;
+            /** @description Meios aceitos agora (Pix só com a integração operacional). */
+            payment_methods: components["schemas"]["PaymentMethod"][];
         };
         PublicService: {
             id: components["schemas"]["Id"];
@@ -2829,6 +3383,62 @@ export interface components {
             price: components["schemas"]["Money"];
             duration_minutes: number;
             professional_ids: components["schemas"]["Id"][];
+            category_id?: components["schemas"]["Id"] | null;
+            display_order?: number;
+        };
+        /** @enum {string} */
+        CatalogKind: "service" | "product";
+        CatalogCategory: {
+            id: components["schemas"]["Id"];
+            kind: components["schemas"]["CatalogKind"];
+            name: string;
+            display_order: number;
+            status: components["schemas"]["ServiceStatus"];
+            version: components["schemas"]["Version"];
+        };
+        PublicCatalogCategory: {
+            id: components["schemas"]["Id"];
+            kind: components["schemas"]["CatalogKind"];
+            name: string;
+            display_order: number;
+        };
+        Product: {
+            id: components["schemas"]["Id"];
+            name: string;
+            description: string | null;
+            category_id: components["schemas"]["Id"] | null;
+            price: components["schemas"]["Money"];
+            image: components["schemas"]["ImageRef"] | null;
+            display_order: number;
+            status: components["schemas"]["ServiceStatus"];
+            version: components["schemas"]["Version"];
+        };
+        /** @description Sem estoque (não existe estoque nesta versão) — disponível = ativo. */
+        PublicProduct: {
+            id: components["schemas"]["Id"];
+            name: string;
+            description: string | null;
+            category_id: components["schemas"]["Id"] | null;
+            price: components["schemas"]["Money"];
+            image: components["schemas"]["ImageRef"] | null;
+            display_order: number;
+        };
+        CategoryRequest: {
+            expected_version?: components["schemas"]["Version"];
+            kind?: components["schemas"]["CatalogKind"];
+            name?: string;
+            display_order?: number;
+        };
+        /** @description Criação exige `name` e `price_cents`; alteração exige `expected_version`. `null` limpa descrição, categoria ou foto. */
+        ProductRequest: {
+            expected_version?: components["schemas"]["Version"];
+            name?: string;
+            description?: string | null;
+            category_id?: components["schemas"]["Id"] | null;
+            price_cents?: number;
+            display_order?: number;
+            /** @description Envio próprio com finalidade product_photo. */
+            image_asset_id?: components["schemas"]["Id"] | null;
         };
         /** @description Somente dados públicos. Sem nick, serviços, valores ou contatos. */
         PublicQueue: {
@@ -2847,8 +3457,14 @@ export interface components {
                 status: "waiting" | "called" | "in_service";
             }[];
             estimated_wait: components["schemas"]["Estimate"];
+            entry_state: components["schemas"]["EntryState"];
             version: components["schemas"]["Version"];
         };
+        /**
+         * @description Se a fila aceita nova participação agora: accepting; full (capacidade atingida, volta sozinha quando liberar vaga); closed_manual (entrada fechada pela equipe); operation_paused; operation_closed.
+         * @enum {string}
+         */
+        EntryState: "accepting" | "full" | "closed_manual" | "operation_paused" | "operation_closed";
         Visit: {
             participation: components["schemas"]["Participation"];
             order: components["schemas"]["Order"];
@@ -2873,6 +3489,8 @@ export interface components {
             loyalty_eligible?: boolean;
             called_at?: components["schemas"]["Timestamp"] | null;
             tolerance_ends_at?: components["schemas"]["Timestamp"] | null;
+            /** @description Tolerância gravada na chamada (configuração da loja naquele momento). */
+            tolerance_minutes?: number | null;
             started_at?: components["schemas"]["Timestamp"] | null;
             finished_at?: components["schemas"]["Timestamp"] | null;
             end_reason?: string | null;
@@ -2894,6 +3512,12 @@ export interface components {
             status: components["schemas"]["OrderStatus"];
             version: components["schemas"]["Version"];
             items: components["schemas"]["OrderItem"][];
+            /** @description Unidades de serviço (não são pessoas), unidades de produto e duração estimada (só serviços). */
+            totals?: {
+                service_units: number;
+                product_units: number;
+                duration_minutes: number;
+            };
             /** @description Soma dos itens cobráveis da versão atual (calculada no servidor). */
             total: components["schemas"]["Money"];
             total_frozen_at?: components["schemas"]["Timestamp"] | null;
@@ -2913,16 +3537,31 @@ export interface components {
             created_at: components["schemas"]["Timestamp"];
             closed_at?: components["schemas"]["Timestamp"] | null;
         };
+        /** @description Uma linha por serviço ou produto. Invariantes: 0 ≤ charged_quantity ≤ performed_quantity ≤ quantity. */
         OrderItem: {
             id: components["schemas"]["Id"];
-            service_id: components["schemas"]["Id"];
+            kind: components["schemas"]["CatalogKind"];
+            service_id: components["schemas"]["Id"] | null;
+            product_id: components["schemas"]["Id"] | null;
             /** @description Snapshot na inclusão. */
             name: string;
             unit_price: components["schemas"]["Money"];
+            /** @description Unidades pedidas (vigentes). */
+            quantity: number;
+            /** @description Unidades integralmente realizadas (serviço) ou entregues (produto). */
+            performed_quantity: number;
+            /** @description Unidades cobradas (só depois de fechado o valor). */
+            charged_quantity: number;
+            /** @description Unidades feitas segundo o profissional na interrupção. */
+            reported_quantity?: number | null;
+            /** @description Aberta - preço × quantidade; valor fechado - preço × cobradas. */
+            subtotal: components["schemas"]["Money"];
+            /** @description Por unidade; produto = 0 (não entra na fila). */
             duration_minutes: number;
+            /** @description Por unidade de serviço; produto = 0. */
             points: number;
             status: components["schemas"]["OrderItemStatus"];
-            /** @description Entra no total fechado. */
+            /** @description Tem unidades no total fechado (charged_quantity > 0). */
             charged: boolean;
             added_at?: components["schemas"]["Timestamp"];
             performed_at?: components["schemas"]["Timestamp"] | null;
@@ -2941,17 +3580,29 @@ export interface components {
             new_total: components["schemas"]["Money"];
             uncharged_item_ids: components["schemas"]["Id"][];
             added_item_ids: components["schemas"]["Id"][];
+            quantity_changes?: {
+                item_id: components["schemas"]["Id"];
+                from: number;
+                to: number;
+            }[];
             at: components["schemas"]["Timestamp"];
         };
         ChangeRequest: {
             id: components["schemas"]["Id"];
             status: components["schemas"]["ChangeRequestStatus"];
             add: {
-                service_id: components["schemas"]["Id"];
+                kind: components["schemas"]["CatalogKind"];
+                service_id: components["schemas"]["Id"] | null;
+                product_id: components["schemas"]["Id"] | null;
                 name: string;
                 unit_price: components["schemas"]["Money"];
+                quantity: number;
             }[];
             remove_item_ids: components["schemas"]["Id"][];
+            set_quantities: {
+                item_id: components["schemas"]["Id"];
+                quantity: number;
+            }[];
             created_at: components["schemas"]["Timestamp"];
             decided_at?: components["schemas"]["Timestamp"] | null;
             decided_by_role?: components["schemas"]["StaffRole"] | null;
@@ -3001,6 +3652,11 @@ export interface components {
             cash_tendered?: components["schemas"]["Money"] | null;
             change_given?: components["schemas"]["Money"] | null;
             card_reference?: string | null;
+            /**
+             * @description null = dinheiro, Pix ou cartão registrado antes da modalidade (não especificado).
+             * @enum {string|null}
+             */
+            card_type?: "debit" | "credit" | null;
             refunded?: components["schemas"]["Money"];
         };
         Refund: {
@@ -3043,6 +3699,28 @@ export interface components {
                 active: boolean;
                 note?: string | null;
                 since?: components["schemas"]["Timestamp"] | null;
+            };
+            /** @description Entrada de novas participações, separada da operação (status). */
+            admission: {
+                /**
+                 * @description closed = fechada manualmente pela equipe.
+                 * @enum {string}
+                 */
+                status: "open" | "closed";
+                changed_at: components["schemas"]["Timestamp"] | null;
+                /** @description Limite efetivo de participações pendentes (null = sem limite). */
+                capacity: number | null;
+                /** @description Limite próprio da fila (null = padrão da loja). */
+                capacity_override: number | null;
+                state: components["schemas"]["EntryState"];
+                /** @description O profissional pode fechar/reabrir a entrada da PRÓPRIA fila. */
+                professionals_can_control: boolean;
+            };
+            /** @description Carga pendente (aguardando + chamado). Participações não são pessoas, nem unidades de serviço. */
+            load: {
+                pending_participations: number;
+                pending_service_units: number;
+                estimated_minutes: number;
             };
             /** @description Aguardando (ordem FIFO), chamado e em atendimento. */
             entries: {
@@ -3104,6 +3782,8 @@ export interface components {
             points: number;
             status: components["schemas"]["ServiceStatus"];
             professional_ids: components["schemas"]["Id"][];
+            category_id?: components["schemas"]["Id"] | null;
+            display_order?: number;
             version: components["schemas"]["Version"];
         };
         LoyaltyProgram: {
@@ -3170,8 +3850,11 @@ export interface components {
             visited_at: components["schemas"]["Timestamp"];
             professional_name: string;
             items: {
+                kind: components["schemas"]["CatalogKind"];
                 name: string;
                 unit_price: components["schemas"]["Money"];
+                quantity: number;
+                charged_quantity: number;
                 charged: boolean;
             }[];
             total: components["schemas"]["Money"];
@@ -3356,6 +4039,12 @@ export interface components {
             net_cents: components["schemas"]["AnalyticsValue"];
             receipts: components["schemas"]["AnalyticsValue"];
             refunds: components["schemas"]["AnalyticsValue"];
+            fees_estimated_cents: components["schemas"]["AnalyticsValue"];
+            fees_known_cents: components["schemas"]["AnalyticsValue"];
+            /** @description Recebido − estornos − custos de recebimento conhecidos ou estimados. Não é lucro. */
+            after_costs_cents: components["schemas"]["AnalyticsValue"];
+            /** @description Fração (0–1) dos recebimentos com custo conhecido, estimado ou que não se aplica. Abaixo de 1 o resultado é incompleto. */
+            fee_coverage: components["schemas"]["AnalyticsValue"];
             ignored_filters: string[];
         };
         AnalyticsSummaryPart: {
@@ -3741,6 +4430,9 @@ export interface components {
         AssetId: components["schemas"]["Id"];
         /** @description Lado desejado em px; entrega a variante desse tamanho, a menor maior que ele ou a maior. */
         ImageSize: number;
+        CategoryId: components["schemas"]["Id"];
+        ProductId: components["schemas"]["Id"];
+        FeeMethod: "debit" | "credit" | "pix";
         ServiceId: components["schemas"]["Id"];
         RewardId: components["schemas"]["Id"];
         ReservationId: components["schemas"]["Id"];
@@ -5258,6 +5950,8 @@ export interface operations {
         parameters: {
             query?: {
                 status?: components["schemas"]["OrderStatus"][];
+                /** @description Busca no servidor por senha, nick ou nome de item (sem diferenciar maiúsculas nem acentos; até 60 caracteres). */
+                q?: string;
                 limit?: components["parameters"]["Limit"];
                 /** @description Cursor opaco de paginação devolvido em page.next_cursor. */
                 cursor?: components["parameters"]["Cursor"];
@@ -7360,7 +8054,7 @@ export interface operations {
             };
             path: {
                 establishmentId: components["parameters"]["EstablishmentId"];
-                dimension: "payment_methods" | "outcomes" | "professionals" | "services" | "peak_hours" | "wait_bands" | "pending" | "rewards" | "recurrence";
+                dimension: "payment_methods" | "outcomes" | "professionals" | "services" | "products" | "peak_hours" | "wait_bands" | "pending" | "rewards" | "recurrence";
             };
             cookie?: never;
         };
@@ -7464,6 +8158,786 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    listCategories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CatalogCategory"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    createCategory: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoryRequest"];
+            };
+        };
+        responses: {
+            /** @description OK. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CatalogCategory"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyMismatch"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    updateCategory: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+                categoryId: components["parameters"]["CategoryId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoryRequest"];
+            };
+        };
+        responses: {
+            /** @description OK. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CatalogCategory"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyMismatch"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    deactivateCategory: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+                categoryId: components["parameters"]["CategoryId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VersionedRequest"];
+            };
+        };
+        responses: {
+            /** @description OK. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CatalogCategory"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyMismatch"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    reactivateCategory: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+                categoryId: components["parameters"]["CategoryId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VersionedRequest"];
+            };
+        };
+        responses: {
+            /** @description OK. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["CatalogCategory"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyMismatch"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    listPublicCategories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PublicCatalogCategory"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    listProducts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Product"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    createProduct: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductRequest"];
+            };
+        };
+        responses: {
+            /** @description OK. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Product"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyMismatch"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    updateProduct: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+                productId: components["parameters"]["ProductId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductRequest"];
+            };
+        };
+        responses: {
+            /** @description OK. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Product"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyMismatch"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    deactivateProduct: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+                productId: components["parameters"]["ProductId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VersionedRequest"];
+            };
+        };
+        responses: {
+            /** @description OK. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Product"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyMismatch"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    reactivateProduct: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+                productId: components["parameters"]["ProductId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VersionedRequest"];
+            };
+        };
+        responses: {
+            /** @description OK. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Product"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyMismatch"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    listPublicProducts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PublicProduct"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    closeAdmission: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+                queueId: components["parameters"]["QueueId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VersionedRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["StaffQueueOk"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyMismatch"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    reopenAdmission: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+                queueId: components["parameters"]["QueueId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VersionedRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["StaffQueueOk"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyMismatch"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    setQueueCapacity: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+                queueId: components["parameters"]["QueueId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetQueueCapacityRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["StaffQueueOk"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyMismatch"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    getEstablishmentSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["EstablishmentSettings"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    updateCatalogSettings: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CatalogSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description OK. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["EstablishmentSettings"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyMismatch"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    updateQueueSettings: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QueueSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description OK. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["EstablishmentSettings"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyMismatch"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    updatePaymentSettings: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PaymentSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description OK. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["EstablishmentSettings"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyMismatch"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    setItemPerformedQuantity: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+                orderId: components["parameters"]["OrderId"];
+                itemId: components["parameters"]["ItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetPerformedQuantityRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["OrderOk"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyMismatch"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    listPaymentFees: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PaymentFee"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    setPaymentFee: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+                method: components["parameters"]["FeeMethod"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetPaymentFeeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PaymentFee"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyMismatch"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    getReceiptCosts: {
+        parameters: {
+            query?: {
+                from?: components["schemas"]["Timestamp"];
+                to?: components["schemas"]["Timestamp"];
+            };
+            header?: never;
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ReceiptCosts"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             default: components["responses"]["Unexpected"];
         };

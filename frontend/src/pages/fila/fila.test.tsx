@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { fakeApi } from "../../test/fake-api";
+import { fakeApi, problem } from "../../test/fake-api";
 import { Entradas } from "../gestao/Entradas";
 import { MinhaVisita } from "./MinhaVisita";
 import { StoreDataProvider } from "./dados";
@@ -117,10 +117,10 @@ describe("Minha visita", () => {
       </StoreDataProvider>,
     );
     fireEvent.click(await screen.findByLabelText(/Beto/));
-    fireEvent.click(await screen.findByLabelText(/Corte/));
+    fireEvent.click(await screen.findByRole("button", { name: "Adicionar Corte" }));
     fireEvent.click(screen.getByRole("button", { name: "Entrar na fila" }));
     expect(await screen.findByText("A007")).toBeInTheDocument();
-    expect(posts).toEqual([{ queue_id: Q1, service_ids: [SVC] }]);
+    expect(posts).toEqual([{ queue_id: Q1, items: [{ service_id: SVC, quantity: 1 }] }]);
     // Só depois de a participação existir: "Você entrou na fila".
     expect(screen.getByText("Você entrou na fila.")).toBeInTheDocument();
     expect(screen.getByText(/você é o 3º da fila/)).toBeInTheDocument(); // frase para o leitor de tela
@@ -128,6 +128,73 @@ describe("Minha visita", () => {
     expect(screen.getByText("Espera (estimativa)")).toBeInTheDocument();
     const post = requests.find((r) => r.method === "POST");
     expect(post?.headers.get("Idempotency-Key")).toMatch(/^[A-Za-z0-9_-]{16,}$/);
+  });
+
+  it("produto é complemento: sem serviço não entra; com serviço, vai junto e a fila cheia é explicada", async () => {
+    const posts: unknown[] = [];
+    fakeApi({
+      ...publicData,
+      [`GET /v1/public/establishments/${EST}/products`]: () =>
+        Response.json({
+          data: [
+            {
+              id: "0190a000-0000-7000-8000-0000000000f1",
+              name: "Pomada",
+              description: null,
+              category_id: null,
+              price: { amount_cents: 2500, currency: "BRL" },
+              image: null,
+              display_order: 0,
+            },
+          ],
+        }),
+      [`GET /v1/establishments/${EST}/my-visit`]: () => Response.json({ data: null, cursor: null }),
+      [`POST /v1/establishments/${EST}/participations`]: (_r, body) => {
+        posts.push(body);
+        return problem(
+          409,
+          "queue_full",
+          "A fila está cheia no momento. Tente novamente quando uma vaga for liberada.",
+        );
+      },
+    });
+    render(
+      <StoreDataProvider
+        shopId={EST}
+        ordering={{
+          max_service_quantity: 2,
+          products_enabled: true,
+          visitors_enabled: true,
+          payment_methods: ["cash"],
+        }}
+      >
+        <MinhaVisita shopId={EST} />
+      </StoreDataProvider>,
+    );
+    fireEvent.click(await screen.findByLabelText(/Beto/));
+    fireEvent.click(await screen.findByRole("button", { name: "Ver produtos (1)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar Pomada" }));
+    fireEvent.click(screen.getByRole("button", { name: "Entrar na fila" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Escolha um profissional e pelo menos um serviço.",
+    );
+    expect(posts).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar Corte" }));
+    fireEvent.click(screen.getByRole("button", { name: "Aumentar quantidade de corte" }));
+    // Limite da loja (2): o botão para no limite.
+    expect(screen.getByRole("button", { name: "Aumentar quantidade de corte" })).toBeDisabled();
+    expect(screen.getByText(/Total estimado · 2 serviços · 1 produto · ~60 min/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Entrar na fila" }));
+    expect(await screen.findByText(/A fila está cheia no momento/)).toBeInTheDocument();
+    expect(posts).toEqual([
+      {
+        queue_id: Q1,
+        items: [
+          { service_id: SVC, quantity: 2 },
+          { product_id: "0190a000-0000-7000-8000-0000000000f1", quantity: 1 },
+        ],
+      },
+    ]);
   });
 
   it("sair da fila envia a versão esperada", async () => {

@@ -94,6 +94,8 @@ describe("Serviços", () => {
       duration_minutes: 30,
       points: 0,
       professional_ids: [],
+      category_id: null,
+      display_order: 0,
     });
     const post = requests.find((r) => r.method === "POST");
     expect(post?.headers.get("Idempotency-Key")).toMatch(/^[A-Za-z0-9_-]{16,128}$/);
@@ -143,7 +145,7 @@ describe("Serviços", () => {
     const mais = screen.getByRole("dialog", { name: "Mais" });
     expect(within(mais).queryByRole("link", { name: "Profissionais" })).toBeNull();
     expect(within(mais).queryByRole("link", { name: "Auditoria" })).toBeNull();
-    expect(within(mais).getByRole("link", { name: "Serviços" })).toBeInTheDocument();
+    expect(within(mais).getByRole("link", { name: "Catálogo" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Editar" })).toBeNull();
   });
 });
@@ -169,9 +171,9 @@ describe("Filas", () => {
       },
     });
     renderGestao(`/gestao/${EST}/filas`);
-    fireEvent.click(await screen.findByRole("button", { name: "Abrir fila" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir operação" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Outra pessoa alterou");
-    expect(await screen.findByRole("button", { name: "Pausar fila" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Pausar operação" })).toBeInTheDocument();
     const open = requests.find((r) => r.path.endsWith("/open"));
     expect(open?.body).toEqual({ expected_version: 1 });
   });
@@ -311,7 +313,7 @@ describe("Abas da gestão", () => {
     for (const [aba, caminho] of [
       ["Profissionais", "profissionais"],
       ["Comandas", "comandas"],
-      ["Serviços", "servicos"],
+      ["Catálogo", "servicos"],
       ["Configurações da loja", "loja"],
       ["Filas", "filas"],
     ] as const) {

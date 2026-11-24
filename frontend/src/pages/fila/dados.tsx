@@ -3,7 +3,53 @@ import { api } from "../../api/client";
 import { call, problemMessage } from "../../api/problem";
 import { Ctx, type StoreData } from "./dadosContexto";
 import { usePublicQueues } from "./filasPublicas";
-import { reconcile, type PublicService, type Selection } from "./selecao";
+import {
+  emptySelection,
+  reconcile,
+  type PublicCategory,
+  type PublicProduct,
+  type Ordering,
+  type PublicService,
+  type Selection,
+} from "./selecao";
+
+/** Sem `ordering` (API anterior): limite padrão de 10 e produtos só se houver algum ativo. */
+const defaultOrdering: Ordering = {
+  max_service_quantity: 10,
+  products_enabled: true,
+  visitors_enabled: true,
+  payment_methods: [],
+};
+
+/** Produtos e categorias públicos (o catálogo não vem pelo SSE: lido ao abrir a tela). */
+function usePublicExtras(shopId: string, attempt: number) {
+  const [products, setProducts] = useState<PublicProduct[] | null>(null);
+  const [categories, setCategories] = useState<PublicCategory[]>([]);
+  useEffect(() => {
+    let active = true;
+    void Promise.all([
+      call(() =>
+        api.GET("/v1/public/establishments/{establishmentId}/products", {
+          params: { path: { establishmentId: shopId } },
+        }),
+      ),
+      call(() =>
+        api.GET("/v1/public/establishments/{establishmentId}/catalog-categories", {
+          params: { path: { establishmentId: shopId } },
+        }),
+      ),
+    ]).then(([p, c]) => {
+      if (!active) return;
+      // Sem produtos (ou falha ao ler): o pedido segue só com serviços.
+      setProducts(p.ok ? p.data.data : []);
+      setCategories(c.ok ? c.data.data : []);
+    });
+    return () => {
+      active = false;
+    };
+  }, [shopId, attempt]);
+  return { products, categories };
+}
 
 function usePublicServices(shopId: string) {
   const [services, setServices] = useState<PublicService[] | null>(null);
@@ -34,10 +80,19 @@ function usePublicServices(shopId: string) {
   return { services, error, retry };
 }
 
-export function StoreDataProvider({ shopId, children }: { shopId: string; children: ReactNode }) {
+export function StoreDataProvider({
+  shopId,
+  ordering,
+  children,
+}: {
+  shopId: string;
+  ordering?: Ordering | undefined;
+  children: ReactNode;
+}) {
   const q = usePublicQueues(shopId);
   const s = usePublicServices(shopId);
-  const [selection, setSelectionRaw] = useState<Selection>({ queueId: "", serviceIds: [] });
+  const extras = usePublicExtras(shopId, 0);
+  const [selection, setSelectionRaw] = useState<Selection>(emptySelection);
   const [selectionNote, setNote] = useState<string | null>(null);
 
   // Dados novos (tempo real) podem invalidar a escolha: corrige na mesma renderização e explica.
@@ -70,6 +125,9 @@ export function StoreDataProvider({ shopId, children }: { shopId: string; childr
       services: s.services,
       servicesError: s.error,
       retryServices: s.retry,
+      products: extras.products,
+      categories: extras.categories,
+      ordering: ordering ?? defaultOrdering,
       selection,
       setSelection,
       selectionNote,
@@ -83,6 +141,9 @@ export function StoreDataProvider({ shopId, children }: { shopId: string; childr
       s.services,
       s.error,
       s.retry,
+      extras.products,
+      extras.categories,
+      ordering,
       selection,
       setSelection,
       selectionNote,

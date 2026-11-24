@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { Clock } from "lucide-react";
 import { formatCents } from "../../money";
 import { AmountRow, CopyButton } from "../../ui/ui";
-import { methodText, type PixCharge, type Receipt } from "./textos";
+import { methodText, type PixCharge, type Receipt, cardTypeText } from "./textos";
 
 const time = new Intl.DateTimeFormat("pt-BR", { timeStyle: "short" });
 
@@ -107,6 +107,7 @@ export function Recebimentos({ receipts }: { receipts: Receipt[] }) {
           r.change_given && r.change_given.amount_cents > 0
             ? `entregue ${formatCents(r.cash_tendered?.amount_cents ?? 0)}, troco ${formatCents(r.change_given.amount_cents)}`
             : "",
+          r.method === "card" ? `cartão ${cardTypeText(r.card_type)}` : "",
           r.card_reference ? `ref. ${r.card_reference}` : "",
           (r.refunded?.amount_cents ?? 0) > 0
             ? `estornado ${formatCents(r.refunded?.amount_cents ?? 0)}`
