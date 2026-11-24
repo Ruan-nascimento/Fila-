@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useRef } from "react";
 import type { StreamMessage, StreamStatus } from "./client";
 
 export type StreamContextValue = {
@@ -27,7 +27,11 @@ export function useStale(): boolean {
 export function useStreamMessages(handler: (m: StreamMessage) => void): void {
   const { subscribe } = useContext(StreamContext);
   const ref = useRef(handler);
-  useEffect(() => {
+  // useLayoutEffect, não useEffect: o handler novo (com o estado já renderizado) passa a valer
+  // logo depois de aplicar a renderização, antes de qualquer evento que chegue em seguida. Com
+  // useEffect havia um intervalo em que um evento era tratado com o estado anterior (ex.: visita
+  // ainda nula) e a posição não era relida.
+  useLayoutEffect(() => {
     ref.current = handler;
   });
   useEffect(() => subscribe((m) => ref.current(m)), [subscribe]);
