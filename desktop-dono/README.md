@@ -2,7 +2,7 @@
 
 Programa instalável que abre a **gestão do site** direto no acesso do dono. Não há uma segunda gestão: a janela carrega o frontend hospedado (mesmo login, mesmas telas, mesma API e o mesmo tempo real). Desde a versão 0.2.0, o programa traz também o **Dashboard analítico**, uma página local exclusiva deste programa num computador autorizado (ADR-0027).
 
-Passo a passo para o dono e o operador: [docs/desktop/guia-do-dono.md](../docs/desktop/guia-do-dono.md). Dicionário das métricas: [docs/desktop/metricas.md](../docs/desktop/metricas.md).
+**Versão atual: 1.0.0** ([baixar](https://github.com/Ruan-nascimento/Fila-/releases/latest), [notas da versão](NOTAS-DA-VERSAO.md)). Passo a passo para o dono e o operador: [docs/desktop/guia-do-dono.md](../docs/desktop/guia-do-dono.md) e o [Guia prático](../docs/guia-pratico.md) (seção 6). Dicionário das métricas: [docs/desktop/metricas.md](../docs/desktop/metricas.md).
 
 | Pasta / arquivo | O que tem |
 |---|---|
@@ -97,7 +97,7 @@ cd desktop-dono
 powershell -ExecutionPolicy Bypass -File scripts\gerar-instalador-windows.ps1 -PainelUrl https://fila.suabarbearia.com.br
 ```
 
-Arquivo produzido: `desktop-dono\src-tauri\target\release\bundle\nsis\Fila Gestão_0.2.0_x64-setup.exe`
+Arquivo produzido: `desktop-dono\src-tauri\target\release\bundle\nsis\Fila Gestão_1.0.0_x64-setup.exe` (o workflow de release publica como `Fila-Gestao_1.0.0_x64-setup.exe`)
 
 Sem máquina Windows, há uma alternativa no GitHub: **Actions → "Fila Gestão (instaladores)" → Run workflow**, informando a URL. O `.exe` e o `.deb` ficam em *Artifacts* da execução. Workflows manuais só aparecem depois que o arquivo `.github/workflows/desktop-dono.yml` está no branch padrão.
 
@@ -127,12 +127,12 @@ cd desktop-dono
 scripts/gerar-pacote-linux.sh https://fila.suabarbearia.com.br
 ```
 
-Arquivo produzido: `desktop-dono/src-tauri/target/release/bundle/deb/Fila Gestao_0.2.0_amd64.deb` (sem acento no nome do arquivo e do pacote `fila-gestao`, exigência do Debian; no menu aparece "Fila Gestão"). Com `APPIMAGE=1`, sai também um `.AppImage` em `bundle/appimage/`.
+Arquivo produzido: `desktop-dono/src-tauri/target/release/bundle/deb/Fila Gestao_1.0.0_amd64.deb` (sem acento no nome do arquivo e do pacote `fila-gestao`, exigência do Debian; no menu aparece "Fila Gestão"). Com `APPIMAGE=1`, sai também um `.AppImage` em `bundle/appimage/`.
 
 ### No computador do dono
 
 ```bash
-sudo apt install ./"Fila Gestao_0.2.0_amd64.deb"
+sudo apt install ./"Fila Gestao_1.0.0_amd64.deb"
 ```
 
 Também dá para abrir o `.deb` com dois cliques (Instalador de pacotes). O programa aparece no menu como **Fila Gestão**. As dependências (`libwebkit2gtk-4.1-0`, `libgtk-3-0` e `libayatana-appindicator3-1`, do ícone na bandeja) vêm do próprio Mint. Para remover: `sudo apt remove fila-gestao`.

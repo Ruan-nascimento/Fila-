@@ -35,7 +35,7 @@ Topologia: **Vercel** (site + proxy `/v1` e `/healthz`) → **Render** (API Go +
 | SSE pela Vercel (> 35 min, reconexão, deploy) | **Validado no ambiente real** (40 min): a Vercel encerra a cada 15 min e o cliente retoma pelo cursor sem perda; atraso típico 1,2 s |
 | Primeira loja | **Criada em produção**: `Barbearia WE` (`app.fiveline.pro/webarbearia`); convite do dono entregue. **Aguardando** o dono aceitar o convite e cadastrar profissionais, serviços e preços reais |
 
-**A V1 não está pronta.** Faltam todas as validações com provedores reais, o SSE pelo percurso real, o Pix em sandbox e o teste do Windows.
+**Situação em 24/11/2026:** produção no ar (web, API, worker, banco, R2, e-mail, Google), versão 1.0.0 publicada e release `desktop-v1.0.0` disponível. Continuam pendentes: Pix real (só modo teste validado), instalador do Windows executado em máquina real e os itens 4–6 do checklist da AbacatePay.
 
 ## 2. Decisões desta preparação
 

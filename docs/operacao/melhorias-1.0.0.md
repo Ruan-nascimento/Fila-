@@ -1,6 +1,8 @@
 # Melhorias da versão 1.0.0 — checkpoint, publicação e guia rápido
 
-Worktree `../Fila-melhorias`, branch `melhorias-1.0.0`, criada de `publicacao-v1` (`07b5d1a`, que já tem a migration `00023` aplicada em produção). **Nada foi commitado.** A versão pública continua **1.0.0**.
+> **Situação em 24/11/2026: concluída.** PRs #24, #25 e #26 mergeados em `main`; web em produção e homologação; release `desktop-v1.0.0` publicada. A 1.0.0 está fechada: mudanças novas saem como 1.0.1/1.1.0. Guia de uso: [guia-pratico.md](../guia-pratico.md). O texto abaixo é o registro da preparação.
+
+Worktree `../Fila-melhorias`, branch `melhorias-1.0.0`, criada de `publicacao-v1` (`07b5d1a`, que já tem a migration `00023` aplicada em produção). A versão pública continua **1.0.0**.
 
 Decisões: [ADR-0032](../adr/0032-produtos-simples-e-categorias.md) a [ADR-0037](../adr/0037-desktop-em-segundo-plano.md). Configurações: [configuracoes-da-loja.md](../configuracoes-da-loja.md). Impacto: [melhorias-1.0.0-impacto.md](../melhorias-1.0.0-impacto.md). Evidências: [evidencias/melhorias-1.0.0.md](../evidencias/melhorias-1.0.0.md).
 
