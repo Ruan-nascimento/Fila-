@@ -201,3 +201,7 @@ Durante a publicação, a zona na Hostinger voltou ao padrão (`@` → `2.57.91.
 - `.deb` instalado num Ubuntu 24.04 limpo (contêiner): instalou com dependências, sem bibliotecas faltando, com a origem `https://app.fiveline.pro` embutida.
 - Encontrado: o `SHA256SUMS` listava nomes que o GitHub altera ao publicar anexos (espaço e acento). Os hashes conferiam, mas `sha256sum -c` falhava para quem baixa. Corrigido em `722623e` (nomes ASCII e um `SHA256SUMS.txt` conferido com o build).
 - **Windows não testado em máquina real**: o `.exe` é um instalador NSIS sem assinatura de código (o SmartScreen avisa).
+
+### Google em produção (21/11/2026)
+
+Cliente `fila-prod` (projeto Google separado, app publicado). O Google aceitou cliente e retorno (`https://app.fiveline.pro/v1/auth/google/callback`, PKCE S256, `openid email profile`). Login real com conta fora da lista de teste: conta `active`, e-mail verificado, sessão `auth_method=google` ativa.
