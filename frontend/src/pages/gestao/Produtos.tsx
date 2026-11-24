@@ -114,8 +114,13 @@ function ProdutoLinha({
         <div className="grid min-w-0 flex-1 gap-0.5">
           <h2 className="m-0 text-base font-semibold break-words">{p.name}</h2>
           <p className="m-0 text-sm text-fg-muted">
-            {cat ? cat.name : "Sem categoria"} · posição {p.display_order}
-            {p.description ? ` · ${p.description}` : ""}
+            {[
+              cat?.name,
+              p.display_order ? `posição ${p.display_order}` : undefined,
+              p.description ?? undefined,
+            ]
+              .filter(Boolean)
+              .join(" · ") || "Sem categoria"}
           </p>
         </div>
         <div className="grid justify-items-end gap-1">
