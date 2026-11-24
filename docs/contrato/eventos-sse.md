@@ -56,10 +56,10 @@ Cada mudança grava **um registro de evento por audiência afetada**, já com o 
 |---|---|---|---|
 | `stream.snapshot` | todas | `stream` | Início da conexão sem cursor, cursor expirado/inválido, mudança de época |
 | `stream.session_ended` | a conexão afetada | `stream` | Logout, troca/reset de senha, desativação de profissional, recuperação de visitante, exclusão, expiração |
-| `queue.public.updated` | public | queue | Entrada, saída, chamada, início, conclusão, transferência, abrir/pausar/fechar |
-| `queue.updated` | professional, owner | queue | Idem + sinal de indisponibilidade |
+| `queue.public.updated` | public | queue | Entrada, saída, chamada, início, conclusão, transferência, abrir/pausar/fechar, abrir/fechar ENTRADA, capacidade da fila ou padrão da loja, quantidades (estimativa). Leva só `entry_state`, nunca o número de vagas, custos ou configurações privadas |
+| `queue.updated` | professional, owner | queue | Idem + sinal de indisponibilidade, entrada (`admission`) e carga (participações, unidades, minutos) |
 | `participation.updated` | visit, professional, owner | participation | Todas as transições T-P-* |
-| `order.updated` | visit, professional, owner | order | T-O-*, aprovação/recusa de solicitação |
+| `order.updated` | visit, professional, owner | order | T-O-* (inclui T-O-14, unidades realizadas/entregues), mudança de quantidades, aprovação/recusa de solicitação |
 | `change_request.updated` | visit, professional, owner | change_request | T-CR-* |
 | `payment.updated` | visit, professional, owner | order | Cobrança Pix, recebimento, conferência, estorno |
 | `financial_issue.updated` | owner | financial_issue | Abertura/resolução de pendência financeira |
@@ -179,3 +179,10 @@ location /v1/stream {
 ```
 
 Em desenvolvimento o proxy do Vite já repassa `/v1/stream` sem segurar as mensagens (testado no E2E da etapa 06).
+
+## Melhorias 1.0.0 (ADR-0033 a ADR-0035)
+
+- Nenhum tipo novo de evento: as mudanças usam `queue.*` e `order.updated`, que já trazem a visão completa.
+- Configurações da loja: a seção **Filas e atendimento** emite `queue.updated`/`queue.public.updated` de todas as filas (a capacidade padrão muda a `entry_state`). Catálogo e Pagamentos **não** emitem evento: o servidor confere na hora de cada comando, e a página pública relê `ordering` ao abrir. A tolerância não é publicada (cada chamada carrega a própria em `tolerance_minutes`).
+- Custos de recebimento e configurações de pagamento nunca entram em evento.
+- Reconexão: o snapshot e os eventos trazem o estado atual; nenhuma participação ou pedido é recriado no cliente (o envio continua por comando idempotente).

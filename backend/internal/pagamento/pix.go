@@ -13,6 +13,7 @@ import (
 
 	"fila/internal/atendimento"
 	"fila/internal/auditoria"
+	"fila/internal/estabelecimento"
 	"fila/internal/platform/database"
 	hs "fila/internal/platform/httpserver"
 	"fila/internal/platform/idempotency"
@@ -61,6 +62,12 @@ func (s *Service) createPixCharge(w http.ResponseWriter, r *http.Request) error 
 		return err
 	}
 	ctx := r.Context()
+	// Pix desligado pela loja: nenhuma cobrança NOVA (cobranças existentes continuam valendo).
+	if st, err := estabelecimento.LoadSettings(ctx, s.Pool, p.EstablishmentID); err != nil {
+		return err
+	} else if !st.PixEnabled {
+		return methodDisabled("pix")
+	}
 	keyHash := sha256.Sum256([]byte(who.Key + "|" + key))
 	now := s.Clock.Now()
 	var ch chargeRow
@@ -287,6 +294,13 @@ func (s *Service) paid(ctx context.Context, tx pgx.Tx, lp atendimento.PaymentInf
 	inserted := err == nil
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return err
+	}
+	if inserted {
+		// Custo estimado do Pix com a configuração vigente agora; a taxa efetiva só substitui a
+		// estimativa se o provedor a informar (receipt_fee.actual_cents).
+		if err := recordReceiptFee(ctx, tx, lp.EstablishmentID, receiptID, "pix", nil, amount, now); err != nil {
+			return err
+		}
 	}
 	// Tardio: pago depois de expirar/cancelar/falhar, ou depois do pedido de cancelamento (troca de meio).
 	late := c.CancelRequestedAt != nil || c.Status == ChargeExpired || c.Status == ChargeCancelled || c.Status == ChargeFailed

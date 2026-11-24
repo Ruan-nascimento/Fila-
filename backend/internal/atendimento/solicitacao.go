@@ -1,10 +1,9 @@
 package atendimento
 
 import (
+	"context"
 	"errors"
-	"fmt"
 	"net/http"
-	"slices"
 	"strconv"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 
 	"fila/internal/auditoria"
 	"fila/internal/catalogo"
+	"fila/internal/estabelecimento"
 	"fila/internal/platform/database"
 	hs "fila/internal/platform/httpserver"
 	"fila/internal/platform/idempotency"
@@ -20,9 +20,23 @@ import (
 )
 
 type changeRequestBody struct {
-	ExpectedVersion *int64       `json:"expected_version"`
-	AddServiceIDs   *[]uuid.UUID `json:"add_service_ids"`
-	RemoveItemIDs   *[]uuid.UUID `json:"remove_item_ids"`
+	ExpectedVersion *int64             `json:"expected_version"`
+	AddServiceIDs   *[]uuid.UUID       `json:"add_service_ids"`
+	AddItems        *[]LineRequest     `json:"add_items"`
+	RemoveItemIDs   *[]uuid.UUID       `json:"remove_item_ids"`
+	SetQuantities   *[]quantityRequest `json:"set_quantities"`
+}
+
+// quantityRequest pede uma nova quantidade (absoluta) para uma linha existente.
+type quantityRequest struct {
+	ItemID   *uuid.UUID `json:"item_id"`
+	Quantity *int64     `json:"quantity"`
+}
+
+type quantityWant struct {
+	ItemID   uuid.UUID
+	Quantity int
+	field    string
 }
 
 func list(p *[]uuid.UUID) []uuid.UUID {
@@ -32,19 +46,135 @@ func list(p *[]uuid.UUID) []uuid.UUID {
 	return *p
 }
 
-// createChangeRequest (T-CR-01): depois da chamada, o cliente pede inclusão/remoção. O total
-// aceito NÃO muda até a decisão da equipe (R-CMD-07). Uma pendente por comanda (índice único).
+func parseQuantities(v *validate.Collector, p *[]quantityRequest) []quantityWant {
+	if p == nil {
+		return nil
+	}
+	if len(*p) > maxServiceLines+maxProductLines {
+		v.Add(&hs.FieldError{Field: "/set_quantities", Code: hs.FieldTooLong})
+	}
+	seen := map[uuid.UUID]bool{}
+	var out []quantityWant
+	for i, q := range *p {
+		f := "/set_quantities/" + strconv.Itoa(i)
+		v.Required(f+"/item_id", q.ItemID == nil)
+		v.Required(f+"/quantity", q.Quantity == nil)
+		if q.ItemID == nil || q.Quantity == nil {
+			continue
+		}
+		n := v.IntRange(f+"/quantity", q.Quantity, 1, maxLineQuantity)
+		if seen[*q.ItemID] {
+			v.Add(&hs.FieldError{Field: f + "/item_id", Code: "duplicate"})
+		}
+		seen[*q.ItemID] = true
+		out = append(out, quantityWant{ItemID: *q.ItemID, Quantity: int(n), field: f})
+	}
+	return out
+}
+
+// changeSet é o pedido de mudança validado no formato.
+type changeSet struct {
+	add    []LineWant
+	remove []uuid.UUID
+	qty    []quantityWant
+}
+
+// desired monta o conjunto final (quantidade por item do catálogo) a partir das linhas atuais e
+// da solicitação, conferindo o que não pode mudar: linha inexistente, linha com unidade realizada
+// retirada, quantidade abaixo do já realizado e item já presente incluído de novo.
+func (c changeSet) desired(items []itemRow) ([]LineWant, error) {
+	byID := map[uuid.UUID]itemRow{}
+	have := map[lineKey]bool{}
+	for _, it := range items {
+		byID[it.ID] = it
+		have[it.key()] = true
+	}
+	removed := map[uuid.UUID]bool{}
+	for i, id := range c.remove {
+		it, ok := byID[id]
+		if !ok {
+			return nil, hs.ErrValidation(hs.FieldError{Field: "/remove_item_ids/" + strconv.Itoa(i), Code: hs.FieldNotAllowed,
+				Message: "item não está nesta comanda"})
+		}
+		if it.PerformedQty > 0 {
+			return nil, itemPerformedConflict(it, 0)
+		}
+		removed[id] = true
+	}
+	newQty := map[uuid.UUID]quantityWant{}
+	for _, q := range c.qty {
+		it, ok := byID[q.ItemID]
+		if !ok || removed[q.ItemID] {
+			return nil, hs.ErrValidation(hs.FieldError{Field: q.field + "/item_id", Code: hs.FieldNotAllowed,
+				Message: "item não está nesta comanda"})
+		}
+		if q.Quantity < it.PerformedQty {
+			return nil, itemPerformedConflict(it, q.Quantity)
+		}
+		newQty[q.ItemID] = q
+	}
+	var out []LineWant
+	services, products := 0, 0
+	for _, it := range items {
+		if removed[it.ID] {
+			continue
+		}
+		w := LineWant{Key: it.key(), Quantity: it.Quantity}
+		if q, ok := newQty[it.ID]; ok {
+			w.Quantity, w.field = q.Quantity, q.field
+		}
+		out = append(out, w)
+	}
+	for _, a := range c.add {
+		if have[a.Key] {
+			return nil, conflict("duplicate_service", "Item já está na comanda",
+				"Cada serviço ou produto aparece uma vez por comanda: peça outra quantidade da mesma linha.", nil)
+		}
+		out = append(out, a)
+	}
+	for _, w := range out {
+		if w.Key.Kind == catalogo.KindService {
+			services++
+		} else {
+			products++
+		}
+	}
+	if services < 1 {
+		return nil, conflict("order_requires_item", "A comanda precisa de um serviço",
+			"Para tirar todos os serviços, fale com o profissional.", nil)
+	}
+	if services > maxServiceLines || products > maxProductLines {
+		return nil, hs.ErrValidation(hs.FieldError{Field: "/add_items", Code: hs.FieldTooLong,
+			Message: "no máximo 10 serviços e 10 produtos diferentes por comanda"})
+	}
+	return out, nil
+}
+
+// createChangeRequest (T-CR-01): depois da chamada, o cliente pede inclusão, retirada ou outra
+// quantidade. O total aceito NÃO muda até a decisão da equipe (R-CMD-07). Uma pendente por
+// comanda (índice único). Inclusões guardam o preço visto pelo cliente.
 func (s *Service) createChangeRequest(w http.ResponseWriter, r *http.Request) error {
 	var body changeRequestBody
 	var expected int64
+	var cs changeSet
 	return s.orderCommand(w, r, "createChangeRequest", allow{customer: true}, &body,
 		func(who) error {
 			var v validate.Collector
 			expected = v.Version("/expected_version", body.ExpectedVersion)
-			validateServiceList(&v, "/add_service_ids", body.AddServiceIDs, 0)
+			switch {
+			case body.AddServiceIDs != nil && body.AddItems != nil:
+				v.Add(&hs.FieldError{Field: "/add_items", Code: hs.FieldNotAllowed, Message: "envie add_items OU add_service_ids"})
+			case body.AddItems != nil:
+				cs.add = ParseLines(&v, "/add_items", body.AddItems, 0)
+			default:
+				validateServiceList(&v, "/add_service_ids", body.AddServiceIDs, 0)
+				cs.add = ServiceLines(list(body.AddServiceIDs), "/add_service_ids")
+			}
 			validateServiceList(&v, "/remove_item_ids", body.RemoveItemIDs, 0)
-			if len(list(body.AddServiceIDs))+len(list(body.RemoveItemIDs)) == 0 {
-				v.Add(&hs.FieldError{Field: "/add_service_ids", Code: hs.FieldRequired, Message: "inclua ou retire pelo menos um serviço"})
+			cs.remove = list(body.RemoveItemIDs)
+			cs.qty = parseQuantities(&v, body.SetQuantities)
+			if len(cs.add)+len(cs.remove)+len(cs.qty) == 0 {
+				v.Add(&hs.FieldError{Field: "/add_items", Code: hs.FieldRequired, Message: "inclua, retire ou mude a quantidade de pelo menos um item"})
 			}
 			return v.Err()
 		},
@@ -71,45 +201,20 @@ func (s *Service) createChangeRequest(w http.ResponseWriter, r *http.Request) er
 			if err != nil {
 				return idempotency.Result{}, err
 			}
-			removeIDs, addIDs := list(body.RemoveItemIDs), list(body.AddServiceIDs)
-			byID := map[uuid.UUID]itemRow{}
-			have := map[uuid.UUID]bool{}
-			for _, it := range items {
-				byID[it.ID] = it
-				have[it.ServiceID] = true
+			wants, err := cs.desired(items)
+			if err != nil {
+				return idempotency.Result{}, s.withOrder(ctx, tx, cur, err)
 			}
-			for i, id := range removeIDs {
-				it, ok := byID[id]
-				if !ok {
-					return idempotency.Result{}, hs.ErrValidation(hs.FieldError{Field: "/remove_item_ids/" + strconv.Itoa(i),
-						Code: hs.FieldNotAllowed, Message: "item não está nesta comanda"})
-				}
-				if it.Status == ItemPerformed {
-					return idempotency.Result{}, s.orderConflict(ctx, tx, cur, "item_already_performed", "Serviço já realizado",
-						fmt.Sprintf("%q já foi realizado e não pode ser retirado.", it.Name))
-				}
-			}
-			for _, id := range addIDs {
-				if have[id] {
-					return idempotency.Result{}, s.orderConflict(ctx, tx, cur, "duplicate_service", "Serviço já está na comanda",
-						"Cada serviço aparece uma vez por comanda.")
-				}
-			}
-			if len(items)-len(removeIDs)+len(addIDs) < 1 {
-				return idempotency.Result{}, s.orderConflict(ctx, tx, cur, "order_requires_item", "A comanda precisa de um serviço",
-					"Para tirar todos os serviços, fale com o profissional.")
-			}
-			if len(items)-len(removeIDs)+len(addIDs) > maxItems {
-				return idempotency.Result{}, hs.ErrValidation(hs.FieldError{Field: "/add_service_ids", Code: hs.FieldTooLong,
-					Message: "no máximo 10 serviços por comanda"})
-			}
-			snaps, err := snapshotsToAdd(ctx, tx, cur, addIDs, func(id uuid.UUID) string {
-				return "/add_service_ids/" + strconv.Itoa(slices.Index(addIDs, id))
-			})
+			st, err := estabelecimento.LoadSettings(ctx, tx, cur.EstablishmentID)
 			if err != nil {
 				return idempotency.Result{}, err
 			}
+			adds, err := growthSnapshots(ctx, tx, cur, items, wants, st)
+			if err != nil {
+				return idempotency.Result{}, s.withOrder(ctx, tx, cur, err)
+			}
 			now := s.Clock.Now()
+			removeIDs := cs.remove
 			if removeIDs == nil {
 				removeIDs = []uuid.UUID{}
 			}
@@ -124,10 +229,14 @@ func (s *Service) createChangeRequest(w http.ResponseWriter, r *http.Request) er
 			if err != nil {
 				return idempotency.Result{}, err
 			}
-			for _, sn := range snaps {
-				if _, err := tx.Exec(ctx, `
-					INSERT INTO change_request_addition (change_request_id, establishment_id, service_id, name, unit_price_cents, duration_minutes, points)
-					VALUES ($1, $2, $3, $4, $5, $6, $7)`, crID, cur.EstablishmentID, sn.ID, sn.Name, sn.PriceCents, sn.DurationMinutes, sn.Points); err != nil {
+			for _, a := range cs.add {
+				if err := insertAddition(ctx, tx, cur.EstablishmentID, crID, adds[a.Key], a.Quantity); err != nil {
+					return idempotency.Result{}, err
+				}
+			}
+			for _, q := range cs.qty {
+				if _, err := tx.Exec(ctx, `INSERT INTO change_request_item_quantity (change_request_id, item_id, quantity) VALUES ($1, $2, $3)`,
+					crID, q.ItemID, q.Quantity); err != nil {
 					return idempotency.Result{}, err
 				}
 			}
@@ -145,6 +254,52 @@ func (s *Service) createChangeRequest(w http.ResponseWriter, r *http.Request) er
 			}
 			return s.done(ctx, tx, cur, http.StatusCreated)
 		})
+}
+
+// growthSnapshots confere, no catálogo atual, toda linha nova ou que cresce (ativa, feita pelo
+// profissional, produtos ligados, limite da loja) e devolve os snapshots das linhas novas.
+func growthSnapshots(ctx context.Context, tx pgx.Tx, o orderRow, items []itemRow, wants []LineWant,
+	st estabelecimento.Settings) (map[lineKey]catalogo.Snapshot, error) {
+	current := map[lineKey]int{}
+	for _, it := range items {
+		current[it.key()] = it.Quantity
+	}
+	var keys []lineKey
+	for _, w := range wants {
+		if w.Quantity > current[w.Key] {
+			keys = append(keys, w.Key)
+		}
+	}
+	snaps, err := snapshotsFor(ctx, tx, o.EstablishmentID, keys)
+	if err != nil {
+		return nil, err
+	}
+	for _, w := range wants {
+		if w.Quantity <= current[w.Key] {
+			continue
+		}
+		sn, ok := snaps[w.Key]
+		if err := checkGrowth(sn, ok, w, current[w.Key], o.ProfessionalID, "", st); err != nil {
+			return nil, err
+		}
+	}
+	return snaps, nil
+}
+
+func insertAddition(ctx context.Context, q database.Querier, estID, crID uuid.UUID, sn catalogo.Snapshot, quantity int) error {
+	var serviceID, productID *uuid.UUID
+	kind, duration, points := catalogo.KindService, sn.DurationMinutes, sn.Points
+	if sn.Kind == catalogo.KindProduct {
+		kind, productID, duration, points = catalogo.KindProduct, &sn.ID, 0, 0
+	} else {
+		serviceID = &sn.ID
+	}
+	_, err := q.Exec(ctx, `
+		INSERT INTO change_request_addition (change_request_id, establishment_id, kind, service_id, product_id, name, unit_price_cents,
+		                                     duration_minutes, points, quantity)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+		crID, estID, kind, serviceID, productID, sn.Name, sn.PriceCents, duration, points, quantity)
+	return err
 }
 
 // afterDecision grava os eventos de solicitação, comanda e fila depois de criar/decidir.
@@ -188,7 +343,8 @@ func (s *Service) lockPending(r *http.Request, tx pgx.Tx, o orderRow) (pendingCR
 }
 
 // approveChangeRequest (T-CR-02): aplica a solicitação como nova versão da comanda, com o preço
-// que o cliente viu. Inclusões são reconferidas (serviço ainda ativo e feito pelo profissional).
+// que o cliente viu nas inclusões e o preço já registrado nas linhas que mudam de quantidade.
+// Tudo é reconferido (unidades realizadas, item ainda ativo e feito pelo profissional, limite).
 func (s *Service) approveChangeRequest(w http.ResponseWriter, r *http.Request) error {
 	var body versionOnly
 	var expected int64
@@ -212,45 +368,64 @@ func (s *Service) approveChangeRequest(w http.ResponseWriter, r *http.Request) e
 			if err != nil {
 				return idempotency.Result{}, err
 			}
-			for _, it := range items {
-				if slices.Contains(cr.RemoveItemIDs, it.ID) && it.Status == ItemPerformed {
-					return idempotency.Result{}, s.orderConflict(ctx, tx, cur, "item_already_performed", "Serviço já realizado",
-						fmt.Sprintf("%q já foi realizado e não pode ser retirado. Recuse a solicitação.", it.Name))
-				}
-			}
-			rows, err := tx.Query(ctx, `
-				SELECT service_id, name, unit_price_cents, duration_minutes, points
-				FROM change_request_addition WHERE change_request_id = $1 ORDER BY name, service_id`, cr.ID)
+			adds, err := crAdditions(ctx, tx, cr.ID)
 			if err != nil {
 				return idempotency.Result{}, err
 			}
-			adds, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (catalogo.Snapshot, error) {
-				var sn catalogo.Snapshot
-				err := row.Scan(&sn.ID, &sn.Name, &sn.PriceCents, &sn.DurationMinutes, &sn.Points)
-				return sn, err
-			})
+			qty, err := crQuantities(ctx, tx, cr.ID)
 			if err != nil {
 				return idempotency.Result{}, err
 			}
-			ids := make([]uuid.UUID, len(adds))
-			for i := range adds {
-				ids[i] = adds[i].ID
+			cs := changeSet{remove: cr.RemoveItemIDs, qty: qty}
+			addSnap := map[lineKey]Line{}
+			for _, a := range adds {
+				k := lineKey{a.Snap.Kind, a.Snap.ID}
+				cs.add = append(cs.add, LineWant{Key: k, Quantity: a.Quantity, field: "/add"})
+				addSnap[k] = a
 			}
-			if _, err := snapshotsToAdd(ctx, tx, cur, ids, func(uuid.UUID) string { return "/add" }); err != nil {
+			wants, err := cs.desired(items)
+			if err != nil {
+				return idempotency.Result{}, s.withOrder(ctx, tx, cur, withRejectHint(err))
+			}
+			st, err := estabelecimento.LoadSettings(ctx, tx, cur.EstablishmentID)
+			if err != nil {
 				return idempotency.Result{}, err
+			}
+			if _, err := growthSnapshots(ctx, tx, cur, items, wants, st); err != nil {
+				return idempotency.Result{}, s.withOrder(ctx, tx, cur, withRejectHint(err))
 			}
 			now := s.Clock.Now()
-			if len(cr.RemoveItemIDs) > 0 {
-				if _, err := tx.Exec(ctx, `UPDATE order_item SET status = 'removed', removed_at = $3
-					WHERE order_id = $1 AND id = ANY($2) AND status = 'accepted'`, cur.ID, cr.RemoveItemIDs, now); err != nil {
-					return idempotency.Result{}, err
+			var evs []qtyEvent
+			byKey := map[lineKey]itemRow{}
+			for _, it := range items {
+				byKey[it.key()] = it
+			}
+			for _, id := range cr.RemoveItemIDs {
+				for _, it := range items {
+					if it.ID == id {
+						if _, err := tx.Exec(ctx, `UPDATE order_item SET status = 'removed', removed_at = $2 WHERE id = $1`, id, now); err != nil {
+							return idempotency.Result{}, err
+						}
+						evs = append(evs, qtyEvent{id, "quantity", it.Quantity, 0})
+					}
 				}
 			}
-			for _, sn := range adds { // preço aceito = o da solicitação (visto pelo cliente)
-				if _, err := insertItem(ctx, tx, cur.EstablishmentID, cur.ID, sn, now); err != nil {
-					if database.IsUniqueViolation(err, "order_item_service_uq") {
-						return idempotency.Result{}, s.orderConflict(ctx, tx, cur, "duplicate_service", "Serviço já está na comanda",
-							"Cada serviço aparece uma vez por comanda.")
+			for _, q := range qty {
+				for _, it := range items {
+					if it.ID == q.ItemID && it.Quantity != q.Quantity {
+						if err := setQuantity(ctx, tx, it, q.Quantity, now); err != nil {
+							return idempotency.Result{}, err
+						}
+						evs = append(evs, qtyEvent{it.ID, "quantity", it.Quantity, q.Quantity})
+					}
+				}
+			}
+			for _, a := range cs.add { // preço aceito = o da solicitação (visto pelo cliente)
+				l := addSnap[a.Key]
+				if _, err := insertItem(ctx, tx, cur.EstablishmentID, cur.ID, l.Snap, l.Quantity, now); err != nil {
+					if database.IsUniqueViolation(err, "order_item_service_uq") || database.IsUniqueViolation(err, "order_item_product_uq") {
+						return idempotency.Result{}, s.orderConflict(ctx, tx, cur, "duplicate_service", "Item já está na comanda",
+							"Cada serviço ou produto aparece uma vez por comanda.")
 					}
 					return idempotency.Result{}, err
 				}
@@ -259,10 +434,13 @@ func (s *Service) approveChangeRequest(w http.ResponseWriter, r *http.Request) e
 			if err != nil {
 				return idempotency.Result{}, err
 			}
+			a := by.audit(ctx, cur)
+			if err := recordQuantities(ctx, tx, cur.EstablishmentID, cur.ID, evs, "change_request", a, version, now); err != nil {
+				return idempotency.Result{}, err
+			}
 			if err := s.decide(r, tx, cur, by, cr.ID, CRApproved, "", now); err != nil {
 				return idempotency.Result{}, err
 			}
-			a := by.audit(ctx, cur)
 			a.EstablishmentID, a.OccurredAt, a.Action, a.TargetType, a.TargetID = &cur.EstablishmentID, now, "T-CR-02", "order", cur.ID
 			a.FromState, a.ToState = versionTag(StatusOpen, version-1), versionTag(StatusOpen, version)
 			if err := auditoria.Record(ctx, tx, a); err != nil {
@@ -273,6 +451,45 @@ func (s *Service) approveChangeRequest(w http.ResponseWriter, r *http.Request) e
 			}
 			return s.done(ctx, tx, cur, http.StatusOK)
 		})
+}
+
+// withRejectHint orienta a equipe a recusar quando a solicitação não pode mais ser aplicada.
+func withRejectHint(err error) error {
+	var he *hs.Error
+	if errors.As(err, &he) && he.Status == http.StatusConflict {
+		he.Detail += " Recuse a solicitação."
+	}
+	return err
+}
+
+// crAdditions lê as inclusões da solicitação (snapshot visto pelo cliente, com quantidade).
+func crAdditions(ctx context.Context, q database.Querier, crID uuid.UUID) ([]Line, error) {
+	rows, err := q.Query(ctx, `
+		SELECT kind, coalesce(service_id, product_id), name, unit_price_cents, duration_minutes, points, quantity
+		FROM change_request_addition WHERE change_request_id = $1 ORDER BY kind DESC, name, coalesce(service_id, product_id)`, crID)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (Line, error) {
+		var l Line
+		err := row.Scan(&l.Snap.Kind, &l.Snap.ID, &l.Snap.Name, &l.Snap.PriceCents, &l.Snap.DurationMinutes, &l.Snap.Points, &l.Quantity)
+		l.Snap.Active = true
+		return l, err
+	})
+}
+
+// crQuantities lê as novas quantidades pedidas para linhas existentes.
+func crQuantities(ctx context.Context, q database.Querier, crID uuid.UUID) ([]quantityWant, error) {
+	rows, err := q.Query(ctx, `SELECT item_id, quantity FROM change_request_item_quantity WHERE change_request_id = $1 ORDER BY item_id`, crID)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (quantityWant, error) {
+		var w quantityWant
+		err := row.Scan(&w.ItemID, &w.Quantity)
+		w.field = "/set_quantities"
+		return w, err
+	})
 }
 
 // rejectChangeRequest (T-CR-03): a comanda fica como estava; o cliente é avisado (evento).

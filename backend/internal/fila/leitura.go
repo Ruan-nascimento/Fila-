@@ -200,6 +200,11 @@ func (s *Service) PublicSnapshots(ctx context.Context, q database.Querier, queue
 			if e.Status == Waiting {
 				snap.WaitingCount++
 			}
+			if e.Status == Waiting || e.Status == Called {
+				snap.PendingCount++
+				snap.PendingServiceUnits += e.summary.ServiceUnits
+				snap.PendingMinutes += e.summary.DurationMinutes
+			}
 			snap.EstimateMinutes += remaining(e, now)
 		}
 		out[qid] = snap
@@ -244,26 +249,28 @@ type transferView struct {
 }
 
 type participationView struct {
-	ID              uuid.UUID      `json:"id"`
-	EstablishmentID uuid.UUID      `json:"establishment_id"`
-	QueueID         uuid.UUID      `json:"queue_id"`
-	ProfessionalID  uuid.UUID      `json:"professional_id"`
-	TicketCode      string         `json:"ticket_code"`
-	Status          string         `json:"status"`
-	Position        *int           `json:"position"`
-	EstimatedWait   *estimateView  `json:"estimated_wait"`
-	Nick            string         `json:"nick"`
-	IdentityKind    string         `json:"identity_kind,omitempty"`
-	LoyaltyEligible bool           `json:"loyalty_eligible"`
-	CalledAt        *time.Time     `json:"called_at"`
-	ToleranceEndsAt *time.Time     `json:"tolerance_ends_at"`
-	StartedAt       *time.Time     `json:"started_at"`
-	FinishedAt      *time.Time     `json:"finished_at"`
-	EndReason       *string        `json:"end_reason"`
-	Transfers       []transferView `json:"transfers"`
-	Version         int64          `json:"version"`
-	OrderID         uuid.UUID      `json:"order_id"`
-	CreatedAt       time.Time      `json:"created_at"`
+	ID              uuid.UUID     `json:"id"`
+	EstablishmentID uuid.UUID     `json:"establishment_id"`
+	QueueID         uuid.UUID     `json:"queue_id"`
+	ProfessionalID  uuid.UUID     `json:"professional_id"`
+	TicketCode      string        `json:"ticket_code"`
+	Status          string        `json:"status"`
+	Position        *int          `json:"position"`
+	EstimatedWait   *estimateView `json:"estimated_wait"`
+	Nick            string        `json:"nick"`
+	IdentityKind    string        `json:"identity_kind,omitempty"`
+	LoyaltyEligible bool          `json:"loyalty_eligible"`
+	CalledAt        *time.Time    `json:"called_at"`
+	ToleranceEndsAt *time.Time    `json:"tolerance_ends_at"`
+	// ToleranceMinutes: tolerância aplicada nesta chamada (não muda se a loja mudar a configuração).
+	ToleranceMinutes *int           `json:"tolerance_minutes"`
+	StartedAt        *time.Time     `json:"started_at"`
+	FinishedAt       *time.Time     `json:"finished_at"`
+	EndReason        *string        `json:"end_reason"`
+	Transfers        []transferView `json:"transfers"`
+	Version          int64          `json:"version"`
+	OrderID          uuid.UUID      `json:"order_id"`
+	CreatedAt        time.Time      `json:"created_at"`
 	// LateNoticeAt: o cliente avisou pelo app que vai se atrasar (T-P-12); nova chamada limpa.
 	LateNoticeAt *time.Time `json:"late_notice_at"`
 }
@@ -281,7 +288,7 @@ func (s *Service) visit(ctx context.Context, q database.Querier, p row, forStaff
 	}
 	pv := participationView{ID: p.ID, EstablishmentID: p.EstablishmentID, QueueID: p.QueueID, ProfessionalID: qi.ProfessionalID,
 		TicketCode: p.TicketCode, Status: p.Status, Nick: p.Nick, LoyaltyEligible: p.LoyaltyEligible, CalledAt: p.CalledAt,
-		ToleranceEndsAt: p.ToleranceEndsAt, StartedAt: p.StartedAt, FinishedAt: p.FinishedAt, EndReason: p.EndReason,
+		ToleranceEndsAt: p.ToleranceEndsAt, ToleranceMinutes: p.ToleranceMinutes, StartedAt: p.StartedAt, FinishedAt: p.FinishedAt, EndReason: p.EndReason,
 		Version: p.Version, OrderID: p.OrderID, CreatedAt: p.CreatedAt, Transfers: []transferView{}, LateNoticeAt: p.LateNoticeAt}
 	if forStaff {
 		pv.IdentityKind = acesso.IdentityVisitor

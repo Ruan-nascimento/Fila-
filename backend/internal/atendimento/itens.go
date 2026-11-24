@@ -13,15 +13,18 @@ import (
 
 	"fila/internal/auditoria"
 	"fila/internal/catalogo"
+	"fila/internal/estabelecimento"
+	"fila/internal/platform/database"
 	hs "fila/internal/platform/httpserver"
 	"fila/internal/platform/idempotency"
 	"fila/internal/platform/validate"
 )
 
 type replaceRequest struct {
-	ExpectedVersion *int64       `json:"expected_version"`
-	ServiceIDs      *[]uuid.UUID `json:"service_ids"`
-	Reason          *string      `json:"reason"`
+	ExpectedVersion *int64         `json:"expected_version"`
+	ServiceIDs      *[]uuid.UUID   `json:"service_ids"`
+	Items           *[]LineRequest `json:"items"`
+	Reason          *string        `json:"reason"`
 }
 
 // validateServiceList confere 1–10 serviços distintos (R-CMD-04/06).
@@ -35,13 +38,31 @@ func validateServiceList(v *validate.Collector, field string, ids *[]uuid.UUID, 
 	switch {
 	case len(*ids) < minItems:
 		v.Add(&hs.FieldError{Field: field, Code: hs.FieldTooShort, Message: "escolha pelo menos um serviço"})
-	case len(*ids) > maxItems:
+	case len(*ids) > maxServiceLines:
 		v.Add(&hs.FieldError{Field: field, Code: hs.FieldTooLong})
 	}
 	for i, id := range *ids {
 		if slices.Index(*ids, id) != i {
 			v.Add(&hs.FieldError{Field: field + "/" + strconv.Itoa(i), Code: "duplicate"})
 		}
+	}
+}
+
+// RequestedLines lê o pedido em um dos dois formatos: `items` (com quantidade, serviços e
+// produtos) ou `service_ids` (formato anterior: quantidade 1 cada). Os dois juntos são recusados.
+func RequestedLines(v *validate.Collector, serviceIDs *[]uuid.UUID, items *[]LineRequest, minServices int) []LineWant {
+	switch {
+	case serviceIDs != nil && items != nil:
+		v.Add(&hs.FieldError{Field: "/items", Code: hs.FieldNotAllowed, Message: "envie items OU service_ids"})
+		return nil
+	case items != nil:
+		return ParseLines(v, "/items", items, minServices)
+	case serviceIDs == nil:
+		v.Required("/items", minServices > 0)
+		return nil
+	default:
+		validateServiceList(v, "/service_ids", serviceIDs, minServices)
+		return ServiceLines(*serviceIDs, "/service_ids")
 	}
 }
 
@@ -56,34 +77,6 @@ func reasonFor(v *validate.Collector, by who, reason *string, field string) stri
 	return s
 }
 
-// snapshotsToAdd lê do catálogo (FOR SHARE) os serviços a incluir e confere que existem nesta
-// loja, estão ativos (R-CMD-03) e são feitos pelo profissional do atendimento.
-func snapshotsToAdd(ctx context.Context, tx pgx.Tx, o orderRow, ids []uuid.UUID, field func(uuid.UUID) string) ([]catalogo.Snapshot, error) {
-	if len(ids) == 0 {
-		return nil, nil
-	}
-	snaps, err := catalogo.ServicesForEntry(ctx, tx, o.EstablishmentID, ids)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]catalogo.Snapshot, 0, len(ids))
-	for _, id := range ids {
-		sn, ok := snaps[id]
-		switch {
-		case !ok:
-			return nil, hs.ErrValidation(hs.FieldError{Field: field(id), Code: hs.FieldNotAllowed, Message: "serviço não encontrado nesta loja"})
-		case !sn.Active:
-			return nil, conflict("service_inactive", "Serviço indisponível",
-				fmt.Sprintf("O serviço %q não está disponível no momento.", sn.Name), nil)
-		case !sn.Enabled(o.ProfessionalID):
-			return nil, conflict("service_not_eligible", "Serviço não feito por este profissional",
-				fmt.Sprintf("O profissional deste atendimento não faz o serviço %q.", sn.Name), nil)
-		}
-		out = append(out, sn)
-	}
-	return out, nil
-}
-
 // hasPending informa se a comanda tem solicitação pendente.
 func hasPending(ctx context.Context, tx pgx.Tx, orderID uuid.UUID) (bool, error) {
 	var ok bool
@@ -91,21 +84,34 @@ func hasPending(ctx context.Context, tx pgx.Tx, orderID uuid.UUID) (bool, error)
 	return ok, err
 }
 
-// replaceOrderItems define o conjunto de serviços da comanda aberta.
+// withOrder anexa a comanda atual (current) a um conflito que ainda não a tem.
+func (s *Service) withOrder(ctx context.Context, q database.Querier, o orderRow, err error) error {
+	var he *hs.Error
+	if errors.As(err, &he) && he.Status == http.StatusConflict && he.Current == nil {
+		if view, verr := LoadOrder(ctx, q, o.EstablishmentID, o.ID); verr == nil {
+			he.Current = view
+		}
+	}
+	return err
+}
+
+// replaceOrderItems define os itens da comanda aberta, com quantidade absoluta por item.
 //   - Cliente (T-O-02): só enquanto aguarda; depois da chamada, faz uma solicitação.
 //   - Equipe (T-O-03): aguardando, chamado ou em atendimento, com motivo, sem solicitação pendente.
 //
-// Itens mantidos preservam o snapshot; retirados viram "removed" (nada é apagado); novos copiam o
-// catálogo atual. Item realizado não sai. Total recalculado no servidor.
+// Linhas mantidas preservam o snapshot (também ao aumentar a quantidade); retiradas viram
+// "removed" (nada é apagado); novas copiam o catálogo atual. Unidade realizada não sai. Total e
+// estimativa recalculados no servidor; histórico das quantidades gravado.
 func (s *Service) replaceOrderItems(w http.ResponseWriter, r *http.Request) error {
 	var body replaceRequest
 	var reason string
 	var expected int64
+	var wants []LineWant
 	return s.orderCommand(w, r, "replaceOrderItems", allow{customer: true, professional: true, owner: true}, &body,
 		func(by who) error {
 			var v validate.Collector
 			expected = v.Version("/expected_version", body.ExpectedVersion)
-			validateServiceList(&v, "/service_ids", body.ServiceIDs, 1)
+			wants = RequestedLines(&v, body.ServiceIDs, body.Items, 1)
 			reason = reasonFor(&v, by, body.Reason, "/reason")
 			return v.Err()
 		},
@@ -134,55 +140,30 @@ func (s *Service) replaceOrderItems(w http.ResponseWriter, r *http.Request) erro
 			if err != nil {
 				return idempotency.Result{}, err
 			}
-			want := *body.ServiceIDs
-			var remove []uuid.UUID
-			have := map[uuid.UUID]bool{}
-			for _, it := range items {
-				have[it.ServiceID] = true
-				if slices.Contains(want, it.ServiceID) {
-					continue
-				}
-				if it.Status == ItemPerformed {
-					return idempotency.Result{}, s.orderConflict(ctx, tx, cur, "item_already_performed", "Serviço já realizado",
-						fmt.Sprintf("%q já foi realizado e não pode ser retirado.", it.Name))
-				}
-				remove = append(remove, it.ID)
-			}
-			var add []uuid.UUID
-			for _, id := range want {
-				if !have[id] {
-					add = append(add, id)
-				}
-			}
-			if len(add) == 0 && len(remove) == 0 {
-				return s.done(ctx, tx, cur, http.StatusOK) // mesmo conjunto: nada muda
-			}
-			snaps, err := snapshotsToAdd(ctx, tx, cur, add, func(id uuid.UUID) string {
-				return "/service_ids/" + strconv.Itoa(slices.Index(want, id))
-			})
+			st, err := estabelecimento.LoadSettings(ctx, tx, cur.EstablishmentID)
 			if err != nil {
 				return idempotency.Result{}, err
 			}
 			now := s.Clock.Now()
-			if len(remove) > 0 {
-				if _, err := tx.Exec(ctx, `UPDATE order_item SET status = 'removed', removed_at = $2 WHERE id = ANY($1)`, remove, now); err != nil {
-					return idempotency.Result{}, err
-				}
+			evs, changed, err := planItems(ctx, tx, cur, items, wants, "", st, now)
+			if err != nil {
+				return idempotency.Result{}, s.withOrder(ctx, tx, cur, err)
 			}
-			for _, sn := range snaps {
-				if _, err := insertItem(ctx, tx, cur.EstablishmentID, cur.ID, sn, now); err != nil {
-					return idempotency.Result{}, err
-				}
+			if !changed {
+				return s.done(ctx, tx, cur, http.StatusOK) // mesmo conjunto: nada muda
 			}
 			version, err := bumpOpenTotal(ctx, tx, cur.ID, now)
 			if err != nil {
 				return idempotency.Result{}, err
 			}
-			action := "T-O-02"
+			action, source := "T-O-02", "customer"
 			if by.isStaff {
-				action = "T-O-03"
+				action, source = "T-O-03", "staff"
 			}
 			a := by.audit(ctx, cur)
+			if err := recordQuantities(ctx, tx, cur.EstablishmentID, cur.ID, evs, source, a, version, now); err != nil {
+				return idempotency.Result{}, err
+			}
 			a.EstablishmentID, a.OccurredAt, a.Action, a.TargetType, a.TargetID = &cur.EstablishmentID, now, action, "order", cur.ID
 			a.FromState, a.ToState, a.Reason = versionTag(StatusOpen, version-1), versionTag(StatusOpen, version), reason
 			if err := auditoria.Record(ctx, tx, a); err != nil {
@@ -202,19 +183,51 @@ type versionOnly struct {
 	ExpectedVersion *int64 `json:"expected_version"`
 }
 
-// markItemPerformed (T-O-13): durante o atendimento, a equipe marca um item como integralmente
-// realizado; a partir daí o cliente não pode retirá-lo (R-CMD-09).
+// markItemPerformed (T-O-13): durante o atendimento, a equipe marca TODAS as unidades da linha
+// como integralmente realizadas (serviço) ou entregues (produto); daí em diante o cliente não
+// pode retirá-la (R-CMD-09). Para registrar parte ("2 de 3"), use setItemPerformedQuantity.
 func (s *Service) markItemPerformed(w http.ResponseWriter, r *http.Request) error {
 	var body versionOnly
-	var expected int64
+	return s.performedCommand(w, r, "markItemPerformed", "T-O-13", &body, func(v *validate.Collector) (int64, *int) {
+		return v.Version("/expected_version", body.ExpectedVersion), nil
+	})
+}
+
+type performedRequest struct {
+	ExpectedVersion   *int64 `json:"expected_version"`
+	PerformedQuantity *int64 `json:"performed_quantity"`
+}
+
+// setItemPerformedQuantity (T-O-14): registra quantas unidades da linha já foram integralmente
+// realizadas (ou entregues, para produto), em valor ABSOLUTO com versão esperada — repetir não
+// soma. Só cresce: corrigir para menos é decisão do dono na revisão (interrupção) ou na correção.
+func (s *Service) setItemPerformedQuantity(w http.ResponseWriter, r *http.Request) error {
+	var body performedRequest
+	return s.performedCommand(w, r, "setItemPerformedQuantity", "T-O-14", &body, func(v *validate.Collector) (int64, *int) {
+		expected := v.Version("/expected_version", body.ExpectedVersion)
+		v.Required("/performed_quantity", body.PerformedQuantity == nil)
+		if body.PerformedQuantity == nil {
+			return expected, nil
+		}
+		n := int(v.IntRange("/performed_quantity", body.PerformedQuantity, 1, maxLineQuantity))
+		return expected, &n
+	})
+}
+
+// performedCommand é a parte comum de T-O-13/T-O-14. parse devolve a versão esperada e a
+// quantidade pedida (nil = todas as unidades da linha).
+func (s *Service) performedCommand(w http.ResponseWriter, r *http.Request, op, action string, body any,
+	parse func(v *validate.Collector) (int64, *int)) error {
 	itemID, err := pathID(r, "itemId")
 	if err != nil {
 		return err
 	}
-	return s.orderCommand(w, r, "markItemPerformed", allow{professional: true, owner: true}, &body,
+	var expected int64
+	var want *int
+	return s.orderCommand(w, r, op, allow{professional: true, owner: true}, body,
 		func(who) error {
 			var v validate.Collector
-			expected = v.Version("/expected_version", body.ExpectedVersion)
+			expected, want = parse(&v)
 			return v.Err()
 		},
 		func(tx pgx.Tx, o orderRow, by who) (idempotency.Result, error) {
@@ -223,23 +236,47 @@ func (s *Service) markItemPerformed(w http.ResponseWriter, r *http.Request) erro
 			if err != nil {
 				return idempotency.Result{}, err
 			}
-			var status, name string
-			err = tx.QueryRow(ctx, `SELECT status, name FROM order_item WHERE order_id = $1 AND id = $2`, cur.ID, itemID).Scan(&status, &name)
+			var it itemRow
+			err = tx.QueryRow(ctx, `SELECT id, kind, name, status, quantity, performed_quantity FROM order_item
+				WHERE order_id = $1 AND id = $2 AND status <> 'removed'`, cur.ID, itemID).
+				Scan(&it.ID, &it.Kind, &it.Name, &it.Status, &it.Quantity, &it.PerformedQty)
 			if errors.Is(err, pgx.ErrNoRows) {
 				return idempotency.Result{}, hs.ErrNotFound()
 			}
 			if err != nil {
 				return idempotency.Result{}, err
 			}
-			if cur.Status != StatusOpen || visit.Status != visitInService || status != ItemAccepted {
-				detail := "Só é possível marcar como realizado um serviço aceito, durante o atendimento."
-				if status == ItemPerformed {
-					detail = fmt.Sprintf("%q já está marcado como realizado.", name)
-				}
-				return idempotency.Result{}, s.orderConflict(ctx, tx, cur, "invalid_transition", "Ação não permitida agora", detail)
+			target := it.Quantity
+			if want != nil {
+				target = *want
+			}
+			unit := "realizado"
+			if it.Kind == catalogo.KindProduct {
+				unit = "entregue"
+			}
+			switch {
+			case cur.Status != StatusOpen || visit.Status != visitInService:
+				return idempotency.Result{}, s.orderConflict(ctx, tx, cur, "invalid_transition", "Ação não permitida agora",
+					"Só é possível registrar o que foi "+unit+" durante o atendimento.")
+			case it.PerformedQty == it.Quantity:
+				return idempotency.Result{}, s.orderConflict(ctx, tx, cur, "invalid_transition", "Ação não permitida agora",
+					fmt.Sprintf("%q já está todo marcado como %s.", it.Name, unit))
+			case target > it.Quantity:
+				return idempotency.Result{}, hs.ErrValidation(hs.FieldError{Field: "/performed_quantity", Code: hs.FieldOutOfRange,
+					Message: fmt.Sprintf("o pedido tem %d unidade(s) de %q", it.Quantity, it.Name)})
+			case target < it.PerformedQty:
+				return idempotency.Result{}, s.orderConflict(ctx, tx, cur, "item_already_performed", "Unidades já registradas",
+					fmt.Sprintf("%q já tem %d unidade(s) registradas como %s; o dono corrige na revisão, se preciso.",
+						it.Name, it.PerformedQty, unit))
+			case target == it.PerformedQty:
+				return s.done(ctx, tx, cur, http.StatusOK) // nada muda
 			}
 			now := s.Clock.Now()
-			if _, err := tx.Exec(ctx, `UPDATE order_item SET status = 'performed', performed_at = $2 WHERE id = $1`, itemID, now); err != nil {
+			if _, err := tx.Exec(ctx, `
+				UPDATE order_item SET performed_quantity = $2,
+				       status = CASE WHEN $2 = quantity THEN 'performed' ELSE status END,
+				       performed_at = CASE WHEN $2 = quantity THEN $3 ELSE performed_at END
+				WHERE id = $1`, itemID, target, now); err != nil {
 				return idempotency.Result{}, err
 			}
 			version, err := bumpVersion(ctx, tx, cur.ID, now)
@@ -247,8 +284,13 @@ func (s *Service) markItemPerformed(w http.ResponseWriter, r *http.Request) erro
 				return idempotency.Result{}, err
 			}
 			a := by.audit(ctx, cur)
-			a.EstablishmentID, a.OccurredAt, a.Action, a.TargetType, a.TargetID = &cur.EstablishmentID, now, "T-O-13", "order_item", itemID
-			a.FromState, a.ToState = ItemAccepted+"@"+strconv.FormatInt(version-1, 10), ItemPerformed+"@"+strconv.FormatInt(version, 10)
+			if err := recordQuantities(ctx, tx, cur.EstablishmentID, cur.ID,
+				[]qtyEvent{{itemID, "performed_quantity", it.PerformedQty, target}}, "staff", a, version, now); err != nil {
+				return idempotency.Result{}, err
+			}
+			a.EstablishmentID, a.OccurredAt, a.Action, a.TargetType, a.TargetID = &cur.EstablishmentID, now, action, "order_item", itemID
+			a.FromState = strconv.Itoa(it.PerformedQty) + "/" + strconv.Itoa(it.Quantity) + "@" + strconv.FormatInt(version-1, 10)
+			a.ToState = strconv.Itoa(target) + "/" + strconv.Itoa(it.Quantity) + "@" + strconv.FormatInt(version, 10)
 			if err := auditoria.Record(ctx, tx, a); err != nil {
 				return idempotency.Result{}, err
 			}

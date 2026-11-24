@@ -12,6 +12,8 @@ import (
 
 // Snapshot é a cópia do serviço no momento em que entra numa comanda (R-CMD-05).
 type Snapshot struct {
+	// Kind: KindService ou KindProduct. Produto não tem duração, pontos nem habilitação.
+	Kind            string
 	ID              uuid.UUID
 	Name            string
 	PriceCents      int64
@@ -23,6 +25,9 @@ type Snapshot struct {
 
 // Enabled informa se o profissional está habilitado para o serviço.
 func (s Snapshot) Enabled(professionalID uuid.UUID) bool {
+	if s.Kind == KindProduct {
+		return true // produto não depende do profissional
+	}
 	return slices.Contains(s.ProfessionalIDs, professionalID)
 }
 
@@ -40,7 +45,7 @@ func ServicesForEntry(ctx context.Context, q database.Querier, estID uuid.UUID, 
 		return nil, err
 	}
 	list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (Snapshot, error) {
-		var s Snapshot
+		s := Snapshot{Kind: KindService}
 		err := r.Scan(&s.ID, &s.Name, &s.PriceCents, &s.DurationMinutes, &s.Points, &s.Active, &s.ProfessionalIDs)
 		return s, err
 	})

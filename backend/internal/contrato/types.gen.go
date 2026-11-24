@@ -278,6 +278,24 @@ func (e AuditEventActorKind) Valid() bool {
 	}
 }
 
+// Defines values for CatalogKind.
+const (
+	CatalogKindProduct CatalogKind = "product"
+	CatalogKindService CatalogKind = "service"
+)
+
+// Valid indicates whether the value is a known member of the CatalogKind enum.
+func (e CatalogKind) Valid() bool {
+	switch e {
+	case CatalogKindProduct:
+		return true
+	case CatalogKindService:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ChangeRequestStatus.
 const (
 	ChangeRequestStatusApproved ChangeRequestStatus = "approved"
@@ -437,6 +455,33 @@ const (
 func (e DesktopBindingTokenType) Valid() bool {
 	switch e {
 	case DPoP:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EntryState.
+const (
+	Accepting       EntryState = "accepting"
+	ClosedManual    EntryState = "closed_manual"
+	Full            EntryState = "full"
+	OperationClosed EntryState = "operation_closed"
+	OperationPaused EntryState = "operation_paused"
+)
+
+// Valid indicates whether the value is a known member of the EntryState enum.
+func (e EntryState) Valid() bool {
+	switch e {
+	case Accepting:
+		return true
+	case ClosedManual:
+		return true
+	case Full:
+		return true
+	case OperationClosed:
+		return true
+	case OperationPaused:
 		return true
 	default:
 		return false
@@ -1003,31 +1048,31 @@ func (e LedgerEntrySourceType) Valid() bool {
 
 // Defines values for LedgerEntryKind.
 const (
-	AccountClosure  LedgerEntryKind = "account_closure"
-	Consume         LedgerEntryKind = "consume"
-	ConsumeReversal LedgerEntryKind = "consume_reversal"
-	Credit          LedgerEntryKind = "credit"
-	CreditReversal  LedgerEntryKind = "credit_reversal"
-	Hold            LedgerEntryKind = "hold"
-	HoldRelease     LedgerEntryKind = "hold_release"
+	LedgerEntryKindAccountClosure  LedgerEntryKind = "account_closure"
+	LedgerEntryKindConsume         LedgerEntryKind = "consume"
+	LedgerEntryKindConsumeReversal LedgerEntryKind = "consume_reversal"
+	LedgerEntryKindCredit          LedgerEntryKind = "credit"
+	LedgerEntryKindCreditReversal  LedgerEntryKind = "credit_reversal"
+	LedgerEntryKindHold            LedgerEntryKind = "hold"
+	LedgerEntryKindHoldRelease     LedgerEntryKind = "hold_release"
 )
 
 // Valid indicates whether the value is a known member of the LedgerEntryKind enum.
 func (e LedgerEntryKind) Valid() bool {
 	switch e {
-	case AccountClosure:
+	case LedgerEntryKindAccountClosure:
 		return true
-	case Consume:
+	case LedgerEntryKindConsume:
 		return true
-	case ConsumeReversal:
+	case LedgerEntryKindConsumeReversal:
 		return true
-	case Credit:
+	case LedgerEntryKindCredit:
 		return true
-	case CreditReversal:
+	case LedgerEntryKindCreditReversal:
 		return true
-	case Hold:
+	case LedgerEntryKindHold:
 		return true
-	case HoldRelease:
+	case LedgerEntryKindHoldRelease:
 		return true
 	default:
 		return false
@@ -1038,6 +1083,7 @@ func (e LedgerEntryKind) Valid() bool {
 const (
 	Avatar            MediaPurpose = "avatar"
 	Logo              MediaPurpose = "logo"
+	ProductPhoto      MediaPurpose = "product_photo"
 	ProfessionalPhoto MediaPurpose = "professional_photo"
 )
 
@@ -1047,6 +1093,8 @@ func (e MediaPurpose) Valid() bool {
 	case Avatar:
 		return true
 	case Logo:
+		return true
+	case ProductPhoto:
 		return true
 	case ProfessionalPhoto:
 		return true
@@ -1346,6 +1394,48 @@ func (e ParticipationStatus) Valid() bool {
 	}
 }
 
+// Defines values for PaymentFeeMethod.
+const (
+	PaymentFeeMethodCredit PaymentFeeMethod = "credit"
+	PaymentFeeMethodDebit  PaymentFeeMethod = "debit"
+	PaymentFeeMethodPix    PaymentFeeMethod = "pix"
+)
+
+// Valid indicates whether the value is a known member of the PaymentFeeMethod enum.
+func (e PaymentFeeMethod) Valid() bool {
+	switch e {
+	case PaymentFeeMethodCredit:
+		return true
+	case PaymentFeeMethodDebit:
+		return true
+	case PaymentFeeMethodPix:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PaymentFeeConfigMethod.
+const (
+	PaymentFeeConfigMethodCredit PaymentFeeConfigMethod = "credit"
+	PaymentFeeConfigMethodDebit  PaymentFeeConfigMethod = "debit"
+	PaymentFeeConfigMethodPix    PaymentFeeConfigMethod = "pix"
+)
+
+// Valid indicates whether the value is a known member of the PaymentFeeConfigMethod enum.
+func (e PaymentFeeConfigMethod) Valid() bool {
+	switch e {
+	case PaymentFeeConfigMethodCredit:
+		return true
+	case PaymentFeeConfigMethodDebit:
+		return true
+	case PaymentFeeConfigMethodPix:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PaymentMethod.
 const (
 	PaymentMethodCard PaymentMethod = "card"
@@ -1460,6 +1550,27 @@ func (e QueueStatus) Valid() bool {
 	}
 }
 
+// Defines values for ReceiptCardType.
+const (
+	ReceiptCardTypeCredit      ReceiptCardType = "credit"
+	ReceiptCardTypeDebit       ReceiptCardType = "debit"
+	ReceiptCardTypeLessThannil ReceiptCardType = "<nil>"
+)
+
+// Valid indicates whether the value is a known member of the ReceiptCardType enum.
+func (e ReceiptCardType) Valid() bool {
+	switch e {
+	case ReceiptCardTypeCredit:
+		return true
+	case ReceiptCardTypeDebit:
+		return true
+	case ReceiptCardTypeLessThannil:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ReceiptRegisteredBy.
 const (
 	ReceiptRegisteredByOwner        ReceiptRegisteredBy = "owner"
@@ -1493,6 +1604,33 @@ func (e ReceiptClassification) Valid() bool {
 	case Excess:
 		return true
 	case Principal:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ReceiptCostsByMethodMethod.
+const (
+	ReceiptCostsByMethodMethodCardUnspecified ReceiptCostsByMethodMethod = "card_unspecified"
+	ReceiptCostsByMethodMethodCash            ReceiptCostsByMethodMethod = "cash"
+	ReceiptCostsByMethodMethodCredit          ReceiptCostsByMethodMethod = "credit"
+	ReceiptCostsByMethodMethodDebit           ReceiptCostsByMethodMethod = "debit"
+	ReceiptCostsByMethodMethodPix             ReceiptCostsByMethodMethod = "pix"
+)
+
+// Valid indicates whether the value is a known member of the ReceiptCostsByMethodMethod enum.
+func (e ReceiptCostsByMethodMethod) Valid() bool {
+	switch e {
+	case ReceiptCostsByMethodMethodCardUnspecified:
+		return true
+	case ReceiptCostsByMethodMethodCash:
+		return true
+	case ReceiptCostsByMethodMethodCredit:
+		return true
+	case ReceiptCostsByMethodMethodDebit:
+		return true
+	case ReceiptCostsByMethodMethodPix:
 		return true
 	default:
 		return false
@@ -1559,6 +1697,24 @@ func (e RefundStatus) Valid() bool {
 	case RefundStatusUnderReview:
 		return true
 	case RefundStatusUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RegisterReceiptRequestCardType.
+const (
+	RegisterReceiptRequestCardTypeCredit RegisterReceiptRequestCardType = "credit"
+	RegisterReceiptRequestCardTypeDebit  RegisterReceiptRequestCardType = "debit"
+)
+
+// Valid indicates whether the value is a known member of the RegisterReceiptRequestCardType enum.
+func (e RegisterReceiptRequestCardType) Valid() bool {
+	switch e {
+	case RegisterReceiptRequestCardTypeCredit:
+		return true
+	case RegisterReceiptRequestCardTypeDebit:
 		return true
 	default:
 		return false
@@ -1763,6 +1919,24 @@ func (e SessionViewSessionAuthMethod) Valid() bool {
 	}
 }
 
+// Defines values for StaffQueueAdmissionStatus.
+const (
+	StaffQueueAdmissionStatusClosed StaffQueueAdmissionStatus = "closed"
+	StaffQueueAdmissionStatusOpen   StaffQueueAdmissionStatus = "open"
+)
+
+// Valid indicates whether the value is a known member of the StaffQueueAdmissionStatus enum.
+func (e StaffQueueAdmissionStatus) Valid() bool {
+	switch e {
+	case StaffQueueAdmissionStatusClosed:
+		return true
+	case StaffQueueAdmissionStatusOpen:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for StaffRole.
 const (
 	StaffRoleOwner        StaffRole = "owner"
@@ -1871,6 +2045,27 @@ func (e AnalyticsMethod) Valid() bool {
 	}
 }
 
+// Defines values for FeeMethod.
+const (
+	FeeMethodCredit FeeMethod = "credit"
+	FeeMethodDebit  FeeMethod = "debit"
+	FeeMethodPix    FeeMethod = "pix"
+)
+
+// Valid indicates whether the value is a known member of the FeeMethod enum.
+func (e FeeMethod) Valid() bool {
+	switch e {
+	case FeeMethodCredit:
+		return true
+	case FeeMethodDebit:
+		return true
+	case FeeMethodPix:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for HealthStatus.
 const (
 	HealthStatusNotReady HealthStatus = "not_ready"
@@ -1967,6 +2162,7 @@ const (
 	GetAnalyticsBreakdownParamsDimensionPaymentMethods GetAnalyticsBreakdownParamsDimension = "payment_methods"
 	GetAnalyticsBreakdownParamsDimensionPeakHours      GetAnalyticsBreakdownParamsDimension = "peak_hours"
 	GetAnalyticsBreakdownParamsDimensionPending        GetAnalyticsBreakdownParamsDimension = "pending"
+	GetAnalyticsBreakdownParamsDimensionProducts       GetAnalyticsBreakdownParamsDimension = "products"
 	GetAnalyticsBreakdownParamsDimensionProfessionals  GetAnalyticsBreakdownParamsDimension = "professionals"
 	GetAnalyticsBreakdownParamsDimensionRecurrence     GetAnalyticsBreakdownParamsDimension = "recurrence"
 	GetAnalyticsBreakdownParamsDimensionRewards        GetAnalyticsBreakdownParamsDimension = "rewards"
@@ -1984,6 +2180,8 @@ func (e GetAnalyticsBreakdownParamsDimension) Valid() bool {
 	case GetAnalyticsBreakdownParamsDimensionPeakHours:
 		return true
 	case GetAnalyticsBreakdownParamsDimensionPending:
+		return true
+	case GetAnalyticsBreakdownParamsDimensionProducts:
 		return true
 	case GetAnalyticsBreakdownParamsDimensionProfessionals:
 		return true
@@ -2243,6 +2441,27 @@ func (e GetAnalyticsSummaryParamsMethod) Valid() bool {
 	}
 }
 
+// Defines values for SetPaymentFeeParamsMethod.
+const (
+	SetPaymentFeeParamsMethodCredit SetPaymentFeeParamsMethod = "credit"
+	SetPaymentFeeParamsMethodDebit  SetPaymentFeeParamsMethod = "debit"
+	SetPaymentFeeParamsMethodPix    SetPaymentFeeParamsMethod = "pix"
+)
+
+// Valid indicates whether the value is a known member of the SetPaymentFeeParamsMethod enum.
+func (e SetPaymentFeeParamsMethod) Valid() bool {
+	switch e {
+	case SetPaymentFeeParamsMethodCredit:
+		return true
+	case SetPaymentFeeParamsMethodDebit:
+		return true
+	case SetPaymentFeeParamsMethodPix:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ListPublicEstablishmentsParamsSort.
 const (
 	ListPublicEstablishmentsParamsSortDistance ListPublicEstablishmentsParamsSort = "distance"
@@ -2289,13 +2508,23 @@ type AccountView struct {
 
 // AdjustOrderRequest Correção por item; não existe valor livre nem desconto.
 type AdjustOrderRequest struct {
+	// AddPerformedItems Itens feitos/entregues e não registrados, com quantidade (alternativa a `add_performed_service_ids`).
+	AddPerformedItems *OrderLines `json:"add_performed_items,omitempty"`
+
 	// AddPerformedServiceIds Serviço feito e não registrado; preço atual do catálogo vira snapshot.
 	AddPerformedServiceIds *[]Id `json:"add_performed_service_ids,omitempty"`
 
 	// ExpectedVersion Versão do agregado; incrementa a cada mudança.
 	ExpectedVersion Version `json:"expected_version"`
 	Reason          Reason  `json:"reason"`
-	UnchargeItemIds *[]Id   `json:"uncharge_item_ids,omitempty"`
+
+	// SetChargedQuantities Novas unidades cobradas de linhas existentes (0 = não cobrar a linha). Acima do pedido, a quantidade da linha acompanha.
+	SetChargedQuantities *[]struct {
+		// ItemId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+		ItemId   Id  `json:"item_id"`
+		Quantity int `json:"quantity"`
+	} `json:"set_charged_quantities,omitempty"`
+	UnchargeItemIds *[]Id `json:"uncharge_item_ids,omitempty"`
 }
 
 // AnalyticsBreakdown defines model for AnalyticsBreakdown.
@@ -2312,7 +2541,18 @@ type AnalyticsBreakdownStatus string
 
 // AnalyticsCash defines model for AnalyticsCash.
 type AnalyticsCash struct {
-	IgnoredFilters []string `json:"ignored_filters"`
+	// AfterCostsCents Recebido − estornos − custos de recebimento conhecidos ou estimados. Não é lucro.
+	AfterCostsCents AnalyticsValue `json:"after_costs_cents"`
+
+	// FeeCoverage Fração (0–1) dos recebimentos com custo conhecido, estimado ou que não se aplica. Abaixo de 1 o resultado é incompleto.
+	FeeCoverage AnalyticsValue `json:"fee_coverage"`
+
+	// FeesEstimatedCents value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+	FeesEstimatedCents AnalyticsValue `json:"fees_estimated_cents"`
+
+	// FeesKnownCents value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+	FeesKnownCents AnalyticsValue `json:"fees_known_cents"`
+	IgnoredFilters []string       `json:"ignored_filters"`
 
 	// NetCents value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
 	NetCents AnalyticsValue `json:"net_cents"`
@@ -2530,6 +2770,41 @@ type AvailabilitySignalRequest struct {
 	Unavailable bool    `json:"unavailable"`
 }
 
+// CatalogCategory defines model for CatalogCategory.
+type CatalogCategory struct {
+	DisplayOrder int `json:"display_order"`
+
+	// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	Id     Id            `json:"id"`
+	Kind   CatalogKind   `json:"kind"`
+	Name   string        `json:"name"`
+	Status ServiceStatus `json:"status"`
+
+	// Version Versão do agregado; incrementa a cada mudança.
+	Version Version `json:"version"`
+}
+
+// CatalogKind defines model for CatalogKind.
+type CatalogKind string
+
+// CatalogSettingsRequest defines model for CatalogSettingsRequest.
+type CatalogSettingsRequest struct {
+	// ExpectedVersion Versão do agregado; incrementa a cada mudança.
+	ExpectedVersion    Version `json:"expected_version"`
+	MaxServiceQuantity *int    `json:"max_service_quantity,omitempty"`
+	ProductsEnabled    *bool   `json:"products_enabled,omitempty"`
+}
+
+// CategoryRequest defines model for CategoryRequest.
+type CategoryRequest struct {
+	DisplayOrder *int `json:"display_order,omitempty"`
+
+	// ExpectedVersion Versão do agregado; incrementa a cada mudança.
+	ExpectedVersion *Version     `json:"expected_version,omitempty"`
+	Kind            *CatalogKind `json:"kind,omitempty"`
+	Name            *string      `json:"name,omitempty"`
+}
+
 // ChangePasswordRequest defines model for ChangePasswordRequest.
 type ChangePasswordRequest struct {
 	CurrentPassword string `json:"current_password"`
@@ -2539,11 +2814,12 @@ type ChangePasswordRequest struct {
 // ChangeRequest defines model for ChangeRequest.
 type ChangeRequest struct {
 	Add []struct {
-		Name string `json:"name"`
-
-		// ServiceId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
-		ServiceId Id    `json:"service_id"`
-		UnitPrice Money `json:"unit_price"`
+		Kind      CatalogKind `json:"kind"`
+		Name      string      `json:"name"`
+		ProductId *Id         `json:"product_id"`
+		Quantity  int         `json:"quantity"`
+		ServiceId *Id         `json:"service_id"`
+		UnitPrice Money       `json:"unit_price"`
 	} `json:"add"`
 
 	// CreatedAt RFC 3339 em UTC com sufixo Z.
@@ -2553,9 +2829,14 @@ type ChangeRequest struct {
 	DecisionReason *string    `json:"decision_reason,omitempty"`
 
 	// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
-	Id            Id                  `json:"id"`
-	RemoveItemIds []Id                `json:"remove_item_ids"`
-	Status        ChangeRequestStatus `json:"status"`
+	Id            Id   `json:"id"`
+	RemoveItemIds []Id `json:"remove_item_ids"`
+	SetQuantities []struct {
+		// ItemId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+		ItemId   Id  `json:"item_id"`
+		Quantity int `json:"quantity"`
+	} `json:"set_quantities"`
+	Status ChangeRequestStatus `json:"status"`
 }
 
 // ChangeRequestStatus defines model for ChangeRequestStatus.
@@ -2576,11 +2857,14 @@ type CloseInterruptionRequest struct {
 	// ExpectedVersion Versão do agregado; incrementa a cada mudança.
 	ExpectedVersion Version `json:"expected_version"`
 
-	// Items Decisão do dono por item; só `fully_performed` é cobrado pelo preço aceito.
+	// Items Decisão do dono por item. Cobra-se `quantity` unidades integralmente feitas pelo preço aceito (`fully_performed` = todas); a unidade parcial e as não iniciadas valem zero.
 	Items []struct {
 		// ItemId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
 		ItemId  Id                                   `json:"item_id"`
 		Outcome CloseInterruptionRequestItemsOutcome `json:"outcome"`
+
+		// Quantity Unidades integralmente feitas (produto: entregues). Ausente: todas para resultado completo; nenhuma para os outros.
+		Quantity *int `json:"quantity,omitempty"`
 	} `json:"items"`
 	ReviewNote Reason `json:"review_note"`
 }
@@ -2596,12 +2880,15 @@ type CompleteServiceRequest struct {
 	// ExpectedVersion Versão do agregado; incrementa a cada mudança.
 	ExpectedVersion Version `json:"expected_version"`
 
-	// Items Resultado de cada item aceito. Pelo menos um `performed`. `not_performed` exige `reason`.
+	// Items Resultado de cada item aceito. Pelo menos uma unidade de serviço `performed`. `not_performed` exige `reason`; `performed` com menos unidades que as pedidas também. Unidade já registrada como feita não pode ser declarada não feita.
 	Items []struct {
 		// ItemId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
 		ItemId  Id                                 `json:"item_id"`
 		Outcome CompleteServiceRequestItemsOutcome `json:"outcome"`
-		Reason  *Reason                            `json:"reason,omitempty"`
+
+		// Quantity Unidades integralmente feitas (produto: entregues). Ausente: todas para resultado completo; nenhuma para os outros.
+		Quantity *int    `json:"quantity,omitempty"`
+		Reason   *Reason `json:"reason,omitempty"`
 	} `json:"items"`
 
 	// OrderExpectedVersion Versão do agregado; incrementa a cada mudança.
@@ -2619,11 +2906,16 @@ type ConfirmRefundRequest struct {
 
 // CreateChangeRequestRequest defines model for CreateChangeRequestRequest.
 type CreateChangeRequestRequest struct {
-	AddServiceIds *[]Id `json:"add_service_ids,omitempty"`
+	// AddItems Até 10 serviços e 10 produtos diferentes; cada item aparece uma vez (a quantidade fica na mesma linha).
+	AddItems      *OrderLines `json:"add_items,omitempty"`
+	AddServiceIds *[]Id       `json:"add_service_ids,omitempty"`
 
 	// ExpectedVersion Versão do agregado; incrementa a cada mudança.
 	ExpectedVersion Version `json:"expected_version"`
 	RemoveItemIds   *[]Id   `json:"remove_item_ids,omitempty"`
+
+	// SetQuantities Nova quantidade (absoluta) de linhas que continuam.
+	SetQuantities *[]ItemQuantityRequest `json:"set_quantities,omitempty"`
 }
 
 // CreateInviteRequest defines model for CreateInviteRequest.
@@ -2631,11 +2923,14 @@ type CreateInviteRequest struct {
 	Email openapi_types.Email `json:"email"`
 }
 
-// CreateParticipationRequest Sem preço, total, papel ou identidade — tudo é derivado no servidor.
+// CreateParticipationRequest Sem preço, total, papel ou identidade — tudo é derivado no servidor. Envie `items` (com quantidade, serviços e produtos) OU `service_ids` (formato anterior, quantidade 1). Pelo menos um serviço; nunca só produtos. Um pedido ocupa UMA posição na fila, mesmo com várias unidades.
 type CreateParticipationRequest struct {
+	// Items Até 10 serviços e 10 produtos diferentes; cada item aparece uma vez (a quantidade fica na mesma linha).
+	Items *OrderLines `json:"items,omitempty"`
+
 	// QueueId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
-	QueueId    Id   `json:"queue_id"`
-	ServiceIds []Id `json:"service_ids"`
+	QueueId    Id    `json:"queue_id"`
+	ServiceIds *[]Id `json:"service_ids,omitempty"`
 }
 
 // CreateProfessionalRequest defines model for CreateProfessionalRequest.
@@ -2666,6 +2961,9 @@ type CreateRewardRequest struct {
 
 // CreateServiceRequest defines model for CreateServiceRequest.
 type CreateServiceRequest struct {
+	// CategoryId Categoria de serviço desta loja (null = sem categoria).
+	CategoryId      *Id    `json:"category_id,omitempty"`
+	DisplayOrder    *int   `json:"display_order,omitempty"`
 	DurationMinutes int    `json:"duration_minutes"`
 	Name            string `json:"name"`
 	Points          int    `json:"points"`
@@ -2794,6 +3092,9 @@ type EmailRequest struct {
 // EmptyRequest defines model for EmptyRequest.
 type EmptyRequest = map[string]interface{}
 
+// EntryState Se a fila aceita nova participação agora: accepting; full (capacidade atingida, volta sozinha quando liberar vaga); closed_manual (entrada fechada pela equipe); operation_paused; operation_closed.
+type EntryState string
+
 // ErrorCode defines model for ErrorCode.
 type ErrorCode string
 
@@ -2818,6 +3119,39 @@ type Establishment struct {
 
 	// Version Versão do agregado; incrementa a cada mudança.
 	Version Version `json:"version"`
+}
+
+// EstablishmentSettings Configurações da loja (privadas do dono). docs/configuracoes-da-loja.md descreve tipo, padrão, intervalo e efeito de cada uma.
+type EstablishmentSettings struct {
+	Catalog struct {
+		MaxServiceQuantity int  `json:"max_service_quantity"`
+		ProductsEnabled    bool `json:"products_enabled"`
+
+		// Version Versão do agregado; incrementa a cada mudança.
+		Version Version `json:"version"`
+	} `json:"catalog"`
+	Payments struct {
+		CardEnabled bool `json:"card_enabled"`
+		CashEnabled bool `json:"cash_enabled"`
+
+		// PixAvailable Integração Pix operacional neste servidor.
+		PixAvailable bool `json:"pix_available"`
+		PixEnabled   bool `json:"pix_enabled"`
+
+		// Version Versão do agregado; incrementa a cada mudança.
+		Version Version `json:"version"`
+	} `json:"payments"`
+	Queue struct {
+		CallToleranceMinutes int `json:"call_tolerance_minutes"`
+
+		// DefaultQueueCapacity null = sem limite (padrão).
+		DefaultQueueCapacity          *int `json:"default_queue_capacity"`
+		ProfessionalsControlAdmission bool `json:"professionals_control_admission"`
+
+		// Version Versão do agregado; incrementa a cada mudança.
+		Version         Version `json:"version"`
+		VisitorsEnabled bool    `json:"visitors_enabled"`
+	} `json:"queue"`
 }
 
 // Estimate defines model for Estimate.
@@ -2924,9 +3258,12 @@ type GoogleStartRequestIntent string
 // HistoryEntry defines model for HistoryEntry.
 type HistoryEntry struct {
 	Items []struct {
-		Charged   bool   `json:"charged"`
-		Name      string `json:"name"`
-		UnitPrice Money  `json:"unit_price"`
+		Charged         bool        `json:"charged"`
+		ChargedQuantity int         `json:"charged_quantity"`
+		Kind            CatalogKind `json:"kind"`
+		Name            string      `json:"name"`
+		Quantity        int         `json:"quantity"`
+		UnitPrice       Money       `json:"unit_price"`
 	} `json:"items"`
 
 	// OrderId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
@@ -2968,6 +3305,9 @@ type InterruptServiceRequest struct {
 		// ItemId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
 		ItemId  Id                                  `json:"item_id"`
 		Outcome InterruptServiceRequestItemsOutcome `json:"outcome"`
+
+		// Quantity Unidades integralmente feitas (produto: entregues). Ausente: todas para resultado completo; nenhuma para os outros.
+		Quantity *int `json:"quantity,omitempty"`
 	} `json:"items"`
 
 	// OrderExpectedVersion Versão do agregado; incrementa a cada mudança.
@@ -2993,6 +3333,13 @@ type Invite struct {
 
 // InviteStatus defines model for InviteStatus.
 type InviteStatus string
+
+// ItemQuantityRequest defines model for ItemQuantityRequest.
+type ItemQuantityRequest struct {
+	// ItemId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	ItemId   Id  `json:"item_id"`
+	Quantity int `json:"quantity"`
+}
 
 // LedgerEntry defines model for LedgerEntry.
 type LedgerEntry struct {
@@ -3206,6 +3553,13 @@ type Order struct {
 	Total         Money      `json:"total"`
 	TotalFrozenAt *Timestamp `json:"total_frozen_at,omitempty"`
 
+	// Totals Unidades de serviço (não são pessoas), unidades de produto e duração estimada (só serviços).
+	Totals *struct {
+		DurationMinutes int `json:"duration_minutes"`
+		ProductUnits    int `json:"product_units"`
+		ServiceUnits    int `json:"service_units"`
+	} `json:"totals,omitempty"`
+
 	// Version Versão do agregado; incrementa a cada mudança.
 	Version Version `json:"version"`
 }
@@ -3218,24 +3572,37 @@ type OrderAdjustment struct {
 	At Timestamp `json:"at"`
 
 	// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
-	Id               Id     `json:"id"`
-	NewTotal         Money  `json:"new_total"`
-	PreviousTotal    Money  `json:"previous_total"`
+	Id              Id    `json:"id"`
+	NewTotal        Money `json:"new_total"`
+	PreviousTotal   Money `json:"previous_total"`
+	QuantityChanges *[]struct {
+		From int `json:"from"`
+
+		// ItemId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+		ItemId Id  `json:"item_id"`
+		To     int `json:"to"`
+	} `json:"quantity_changes,omitempty"`
 	Reason           string `json:"reason"`
 	UnchargedItemIds []Id   `json:"uncharged_item_ids"`
 }
 
-// OrderItem defines model for OrderItem.
+// OrderItem Uma linha por serviço ou produto. Invariantes: 0 ≤ charged_quantity ≤ performed_quantity ≤ quantity.
 type OrderItem struct {
 	// AddedAt RFC 3339 em UTC com sufixo Z.
 	AddedAt *Timestamp `json:"added_at,omitempty"`
 
-	// Charged Entra no total fechado.
-	Charged         bool `json:"charged"`
-	DurationMinutes int  `json:"duration_minutes"`
+	// Charged Tem unidades no total fechado (charged_quantity > 0).
+	Charged bool `json:"charged"`
+
+	// ChargedQuantity Unidades cobradas (só depois de fechado o valor).
+	ChargedQuantity int `json:"charged_quantity"`
+
+	// DurationMinutes Por unidade; produto = 0 (não entra na fila).
+	DurationMinutes int `json:"duration_minutes"`
 
 	// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
-	Id Id `json:"id"`
+	Id   Id          `json:"id"`
+	Kind CatalogKind `json:"kind"`
 
 	// Name Snapshot na inclusão.
 	Name string `json:"name"`
@@ -3243,15 +3610,28 @@ type OrderItem struct {
 	// OutcomeReason Motivo informado quando o serviço não foi realizado.
 	OutcomeReason *string    `json:"outcome_reason,omitempty"`
 	PerformedAt   *Timestamp `json:"performed_at,omitempty"`
-	Points        int        `json:"points"`
+
+	// PerformedQuantity Unidades integralmente realizadas (serviço) ou entregues (produto).
+	PerformedQuantity int `json:"performed_quantity"`
+
+	// Points Por unidade de serviço; produto = 0.
+	Points    int `json:"points"`
+	ProductId *Id `json:"product_id"`
+
+	// Quantity Unidades pedidas (vigentes).
+	Quantity int `json:"quantity"`
 
 	// ReportedOutcome O que o profissional informou na interrupção (a decisão final é do dono).
 	ReportedOutcome *OrderItemReportedOutcome `json:"reported_outcome,omitempty"`
 
-	// ServiceId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
-	ServiceId Id              `json:"service_id"`
-	Status    OrderItemStatus `json:"status"`
-	UnitPrice Money           `json:"unit_price"`
+	// ReportedQuantity Unidades feitas segundo o profissional na interrupção.
+	ReportedQuantity *int            `json:"reported_quantity,omitempty"`
+	ServiceId        *Id             `json:"service_id"`
+	Status           OrderItemStatus `json:"status"`
+
+	// Subtotal Aberta - preço × quantidade; valor fechado - preço × cobradas.
+	Subtotal  Money `json:"subtotal"`
+	UnitPrice Money `json:"unit_price"`
 }
 
 // OrderItemReportedOutcome O que o profissional informou na interrupção (a decisão final é do dono).
@@ -3259,6 +3639,19 @@ type OrderItemReportedOutcome string
 
 // OrderItemStatus defines model for OrderItemStatus.
 type OrderItemStatus string
+
+// OrderLineRequest Um item do pedido — exatamente um de `service_id` ou `product_id` — com quantidade (padrão 1). O limite da loja (`ordering.max_service_quantity`, 1–50, padrão 10) vale ao incluir ou aumentar; quantidades já aceitas não são invalidadas.
+type OrderLineRequest struct {
+	// ProductId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	ProductId *Id  `json:"product_id,omitempty"`
+	Quantity  *int `json:"quantity,omitempty"`
+
+	// ServiceId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	ServiceId *Id `json:"service_id,omitempty"`
+}
+
+// OrderLines Até 10 serviços e 10 produtos diferentes; cada item aparece uma vez (a quantidade fica na mesma linha).
+type OrderLines = []OrderLineRequest
 
 // OrderPayment defines model for OrderPayment.
 type OrderPayment struct {
@@ -3361,7 +3754,10 @@ type Participation struct {
 	Status          ParticipationStatus `json:"status"`
 	TicketCode      string              `json:"ticket_code"`
 	ToleranceEndsAt *Timestamp          `json:"tolerance_ends_at,omitempty"`
-	Transfers       *[]struct {
+
+	// ToleranceMinutes Tolerância gravada na chamada (configuração da loja naquele momento).
+	ToleranceMinutes *int `json:"tolerance_minutes,omitempty"`
+	Transfers        *[]struct {
 		// At RFC 3339 em UTC com sufixo Z.
 		At Timestamp `json:"at"`
 
@@ -3388,8 +3784,57 @@ type PasswordResetConfirmRequest struct {
 	Token       string `json:"token"`
 }
 
+// PaymentFee Custo interno ESTIMADO pelo dono para uma modalidade. Nunca aparece para cliente, visitante ou profissional, e não muda o valor cobrado.
+type PaymentFee struct {
+	// Configured false = não configurado; zero explícito é configurado.
+	Configured bool               `json:"configured"`
+	Current    *PaymentFeeConfig  `json:"current"`
+	Estimate   bool               `json:"estimate"`
+	History    []PaymentFeeConfig `json:"history"`
+	Method     PaymentFeeMethod   `json:"method"`
+
+	// Version Versão vigente (0 = nunca configurado).
+	Version int `json:"version"`
+}
+
+// PaymentFeeMethod defines model for PaymentFee.Method.
+type PaymentFeeMethod string
+
+// PaymentFeeConfig defines model for PaymentFeeConfig.
+type PaymentFeeConfig struct {
+	// Cleared Versão que voltou a "não configurado".
+	Cleared bool `json:"cleared"`
+
+	// EffectiveFrom RFC 3339 em UTC com sufixo Z.
+	EffectiveFrom Timestamp `json:"effective_from"`
+
+	// FixedCents Por transação (não por unidade).
+	FixedCents int `json:"fixed_cents"`
+
+	// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	Id     Id                     `json:"id"`
+	Method PaymentFeeConfigMethod `json:"method"`
+
+	// PercentBasisPoints 1 pb = 0,01%.
+	PercentBasisPoints int `json:"percent_basis_points"`
+	Version            int `json:"version"`
+}
+
+// PaymentFeeConfigMethod defines model for PaymentFeeConfig.Method.
+type PaymentFeeConfigMethod string
+
 // PaymentMethod defines model for PaymentMethod.
 type PaymentMethod string
+
+// PaymentSettingsRequest defines model for PaymentSettingsRequest.
+type PaymentSettingsRequest struct {
+	CardEnabled *bool `json:"card_enabled,omitempty"`
+	CashEnabled *bool `json:"cash_enabled,omitempty"`
+
+	// ExpectedVersion Versão do agregado; incrementa a cada mudança.
+	ExpectedVersion Version `json:"expected_version"`
+	PixEnabled      *bool   `json:"pix_enabled,omitempty"`
+}
 
 // Pendencies defines model for Pendencies.
 type Pendencies struct {
@@ -3449,6 +3894,38 @@ type Problem struct {
 	Type string `json:"type"`
 }
 
+// Product defines model for Product.
+type Product struct {
+	CategoryId   *Id     `json:"category_id"`
+	Description  *string `json:"description"`
+	DisplayOrder int     `json:"display_order"`
+
+	// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	Id     Id            `json:"id"`
+	Image  *ImageRef     `json:"image"`
+	Name   string        `json:"name"`
+	Price  Money         `json:"price"`
+	Status ServiceStatus `json:"status"`
+
+	// Version Versão do agregado; incrementa a cada mudança.
+	Version Version `json:"version"`
+}
+
+// ProductRequest Criação exige `name` e `price_cents`; alteração exige `expected_version`. `null` limpa descrição, categoria ou foto.
+type ProductRequest struct {
+	CategoryId   *Id     `json:"category_id,omitempty"`
+	Description  *string `json:"description,omitempty"`
+	DisplayOrder *int    `json:"display_order,omitempty"`
+
+	// ExpectedVersion Versão do agregado; incrementa a cada mudança.
+	ExpectedVersion *Version `json:"expected_version,omitempty"`
+
+	// ImageAssetId Envio próprio com finalidade product_photo.
+	ImageAssetId *Id     `json:"image_asset_id,omitempty"`
+	Name         *string `json:"name,omitempty"`
+	PriceCents   *int    `json:"price_cents,omitempty"`
+}
+
 // Professional defines model for Professional.
 type Professional struct {
 	DisplayName string `json:"display_name"`
@@ -3475,6 +3952,16 @@ type Professional struct {
 // ProfessionalStatus defines model for ProfessionalStatus.
 type ProfessionalStatus string
 
+// PublicCatalogCategory defines model for PublicCatalogCategory.
+type PublicCatalogCategory struct {
+	DisplayOrder int `json:"display_order"`
+
+	// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	Id   Id          `json:"id"`
+	Kind CatalogKind `json:"kind"`
+	Name string      `json:"name"`
+}
+
 // PublicConfig defines model for PublicConfig.
 type PublicConfig struct {
 	GoogleLogin  bool `json:"google_login"`
@@ -3494,6 +3981,9 @@ type PublicEstablishment struct {
 	Logo *ImageRef `json:"logo"`
 	Name string    `json:"name"`
 
+	// Ordering Opções públicas do pedido. Nada financeiro interno (custos, chaves) aparece aqui.
+	Ordering *PublicOrdering `json:"ordering,omitempty"`
+
 	// Palette Paleta do catálogo fechado (padrão purple).
 	Palette Palette `json:"palette"`
 
@@ -3503,9 +3993,34 @@ type PublicEstablishment struct {
 	Timezone string  `json:"timezone"`
 }
 
+// PublicOrdering Opções públicas do pedido. Nada financeiro interno (custos, chaves) aparece aqui.
+type PublicOrdering struct {
+	MaxServiceQuantity int `json:"max_service_quantity"`
+
+	// PaymentMethods Meios aceitos agora (Pix só com a integração operacional).
+	PaymentMethods  []PaymentMethod `json:"payment_methods"`
+	ProductsEnabled bool            `json:"products_enabled"`
+	VisitorsEnabled bool            `json:"visitors_enabled"`
+}
+
+// PublicProduct Sem estoque (não existe estoque nesta versão) — disponível = ativo.
+type PublicProduct struct {
+	CategoryId   *Id     `json:"category_id"`
+	Description  *string `json:"description"`
+	DisplayOrder int     `json:"display_order"`
+
+	// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	Id    Id        `json:"id"`
+	Image *ImageRef `json:"image"`
+	Name  string    `json:"name"`
+	Price Money     `json:"price"`
+}
+
 // PublicQueue Somente dados públicos. Sem nick, serviços, valores ou contatos.
 type PublicQueue struct {
-	EstimatedWait Estimate `json:"estimated_wait"`
+	// EntryState Se a fila aceita nova participação agora: accepting; full (capacidade atingida, volta sozinha quando liberar vaga); closed_manual (entrada fechada pela equipe); operation_paused; operation_closed.
+	EntryState    EntryState `json:"entry_state"`
+	EstimatedWait Estimate   `json:"estimated_wait"`
 	Professional  struct {
 		DisplayName string `json:"display_name"`
 
@@ -3534,13 +4049,26 @@ type PublicQueueTicketsStatus string
 
 // PublicService defines model for PublicService.
 type PublicService struct {
-	DurationMinutes int `json:"duration_minutes"`
+	CategoryId      *Id  `json:"category_id,omitempty"`
+	DisplayOrder    *int `json:"display_order,omitempty"`
+	DurationMinutes int  `json:"duration_minutes"`
 
 	// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
 	Id              Id     `json:"id"`
 	Name            string `json:"name"`
 	Price           Money  `json:"price"`
 	ProfessionalIds []Id   `json:"professional_ids"`
+}
+
+// QueueSettingsRequest defines model for QueueSettingsRequest.
+type QueueSettingsRequest struct {
+	CallToleranceMinutes *int `json:"call_tolerance_minutes,omitempty"`
+	DefaultQueueCapacity *int `json:"default_queue_capacity,omitempty"`
+
+	// ExpectedVersion Versão do agregado; incrementa a cada mudança.
+	ExpectedVersion               Version `json:"expected_version"`
+	ProfessionalsControlAdmission *bool   `json:"professionals_control_admission,omitempty"`
+	VisitorsEnabled               *bool   `json:"visitors_enabled,omitempty"`
 }
 
 // QueueStatus defines model for QueueStatus.
@@ -3562,8 +4090,11 @@ type ReauthenticateRequest struct {
 
 // Receipt defines model for Receipt.
 type Receipt struct {
-	Amount          Money                 `json:"amount"`
-	CardReference   *string               `json:"card_reference,omitempty"`
+	Amount        Money   `json:"amount"`
+	CardReference *string `json:"card_reference,omitempty"`
+
+	// CardType null = dinheiro, Pix ou cartão registrado antes da modalidade (não especificado).
+	CardType        *ReceiptCardType      `json:"card_type,omitempty"`
 	CashTendered    *Money                `json:"cash_tendered,omitempty"`
 	ChangeGiven     *Money                `json:"change_given,omitempty"`
 	Classification  ReceiptClassification `json:"classification"`
@@ -3582,11 +4113,51 @@ type Receipt struct {
 	Status       ReceiptStatus       `json:"status"`
 }
 
+// ReceiptCardType null = dinheiro, Pix ou cartão registrado antes da modalidade (não especificado).
+type ReceiptCardType string
+
 // ReceiptRegisteredBy defines model for Receipt.RegisteredBy.
 type ReceiptRegisteredBy string
 
 // ReceiptClassification defines model for ReceiptClassification.
 type ReceiptClassification string
+
+// ReceiptCosts Recebimentos − estornos − custos conhecidos ou estimados. NÃO é lucro. `complete` = false quando há recebimento com custo desconhecido ou não configurado.
+type ReceiptCosts struct {
+	ActualFeesCents      int64 `json:"actual_fees_cents"`
+	AfterKnownCostsCents int64 `json:"after_known_costs_cents"`
+	ByMethod             []struct {
+		ActualFeesCents    int64                      `json:"actual_fees_cents"`
+		Count              int                        `json:"count"`
+		EstimatedFeesCents int64                      `json:"estimated_fees_cents"`
+		GrossCents         int64                      `json:"gross_cents"`
+		Method             ReceiptCostsByMethodMethod `json:"method"`
+		UnknownFeeCount    int                        `json:"unknown_fee_count"`
+	} `json:"by_method"`
+	Complete           bool  `json:"complete"`
+	EstimatedFeesCents int64 `json:"estimated_fees_cents"`
+	FeeReturnedCents   int64 `json:"fee_returned_cents"`
+
+	// From RFC 3339 em UTC com sufixo Z.
+	From               Timestamp `json:"from"`
+	GrossCents         int64     `json:"gross_cents"`
+	NotConfiguredCount int       `json:"not_configured_count"`
+	Note               string    `json:"note"`
+	ReceiptCount       int       `json:"receipt_count"`
+	RefundedCents      int64     `json:"refunded_cents"`
+
+	// RefundsFeeReturnUnknown Estornos de recebimentos com custo cuja devolução de taxa é desconhecida.
+	RefundsFeeReturnUnknown int `json:"refunds_fee_return_unknown"`
+
+	// To RFC 3339 em UTC com sufixo Z.
+	To Timestamp `json:"to"`
+
+	// UnknownFeeCount Recebimentos sem custo registrado (anteriores à versão ou cartão sem modalidade).
+	UnknownFeeCount int `json:"unknown_fee_count"`
+}
+
+// ReceiptCostsByMethodMethod defines model for ReceiptCosts.ByMethod.Method.
+type ReceiptCostsByMethodMethod string
 
 // ReceiptStatus defines model for ReceiptStatus.
 type ReceiptStatus string
@@ -3638,6 +4209,9 @@ type RegisterReceiptRequest struct {
 	// CardReference Referência opcional da maquininha, sem dados do cartão.
 	CardReference *string `json:"card_reference,omitempty"`
 
+	// CardType Modalidade do cartão (novos registros). Ausente só para clientes antigos durante a atualização - fica "cartão não especificado", sem custo estimado.
+	CardType *RegisterReceiptRequestCardType `json:"card_type,omitempty"`
+
 	// CashTenderedCents Só dinheiro; troco = entregue − devido. Receita registrada = devido.
 	CashTenderedCents *int64 `json:"cash_tendered_cents,omitempty"`
 
@@ -3646,15 +4220,21 @@ type RegisterReceiptRequest struct {
 	Method          RegisterReceiptRequestMethod `json:"method"`
 }
 
+// RegisterReceiptRequestCardType Modalidade do cartão (novos registros). Ausente só para clientes antigos durante a atualização - fica "cartão não especificado", sem custo estimado.
+type RegisterReceiptRequestCardType string
+
 // RegisterReceiptRequestMethod defines model for RegisterReceiptRequest.Method.
 type RegisterReceiptRequestMethod string
 
-// ReplaceOrderItemsRequest defines model for ReplaceOrderItemsRequest.
+// ReplaceOrderItemsRequest Conjunto final de itens com quantidade ABSOLUTA (repetir não soma). Envie `items` OU `service_ids` (formato anterior, quantidade 1). Linhas mantidas guardam o preço aceito, também ao aumentar; a quantidade nunca fica abaixo das unidades já realizadas.
 type ReplaceOrderItemsRequest struct {
 	// ExpectedVersion Versão do agregado; incrementa a cada mudança.
 	ExpectedVersion Version `json:"expected_version"`
-	Reason          *Reason `json:"reason,omitempty"`
-	ServiceIds      []Id    `json:"service_ids"`
+
+	// Items Até 10 serviços e 10 produtos diferentes; cada item aparece uma vez (a quantidade fica na mesma linha).
+	Items      *OrderLines `json:"items,omitempty"`
+	Reason     *Reason     `json:"reason,omitempty"`
+	ServiceIds *[]Id       `json:"service_ids,omitempty"`
 }
 
 // RequestDeletionRequest defines model for RequestDeletionRequest.
@@ -3754,7 +4334,9 @@ type RewardStockInput1Kind string
 
 // Service defines model for Service.
 type Service struct {
-	DurationMinutes int `json:"duration_minutes"`
+	CategoryId      *Id  `json:"category_id,omitempty"`
+	DisplayOrder    *int `json:"display_order,omitempty"`
+	DurationMinutes int  `json:"duration_minutes"`
 
 	// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
 	Id              Id            `json:"id"`
@@ -3816,6 +4398,24 @@ type SetAssetRequest struct {
 	ExpectedVersion Version `json:"expected_version"`
 }
 
+// SetPaymentFeeRequest defines model for SetPaymentFeeRequest.
+type SetPaymentFeeRequest struct {
+	// Clear Volta a "não configurado" (sem percentual nem fixo).
+	Clear *bool `json:"clear,omitempty"`
+
+	// ExpectedVersion Versão vigente vista pela tela (0 = nunca configurado).
+	ExpectedVersion    int  `json:"expected_version"`
+	FixedCents         *int `json:"fixed_cents,omitempty"`
+	PercentBasisPoints *int `json:"percent_basis_points,omitempty"`
+}
+
+// SetPerformedQuantityRequest defines model for SetPerformedQuantityRequest.
+type SetPerformedQuantityRequest struct {
+	// ExpectedVersion Versão do agregado; incrementa a cada mudança.
+	ExpectedVersion   Version `json:"expected_version"`
+	PerformedQuantity int     `json:"performed_quantity"`
+}
+
 // SetProfessionalPhotoRequest `asset_id` (envio próprio, finalidade professional_photo) OU `from_avatar: true`.
 type SetProfessionalPhotoRequest struct {
 	// AssetId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
@@ -3824,6 +4424,14 @@ type SetProfessionalPhotoRequest struct {
 	// ExpectedVersion Versão do agregado; incrementa a cada mudança.
 	ExpectedVersion Version `json:"expected_version"`
 	FromAvatar      *bool   `json:"from_avatar,omitempty"`
+}
+
+// SetQueueCapacityRequest defines model for SetQueueCapacityRequest.
+type SetQueueCapacityRequest struct {
+	Capacity *int `json:"capacity"`
+
+	// ExpectedVersion Versão do agregado; incrementa a cada mudança.
+	ExpectedVersion Version `json:"expected_version"`
 }
 
 // SetServiceProfessionalsRequest defines model for SetServiceProfessionalsRequest.
@@ -3841,6 +4449,25 @@ type SnapshotCursor = StreamCursor
 
 // StaffQueue defines model for StaffQueue.
 type StaffQueue struct {
+	// Admission Entrada de novas participações, separada da operação (status).
+	Admission struct {
+		// Capacity Limite efetivo de participações pendentes (null = sem limite).
+		Capacity *int `json:"capacity"`
+
+		// CapacityOverride Limite próprio da fila (null = padrão da loja).
+		CapacityOverride *int       `json:"capacity_override"`
+		ChangedAt        *Timestamp `json:"changed_at"`
+
+		// ProfessionalsCanControl O profissional pode fechar/reabrir a entrada da PRÓPRIA fila.
+		ProfessionalsCanControl bool `json:"professionals_can_control"`
+
+		// State Se a fila aceita nova participação agora: accepting; full (capacidade atingida, volta sozinha quando liberar vaga); closed_manual (entrada fechada pela equipe); operation_paused; operation_closed.
+		State EntryState `json:"state"`
+
+		// Status closed = fechada manualmente pela equipe.
+		Status StaffQueueAdmissionStatus `json:"status"`
+	} `json:"admission"`
+
 	// Entries Aguardando (ordem FIFO), chamado e em atendimento.
 	Entries []struct {
 		CalledAt *Timestamp `json:"called_at,omitempty"`
@@ -3868,6 +4495,13 @@ type StaffQueue struct {
 		// Version Versão do agregado; incrementa a cada mudança.
 		Version Version `json:"version"`
 	} `json:"entries"`
+
+	// Load Carga pendente (aguardando + chamado). Participações não são pessoas, nem unidades de serviço.
+	Load struct {
+		EstimatedMinutes      int `json:"estimated_minutes"`
+		PendingParticipations int `json:"pending_participations"`
+		PendingServiceUnits   int `json:"pending_service_units"`
+	} `json:"load"`
 	Professional struct {
 		DisplayName string `json:"display_name"`
 
@@ -3888,6 +4522,9 @@ type StaffQueue struct {
 	// Version Versão do agregado; incrementa a cada mudança.
 	Version Version `json:"version"`
 }
+
+// StaffQueueAdmissionStatus closed = fechada manualmente pela equipe.
+type StaffQueueAdmissionStatus string
 
 // StaffRole defines model for StaffRole.
 type StaffRole string
@@ -4006,6 +4643,9 @@ type UpdateRewardRequest struct {
 
 // UpdateServiceRequest defines model for UpdateServiceRequest.
 type UpdateServiceRequest struct {
+	// CategoryId Categoria de serviço desta loja (null = sem categoria).
+	CategoryId      *Id  `json:"category_id,omitempty"`
+	DisplayOrder    *int `json:"display_order,omitempty"`
 	DurationMinutes *int `json:"duration_minutes,omitempty"`
 
 	// ExpectedVersion Versão do agregado; incrementa a cada mudança.
@@ -4090,6 +4730,9 @@ type AnalyticsTo = openapi_types.Date
 // AssetId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
 type AssetId = Id
 
+// CategoryId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+type CategoryId = Id
+
 // ChangeRequestId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
 type ChangeRequestId = Id
 
@@ -4104,6 +4747,9 @@ type DPoPProof = string
 
 // EstablishmentId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
 type EstablishmentId = Id
+
+// FeeMethod defines model for FeeMethod.
+type FeeMethod string
 
 // IdempotencyKey defines model for IdempotencyKey.
 type IdempotencyKey = string
@@ -4128,6 +4774,9 @@ type OrderId = Id
 
 // ParticipationId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
 type ParticipationId = Id
+
+// ProductId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+type ProductId = Id
 
 // ProfessionalId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
 type ProfessionalId = Id
@@ -4462,6 +5111,30 @@ type ListAuditEventsParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// CreateCategoryParams defines parameters for CreateCategory.
+type CreateCategoryParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// UpdateCategoryParams defines parameters for UpdateCategory.
+type UpdateCategoryParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// DeactivateCategoryParams defines parameters for DeactivateCategory.
+type DeactivateCategoryParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// ReactivateCategoryParams defines parameters for ReactivateCategory.
+type ReactivateCategoryParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // ListDeletionRequestsParams defines parameters for ListDeletionRequests.
 type ListDeletionRequestsParams struct {
 	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
@@ -4524,7 +5197,10 @@ type RemoveMyProfessionalPhotoParams struct {
 // ListOrdersParams defines parameters for ListOrders.
 type ListOrdersParams struct {
 	Status *[]OrderStatus `form:"status,omitempty" json:"status,omitempty"`
-	Limit  *Limit         `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Q Busca no servidor por senha, nick ou nome de item (sem diferenciar maiúsculas nem acentos; até 60 caracteres).
+	Q     *string `form:"q,omitempty" json:"q,omitempty"`
+	Limit *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
 
 	// Cursor Cursor opaco de paginação devolvido em page.next_cursor.
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
@@ -4568,6 +5244,12 @@ type ReplaceOrderItemsParams struct {
 
 // MarkItemPerformedParams defines parameters for MarkItemPerformed.
 type MarkItemPerformedParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// SetItemPerformedQuantityParams defines parameters for SetItemPerformedQuantity.
+type SetItemPerformedQuantityParams struct {
 	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
@@ -4674,6 +5356,39 @@ type TransferParticipationParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// SetPaymentFeeParams defines parameters for SetPaymentFee.
+type SetPaymentFeeParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// SetPaymentFeeParamsMethod defines parameters for SetPaymentFee.
+type SetPaymentFeeParamsMethod string
+
+// CreateProductParams defines parameters for CreateProduct.
+type CreateProductParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// UpdateProductParams defines parameters for UpdateProduct.
+type UpdateProductParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// DeactivateProductParams defines parameters for DeactivateProduct.
+type DeactivateProductParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// ReactivateProductParams defines parameters for ReactivateProduct.
+type ReactivateProductParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // CreateProfessionalParams defines parameters for CreateProfessional.
 type CreateProfessionalParams struct {
 	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
@@ -4722,8 +5437,20 @@ type CallNextParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// SetQueueCapacityParams defines parameters for SetQueueCapacity.
+type SetQueueCapacityParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // CloseQueueParams defines parameters for CloseQueue.
 type CloseQueueParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// CloseAdmissionParams defines parameters for CloseAdmission.
+type CloseAdmissionParams struct {
 	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
@@ -4738,6 +5465,18 @@ type OpenQueueParams struct {
 type PauseQueueParams struct {
 	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// ReopenAdmissionParams defines parameters for ReopenAdmission.
+type ReopenAdmissionParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetReceiptCostsParams defines parameters for GetReceiptCosts.
+type GetReceiptCostsParams struct {
+	From *Timestamp `form:"from,omitempty" json:"from,omitempty"`
+	To   *Timestamp `form:"to,omitempty" json:"to,omitempty"`
 }
 
 // ListRewardReservationsParams defines parameters for ListRewardReservations.
@@ -4817,6 +5556,24 @@ type SetServiceProfessionalsParams struct {
 
 // ReactivateServiceParams defines parameters for ReactivateService.
 type ReactivateServiceParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// UpdateCatalogSettingsParams defines parameters for UpdateCatalogSettings.
+type UpdateCatalogSettingsParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// UpdatePaymentSettingsParams defines parameters for UpdatePaymentSettings.
+type UpdatePaymentSettingsParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// UpdateQueueSettingsParams defines parameters for UpdateQueueSettings.
+type UpdateQueueSettingsParams struct {
 	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
@@ -4955,6 +5712,18 @@ type ActivateDesktopInstallationJSONRequestBody ActivateDesktopInstallationJSONB
 // UpdateEstablishmentJSONRequestBody defines body for UpdateEstablishment for application/json ContentType.
 type UpdateEstablishmentJSONRequestBody = UpdateEstablishmentRequest
 
+// CreateCategoryJSONRequestBody defines body for CreateCategory for application/json ContentType.
+type CreateCategoryJSONRequestBody = CategoryRequest
+
+// UpdateCategoryJSONRequestBody defines body for UpdateCategory for application/json ContentType.
+type UpdateCategoryJSONRequestBody = CategoryRequest
+
+// DeactivateCategoryJSONRequestBody defines body for DeactivateCategory for application/json ContentType.
+type DeactivateCategoryJSONRequestBody = VersionedRequest
+
+// ReactivateCategoryJSONRequestBody defines body for ReactivateCategory for application/json ContentType.
+type ReactivateCategoryJSONRequestBody = VersionedRequest
+
 // ResolveFinancialIssueJSONRequestBody defines body for ResolveFinancialIssue for application/json ContentType.
 type ResolveFinancialIssueJSONRequestBody = ResolveIssueRequest
 
@@ -4996,6 +5765,9 @@ type ReplaceOrderItemsJSONRequestBody = ReplaceOrderItemsRequest
 
 // MarkItemPerformedJSONRequestBody defines body for MarkItemPerformed for application/json ContentType.
 type MarkItemPerformedJSONRequestBody = VersionedRequest
+
+// SetItemPerformedQuantityJSONRequestBody defines body for SetItemPerformedQuantity for application/json ContentType.
+type SetItemPerformedQuantityJSONRequestBody = SetPerformedQuantityRequest
 
 // ChoosePaymentMethodJSONRequestBody defines body for ChoosePaymentMethod for application/json ContentType.
 type ChoosePaymentMethodJSONRequestBody = ChoosePaymentMethodRequest
@@ -5048,6 +5820,21 @@ type StartServiceJSONRequestBody = VersionedRequest
 // TransferParticipationJSONRequestBody defines body for TransferParticipation for application/json ContentType.
 type TransferParticipationJSONRequestBody = TransferRequest
 
+// SetPaymentFeeJSONRequestBody defines body for SetPaymentFee for application/json ContentType.
+type SetPaymentFeeJSONRequestBody = SetPaymentFeeRequest
+
+// CreateProductJSONRequestBody defines body for CreateProduct for application/json ContentType.
+type CreateProductJSONRequestBody = ProductRequest
+
+// UpdateProductJSONRequestBody defines body for UpdateProduct for application/json ContentType.
+type UpdateProductJSONRequestBody = ProductRequest
+
+// DeactivateProductJSONRequestBody defines body for DeactivateProduct for application/json ContentType.
+type DeactivateProductJSONRequestBody = VersionedRequest
+
+// ReactivateProductJSONRequestBody defines body for ReactivateProduct for application/json ContentType.
+type ReactivateProductJSONRequestBody = VersionedRequest
+
 // CreateProfessionalJSONRequestBody defines body for CreateProfessional for application/json ContentType.
 type CreateProfessionalJSONRequestBody = CreateProfessionalRequest
 
@@ -5072,14 +5859,23 @@ type SignalAvailabilityJSONRequestBody = AvailabilitySignalRequest
 // CallNextJSONRequestBody defines body for CallNext for application/json ContentType.
 type CallNextJSONRequestBody = EmptyRequest
 
+// SetQueueCapacityJSONRequestBody defines body for SetQueueCapacity for application/json ContentType.
+type SetQueueCapacityJSONRequestBody = SetQueueCapacityRequest
+
 // CloseQueueJSONRequestBody defines body for CloseQueue for application/json ContentType.
 type CloseQueueJSONRequestBody = VersionedRequest
+
+// CloseAdmissionJSONRequestBody defines body for CloseAdmission for application/json ContentType.
+type CloseAdmissionJSONRequestBody = VersionedRequest
 
 // OpenQueueJSONRequestBody defines body for OpenQueue for application/json ContentType.
 type OpenQueueJSONRequestBody = VersionedRequest
 
 // PauseQueueJSONRequestBody defines body for PauseQueue for application/json ContentType.
 type PauseQueueJSONRequestBody = VersionedRequest
+
+// ReopenAdmissionJSONRequestBody defines body for ReopenAdmission for application/json ContentType.
+type ReopenAdmissionJSONRequestBody = VersionedRequest
 
 // CreateRewardReservationJSONRequestBody defines body for CreateRewardReservation for application/json ContentType.
 type CreateRewardReservationJSONRequestBody = CreateReservationRequest
@@ -5116,6 +5912,15 @@ type SetServiceProfessionalsJSONRequestBody = SetServiceProfessionalsRequest
 
 // ReactivateServiceJSONRequestBody defines body for ReactivateService for application/json ContentType.
 type ReactivateServiceJSONRequestBody = VersionedRequest
+
+// UpdateCatalogSettingsJSONRequestBody defines body for UpdateCatalogSettings for application/json ContentType.
+type UpdateCatalogSettingsJSONRequestBody = CatalogSettingsRequest
+
+// UpdatePaymentSettingsJSONRequestBody defines body for UpdatePaymentSettings for application/json ContentType.
+type UpdatePaymentSettingsJSONRequestBody = PaymentSettingsRequest
+
+// UpdateQueueSettingsJSONRequestBody defines body for UpdateQueueSettings for application/json ContentType.
+type UpdateQueueSettingsJSONRequestBody = QueueSettingsRequest
 
 // CreateVisitorSessionJSONRequestBody defines body for CreateVisitorSession for application/json ContentType.
 type CreateVisitorSessionJSONRequestBody = CreateVisitorSessionRequest

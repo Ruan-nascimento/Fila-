@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"slices"
-	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,7 +13,6 @@ import (
 	"fila/internal/acesso"
 	"fila/internal/atendimento"
 	"fila/internal/auditoria"
-	"fila/internal/catalogo"
 	"fila/internal/estabelecimento"
 	"fila/internal/fidelidade"
 	"fila/internal/platform/database"
@@ -32,12 +29,54 @@ var (
 )
 
 type entryRequest struct {
-	QueueID    *uuid.UUID   `json:"queue_id"`
-	ServiceIDs *[]uuid.UUID `json:"service_ids"`
+	QueueID    *uuid.UUID                 `json:"queue_id"`
+	ServiceIDs *[]uuid.UUID               `json:"service_ids"`
+	Items      *[]atendimento.LineRequest `json:"items"`
 }
 
-// createParticipation (T-P-01 + T-O-01): entra na fila com 1–10 serviços. Preço, total, papel e
-// identidade vêm do servidor; o corpo só tem fila e serviços.
+// Mensagens da entrada (ADR-0035): lotação e bloqueio manual são situações diferentes.
+const (
+	msgQueueFull    = "A fila está cheia no momento. Tente novamente quando uma vaga for liberada."
+	msgEntryClosed  = "A entrada na fila foi encerrada por enquanto. Quem já está na fila será atendido normalmente."
+	msgQueuePaused  = "A fila está pausada e não está recebendo entradas agora."
+	msgQueueNotOpen = "Esta fila não está recebendo entradas agora."
+)
+
+// entryConflict traduz a situação da entrada num 409 com código próprio.
+func entryConflict(state string) error {
+	switch state {
+	case estabelecimento.EntryFull:
+		return conflict("queue_full", "Fila cheia", msgQueueFull, nil)
+	case estabelecimento.EntryClosedManual:
+		return conflict("queue_entry_closed", "Entrada encerrada", msgEntryClosed, nil)
+	case estabelecimento.EntryOperationPaused:
+		return conflict("queue_not_open", "Fila pausada", msgQueuePaused, nil)
+	}
+	return conflict("queue_not_open", "Fila não está aberta", msgQueueNotOpen, nil)
+}
+
+// admissionState calcula, com a fila JÁ TRAVADA (FOR UPDATE), se ela aceita mais uma
+// participação: a contagem de pendentes é feita dentro da mesma transação, então duas pessoas
+// disputando a última vaga entram uma de cada vez e só uma passa.
+func admissionState(ctx context.Context, q database.Querier, qi estabelecimento.QueueInfo, st estabelecimento.Settings) (string, error) {
+	if !qi.ProfessionalActive {
+		return estabelecimento.EntryOperationClosed, nil
+	}
+	capacity := qi.EffectiveCapacity(st)
+	pending := 0
+	if capacity != nil {
+		if err := q.QueryRow(ctx, `SELECT count(*) FROM participation WHERE queue_id = $1 AND status IN ('waiting', 'called')`,
+			qi.ID).Scan(&pending); err != nil {
+			return "", err
+		}
+	}
+	return estabelecimento.EntryState(qi.Status, qi.Admission, capacity, pending), nil
+}
+
+// createParticipation (T-P-01 + T-O-01): entra na fila com 1–10 serviços (com quantidade) e,
+// se a loja oferece, até 10 produtos como complemento. Nunca só produtos. Preço, total, papel e
+// identidade vêm do servidor; o corpo só tem fila e itens. Um pedido = UMA participação (uma
+// posição), mesmo com várias unidades: os serviços são feitos em sequência pelo profissional.
 func (s *Service) createParticipation(w http.ResponseWriter, r *http.Request) error {
 	estID, err := pathID(r, "establishmentId")
 	if err != nil {
@@ -58,22 +97,10 @@ func (s *Service) createParticipation(w http.ResponseWriter, r *http.Request) er
 	}
 	var v validate.Collector
 	v.Required("/queue_id", req.QueueID == nil)
-	v.Required("/service_ids", req.ServiceIDs == nil)
-	var serviceIDs []uuid.UUID
-	if req.ServiceIDs != nil {
-		serviceIDs = *req.ServiceIDs
-		switch {
-		case len(serviceIDs) == 0:
-			v.Add(&hs.FieldError{Field: "/service_ids", Code: hs.FieldTooShort, Message: "escolha pelo menos um serviço"})
-		case len(serviceIDs) > maxServices:
-			v.Add(&hs.FieldError{Field: "/service_ids", Code: hs.FieldTooLong})
-		}
-		for i, sid := range serviceIDs {
-			if slices.Index(serviceIDs, sid) != i {
-				v.Add(&hs.FieldError{Field: "/service_ids/" + strconv.Itoa(i), Code: "duplicate"})
-			}
-		}
+	if req.ServiceIDs == nil && req.Items == nil {
+		v.Required("/service_ids", true)
 	}
+	wants := atendimento.RequestedLines(&v, req.ServiceIDs, req.Items, 1)
 	if err := v.Err(); err != nil {
 		return err
 	}
@@ -120,29 +147,23 @@ func (s *Service) createParticipation(w http.ResponseWriter, r *http.Request) er
 			return idempotency.Result{}, err
 		}
 		qi := queues[*req.QueueID]
-		if qi.Status != estabelecimento.QueueOpen || !qi.ProfessionalActive {
-			return idempotency.Result{}, conflict("queue_not_open", "Fila não está aberta",
-				"Esta fila não está recebendo entradas agora.", nil)
-		}
-		snaps, err := catalogo.ServicesForEntry(ctx, tx, estID, serviceIDs)
+		st, err := estabelecimento.LoadSettings(ctx, tx, estID)
 		if err != nil {
 			return idempotency.Result{}, err
 		}
-		services := make([]catalogo.Snapshot, 0, len(serviceIDs))
-		for i, sid := range serviceIDs {
-			sn, ok := snaps[sid]
-			switch {
-			case !ok:
-				return idempotency.Result{}, hs.ErrValidation(hs.FieldError{Field: "/service_ids/" + strconv.Itoa(i),
-					Code: hs.FieldNotAllowed, Message: "serviço não encontrado nesta loja"})
-			case !sn.Active:
-				return idempotency.Result{}, conflict("service_inactive", "Serviço indisponível",
-					fmt.Sprintf("O serviço %q não está disponível no momento.", sn.Name), nil)
-			case !sn.Enabled(qi.ProfessionalID):
-				return idempotency.Result{}, conflict("service_not_eligible", "Serviço não feito por este profissional",
-					fmt.Sprintf("%s não faz o serviço %q. Escolha outro profissional ou serviço.", qi.ProfessionalName, sn.Name), nil)
-			}
-			services = append(services, sn)
+		// Visitante desligado pela loja: nenhuma entrada NOVA de visitante (quem já está segue).
+		if id.Kind == acesso.IdentityVisitor && !st.VisitorsEnabled {
+			return idempotency.Result{}, conflict("visitors_disabled", "Entrada como visitante desligada",
+				"Esta barbearia não aceita entrada como visitante no momento. Entre com a sua conta.", nil)
+		}
+		if state, err := admissionState(ctx, tx, qi, st); err != nil {
+			return idempotency.Result{}, err
+		} else if state != estabelecimento.EntryAccepting {
+			return idempotency.Result{}, entryConflict(state)
+		}
+		lines, err := atendimento.ResolveNewLines(ctx, tx, estID, qi.ProfessionalID, qi.ProfessionalName, wants, st)
+		if err != nil {
+			return idempotency.Result{}, err
 		}
 
 		pos, day, number, err := nextSlot(ctx, tx, qi, now)
@@ -167,7 +188,7 @@ func (s *Service) createParticipation(w http.ResponseWriter, r *http.Request) er
 		}
 		if _, err := atendimento.CreateOrder(ctx, tx, atendimento.NewOrder{ID: orderID, EstablishmentID: estID,
 			ParticipationID: partID, ProfessionalID: qi.ProfessionalID, Identity: orderIdentity(*id),
-			LoyaltyEligible: loyaltyEligible, Services: services, Now: now}, audit); err != nil {
+			LoyaltyEligible: loyaltyEligible, Lines: lines, Now: now}, audit); err != nil {
 			return idempotency.Result{}, err
 		}
 		oi := orderIdentity(*id)

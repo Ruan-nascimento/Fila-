@@ -37,6 +37,55 @@ type unavailableSignal struct {
 	Since  *time.Time `json:"since"`
 }
 
+// Situação da entrada calculada (ADR-0035): operação, bloqueio manual e lotação combinados.
+const (
+	EntryAccepting       = "accepting"
+	EntryFull            = "full"
+	EntryClosedManual    = "closed_manual"
+	EntryOperationPaused = "operation_paused"
+	EntryOperationClosed = "operation_closed"
+)
+
+// EntryState decide se a fila aceita novas participações agora. A operação vem primeiro (pausada
+// ou encerrada não recebem ninguém), depois o bloqueio manual, depois a capacidade.
+func EntryState(status, admission string, capacity *int, pending int) string {
+	switch {
+	case status == QueuePaused:
+		return EntryOperationPaused
+	case status != QueueOpen:
+		return EntryOperationClosed
+	case admission != AdmissionOpen:
+		return EntryClosedManual
+	case capacity != nil && pending >= *capacity:
+		return EntryFull
+	}
+	return EntryAccepting
+}
+
+// Política de entrada (queue.admission).
+const (
+	AdmissionOpen   = "open"
+	AdmissionClosed = "closed"
+)
+
+// admissionView mostra à equipe a entrada da fila: política, capacidade e situação calculada.
+type admissionView struct {
+	Status           string     `json:"status"`
+	ChangedAt        *time.Time `json:"changed_at"`
+	Capacity         *int       `json:"capacity"`
+	CapacityOverride *int       `json:"capacity_override"`
+	State            string     `json:"state"`
+	// ProfessionalsCanControl: o profissional pode fechar/reabrir a entrada da PRÓPRIA fila.
+	ProfessionalsCanControl bool `json:"professionals_can_control"`
+}
+
+// loadView: participações pendentes (não "pessoas"), unidades de serviço e duração acumulada.
+type loadView struct {
+	PendingParticipations int `json:"pending_participations"`
+	PendingServiceUnits   int `json:"pending_service_units"`
+	EstimatedMinutes      int `json:"estimated_minutes"`
+}
+
 // staffQueueView segue o esquema StaffQueue. As entradas vêm do módulo fila (QueueActivity).
 type staffQueueView struct {
 	QueueID      uuid.UUID         `json:"queue_id"`
@@ -44,17 +93,21 @@ type staffQueueView struct {
 	Status       string            `json:"status"`
 	Version      int64             `json:"version"`
 	Unavailable  unavailableSignal `json:"unavailable_signal"`
+	Admission    admissionView     `json:"admission"`
+	Load         loadView          `json:"load"`
 	Entries      []StaffEntry      `json:"entries"`
 }
 
 const queueSelect = `
-	SELECT q.id, p.id, p.display_name, p.status, q.status, q.version, q.unavailable, q.unavailable_note, q.unavailable_since
+	SELECT q.id, p.id, p.display_name, p.status, q.status, q.version, q.unavailable, q.unavailable_note, q.unavailable_since,
+	       q.admission, q.admission_changed_at, q.capacity
 	FROM queue q JOIN professional p ON p.id = q.professional_id`
 
 func scanQueue(row pgx.Row) (staffQueueView, error) {
 	var v staffQueueView
 	err := row.Scan(&v.QueueID, &v.Professional.ID, &v.Professional.DisplayName, &v.Professional.Status,
-		&v.Status, &v.Version, &v.Unavailable.Active, &v.Unavailable.Note, &v.Unavailable.Since)
+		&v.Status, &v.Version, &v.Unavailable.Active, &v.Unavailable.Note, &v.Unavailable.Since,
+		&v.Admission.Status, &v.Admission.ChangedAt, &v.Admission.CapacityOverride)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return v, httpserver.ErrNotFound()
 	}
@@ -225,6 +278,13 @@ func (s *Service) changeQueue(w http.ResponseWriter, r *http.Request, op string)
 		if _, err := tx.Exec(ctx, `UPDATE queue SET status = $2, version = version + 1, updated_at = $3 WHERE id = $1`, queueID, to, now); err != nil {
 			return idempotency.Result{}, err
 		}
+		// Abrir uma operação ENCERRADA (novo expediente) começa com a entrada aberta. Pausar e
+		// retomar não mexem na entrada: um bloqueio manual continua até a equipe reabrir.
+		if action == "T-Q-01" && cur.Admission.Status != AdmissionOpen {
+			if _, err := tx.Exec(ctx, `UPDATE queue SET admission = 'open', admission_changed_at = $2 WHERE id = $1`, queueID, now); err != nil {
+				return idempotency.Result{}, err
+			}
+		}
 		if err := auditoria.Record(ctx, tx, auditoria.Event{EstablishmentID: &estID, OccurredAt: now, ActorKind: auditoria.ActorOwner,
 			ActorID: auditoria.Ptr(actor.AccountID), Action: action, TargetType: "queue", TargetID: queueID,
 			FromState: cur.Status, ToState: to, RequestID: httpserver.RequestIDFrom(ctx)}); err != nil {
@@ -348,7 +408,12 @@ type publicQueueView struct {
 	WaitingCount  int            `json:"waiting_count"`
 	Tickets       []PublicTicket `json:"tickets"`
 	EstimatedWait estimate       `json:"estimated_wait"`
-	Version       int64          `json:"version"`
+	// EntryState: se a fila aceita entrar agora (accepting, full, closed_manual,
+	// operation_paused, operation_closed). Sem número de vagas nem dados internos.
+	EntryState string `json:"entry_state"`
+	Version    int64  `json:"version"`
+	admission  string
+	capacity   *int
 }
 
 type estimate struct {
@@ -394,17 +459,22 @@ func PublicQueues(ctx context.Context, q database.Querier, activity QueueActivit
 }
 
 func publicQueues(ctx context.Context, q database.Querier, activity QueueActivity, estID uuid.UUID, now time.Time) ([]publicQueueView, error) {
+	st, err := LoadSettings(ctx, q, estID)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := q.Query(ctx, `
-		SELECT q.id, p.id, p.display_name, q.status, q.version, p.photo_asset_id
+		SELECT q.id, p.id, p.display_name, q.status, q.version, p.photo_asset_id, q.admission, coalesce(q.capacity, $2)
 		FROM queue q JOIN professional p ON p.id = q.professional_id
 		WHERE q.establishment_id = $1 AND p.status = 'active'
-		ORDER BY p.queue_letter`, estID)
+		ORDER BY p.queue_letter`, estID, st.DefaultQueueCapacity)
 	if err != nil {
 		return nil, err
 	}
 	list, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (publicQueueView, error) {
 		var v publicQueueView
-		err := row.Scan(&v.QueueID, &v.Professional.ID, &v.Professional.DisplayName, &v.Status, &v.Version, &v.photoID)
+		err := row.Scan(&v.QueueID, &v.Professional.ID, &v.Professional.DisplayName, &v.Status, &v.Version, &v.photoID,
+			&v.admission, &v.capacity)
 		v.Tickets = []PublicTicket{}
 		v.EstimatedWait = estimate{Kind: "estimate", Minutes: 0, ComputedAt: now}
 		return v, err
@@ -412,18 +482,18 @@ func publicQueues(ctx context.Context, q database.Querier, activity QueueActivit
 	if err != nil {
 		return nil, err
 	}
+	snaps := map[uuid.UUID]PublicSnapshot{}
 	if activity != nil && len(list) > 0 {
 		ids := make([]uuid.UUID, len(list))
 		for i := range list {
 			ids[i] = list[i].QueueID
 		}
-		snaps, err := activity.PublicSnapshots(ctx, q, ids, now)
-		if err != nil {
+		if snaps, err = activity.PublicSnapshots(ctx, q, ids, now); err != nil {
 			return nil, err
 		}
-		for i := range list {
-			list[i].apply(snaps)
-		}
+	}
+	for i := range list {
+		list[i].apply(snaps)
 	}
 	var photos []uuid.UUID
 	for _, v := range list {
@@ -457,33 +527,65 @@ func (s *Service) fillEntries(ctx context.Context, q database.Querier, views []s
 }
 
 func fillEntries(ctx context.Context, q database.Querier, activity QueueActivity, views []staffQueueView) error {
-	if activity == nil || len(views) == 0 {
+	if len(views) == 0 {
 		return nil
 	}
 	ids := make([]uuid.UUID, len(views))
 	for i := range views {
 		ids[i] = views[i].QueueID
 	}
-	entries, err := activity.StaffEntries(ctx, q, ids)
+	snaps := map[uuid.UUID]PublicSnapshot{}
+	if activity != nil {
+		entries, err := activity.StaffEntries(ctx, q, ids)
+		if err != nil {
+			return err
+		}
+		for i := range views {
+			if e, ok := entries[views[i].QueueID]; ok && e != nil {
+				views[i].Entries = e
+			}
+		}
+		if snaps, err = activity.PublicSnapshots(ctx, q, ids, time.Now()); err != nil {
+			return err
+		}
+	}
+	estID, err := establishmentOfQueue(ctx, q, ids[0])
+	if err != nil {
+		return err
+	}
+	st, err := LoadSettings(ctx, q, estID)
 	if err != nil {
 		return err
 	}
 	for i := range views {
-		if e, ok := entries[views[i].QueueID]; ok && e != nil {
-			views[i].Entries = e
+		v := &views[i]
+		sn := snaps[v.QueueID]
+		v.Admission.Capacity = v.Admission.CapacityOverride
+		if v.Admission.Capacity == nil {
+			v.Admission.Capacity = st.DefaultQueueCapacity
 		}
+		v.Admission.ProfessionalsCanControl = st.ProfessionalsControlAdmission
+		v.Admission.State = EntryState(v.Status, v.Admission.Status, v.Admission.Capacity, sn.PendingCount)
+		v.Load = loadView{PendingParticipations: sn.PendingCount, PendingServiceUnits: sn.PendingServiceUnits,
+			EstimatedMinutes: sn.PendingMinutes}
 	}
 	return nil
 }
 
+func establishmentOfQueue(ctx context.Context, q database.Querier, queueID uuid.UUID) (uuid.UUID, error) {
+	var id uuid.UUID
+	err := q.QueryRow(ctx, `SELECT establishment_id FROM queue WHERE id = $1`, queueID).Scan(&id)
+	return id, err
+}
+
 func (v *publicQueueView) apply(snaps map[uuid.UUID]PublicSnapshot) {
-	if sn, ok := snaps[v.QueueID]; ok {
-		v.WaitingCount = sn.WaitingCount
-		if sn.Tickets != nil {
-			v.Tickets = sn.Tickets
-		}
-		v.EstimatedWait.Minutes = sn.EstimateMinutes
+	sn := snaps[v.QueueID]
+	v.WaitingCount = sn.WaitingCount
+	if sn.Tickets != nil {
+		v.Tickets = sn.Tickets
 	}
+	v.EstimatedWait.Minutes = sn.EstimateMinutes
+	v.EntryState = EntryState(v.Status, v.admission, v.capacity, sn.PendingCount)
 }
 
 // QueueViews são as visões de UMA fila usadas nos eventos (outbox): a da equipe (StaffQueue,
@@ -507,14 +609,14 @@ func QueueEventViews(ctx context.Context, q database.Querier, activity QueueActi
 		return QueueViews{}, err
 	}
 	pub := publicQueueView{QueueID: staff.QueueID, Status: staff.Status, Version: staff.Version, Tickets: []PublicTicket{},
-		EstimatedWait: estimate{Kind: "estimate", ComputedAt: now}}
+		EstimatedWait: estimate{Kind: "estimate", ComputedAt: now}, admission: staff.Admission.Status, capacity: staff.Admission.Capacity}
 	pub.Professional.ID, pub.Professional.DisplayName = staff.Professional.ID, staff.Professional.DisplayName
+	snaps := map[uuid.UUID]PublicSnapshot{}
 	if activity != nil {
-		snaps, err := activity.PublicSnapshots(ctx, q, []uuid.UUID{queueID}, now)
-		if err != nil {
+		if snaps, err = activity.PublicSnapshots(ctx, q, []uuid.UUID{queueID}, now); err != nil {
 			return QueueViews{}, err
 		}
-		pub.apply(snaps)
 	}
+	pub.apply(snaps)
 	return QueueViews{Staff: views[0], Public: pub, Version: staff.Version, ProfessionalID: staff.Professional.ID}, nil
 }

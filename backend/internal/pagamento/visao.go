@@ -81,14 +81,16 @@ type receiptView struct {
 	CashTendered    *atendimento.Money `json:"cash_tendered"`
 	ChangeGiven     *atendimento.Money `json:"change_given"`
 	CardReference   *string            `json:"card_reference"`
-	Refunded        atendimento.Money  `json:"refunded"`
-	amount          int64
+	// CardType: debit | credit; null = dinheiro, Pix ou cartão anterior à modalidade (não especificado).
+	CardType *string           `json:"card_type"`
+	Refunded atendimento.Money `json:"refunded"`
+	amount   int64
 }
 
 func receipts(ctx context.Context, q database.Querier, orderID uuid.UUID) ([]receiptView, error) {
 	rows, err := q.Query(ctx, `
 		SELECT r.id, r.method, r.amount_cents, r.classification, r.pix_charge_id, r.registered_at, r.registered_by,
-		       c.conferred_at, c.conferred_by_role, r.cash_tendered_cents, r.change_cents, r.card_reference
+		       c.conferred_at, c.conferred_by_role, r.cash_tendered_cents, r.change_cents, r.card_reference, r.card_type
 		FROM receipt r LEFT JOIN receipt_conferral c ON c.receipt_id = r.id
 		WHERE r.order_id = $1 ORDER BY r.registered_at, r.id`, orderID)
 	if err != nil {
@@ -98,7 +100,7 @@ func receipts(ctx context.Context, q database.Querier, orderID uuid.UUID) ([]rec
 		var v receiptView
 		var tendered, change *int64
 		err := row.Scan(&v.ID, &v.Method, &v.amount, &v.Classification, &v.PixChargeID, &v.RegisteredAt, &v.RegisteredBy,
-			&v.ConferredAt, &v.ConferredByRole, &tendered, &change, &v.CardReference)
+			&v.ConferredAt, &v.ConferredByRole, &tendered, &change, &v.CardReference, &v.CardType)
 		v.Amount, v.Refunded = brl(v.amount), brl(0)
 		v.Status = "registered"
 		if v.ConferredAt != nil {

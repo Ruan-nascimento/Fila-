@@ -21,7 +21,8 @@ import (
 
 // AppendOnlyTables nunca recebem UPDATE nem DELETE da aplicação.
 var AppendOnlyTables = []string{"audit_event", "loyalty_ledger", "reward_stock_movement", "receipt_conferral",
-	"order_adjustment", "participation_transfer", "change_request_addition"}
+	"order_adjustment", "participation_transfer", "change_request_addition", "order_item_quantity_change",
+	"change_request_item_quantity", "payment_fee_config"}
 
 var roleName = regexp.MustCompile(`^[a-z_][a-z0-9_]{0,62}$`)
 

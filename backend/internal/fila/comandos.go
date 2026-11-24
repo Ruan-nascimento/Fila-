@@ -3,7 +3,9 @@ package fila
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -82,10 +84,14 @@ func (s *Service) callNext(w http.ResponseWriter, r *http.Request) error {
 			return idempotency.Result{}, err
 		}
 		now := s.Clock.Now()
+		tol, err := toleranceFor(ctx, tx, estID)
+		if err != nil {
+			return idempotency.Result{}, err
+		}
 		if _, err := tx.Exec(ctx, `
-			UPDATE participation SET status = 'called', called_at = $2, tolerance_ends_at = $3, late_notice_at = NULL,
-			       version = version + 1, updated_at = $2
-			WHERE id = $1`, next.ID, now, now.Add(Tolerance)); err != nil {
+			UPDATE participation SET status = 'called', called_at = $2, tolerance_minutes = $3, tolerance_ends_at = $4,
+			       late_notice_at = NULL, version = version + 1, updated_at = $2
+			WHERE id = $1`, next.ID, now, tol, now.Add(time.Duration(tol)*time.Minute)); err != nil {
 			if database.IsUniqueViolation(err, "participation_chair_uq") {
 				return idempotency.Result{}, conflict("professional_busy", "Cadeira ocupada", "Já há um cliente chamado nesta fila.", nil)
 			}
@@ -239,7 +245,18 @@ type versionOnly struct {
 	ExpectedVersion *int64 `json:"expected_version"`
 }
 
-// startService (T-P-03): chamado → em atendimento, mesmo após os 10 minutos (enquanto não
+// toleranceFor devolve a tolerância vigente da loja (minutos) para uma NOVA chamada. O valor é
+// gravado na participação junto com o prazo: mudar a configuração depois não altera o prazo de
+// quem já foi chamado, e atualizar a página não reinicia a contagem (R-FILA-09, ADR-0035).
+func toleranceFor(ctx context.Context, q database.Querier, estID uuid.UUID) (int, error) {
+	st, err := estabelecimento.LoadSettings(ctx, q, estID)
+	if err != nil {
+		return 0, err
+	}
+	return st.CallToleranceMinutes, nil
+}
+
+// startService (T-P-03): chamado → em atendimento, mesmo após o fim da tolerância (enquanto não
 // marcado ausente) e com a fila pausada ou fechada (R-FILA-06, R-FILA-11).
 func (s *Service) startService(w http.ResponseWriter, r *http.Request) error {
 	var body versionOnly
@@ -258,7 +275,8 @@ func (s *Service) startService(w http.ResponseWriter, r *http.Request) error {
 		}, func() int64 { return deref(body.ExpectedVersion) }, nil)
 }
 
-// markNoShow (T-P-06): chamado → ausente, só depois dos 10 minutos (relógio do servidor).
+// markNoShow (T-P-06): chamado → ausente, só depois do prazo gravado na chamada (relógio do
+// servidor; o relógio do aparelho do cliente não conta).
 // Encerra a comanda sem cobrança; sem punição de pontos (R-FID-06); voltar = nova entrada.
 func (s *Service) markNoShow(w http.ResponseWriter, r *http.Request) error {
 	var body versionOnly
@@ -274,8 +292,12 @@ func (s *Service) markNoShow(w http.ResponseWriter, r *http.Request) error {
 				if err != nil {
 					return idempotency.Result{}, err
 				}
+				mins := 10
+				if p.ToleranceMinutes != nil {
+					mins = *p.ToleranceMinutes
+				}
 				return idempotency.Result{}, conflict("tolerance_not_elapsed", "Ainda dentro da tolerância",
-					"A ausência só pode ser marcada 10 minutos depois da chamada.", view)
+					fmt.Sprintf("A ausência só pode ser marcada %d minuto(s) depois da chamada.", mins), view)
 			}
 			return s.end(ctx, tx, p, who, NoShow, atendimento.ClosedNoShow, "T-P-06", "")
 		}, func() int64 { return deref(body.ExpectedVersion) }, nil)
@@ -365,6 +387,22 @@ func (s *Service) transferParticipation(w http.ResponseWriter, r *http.Request) 
 			if tq.Status != estabelecimento.QueueOpen || !tq.ProfessionalActive {
 				return idempotency.Result{}, conflict("queue_not_open", "Fila de destino não está aberta",
 					"Só é possível transferir para uma fila aberta.", nil)
+			}
+			// Mesma proteção da entrada: destino com a entrada fechada ou lotado recusa, e a pessoa
+			// continua na fila de origem, no mesmo lugar (nada foi alterado ainda).
+			st, err := estabelecimento.LoadSettings(ctx, tx, p.EstablishmentID)
+			if err != nil {
+				return idempotency.Result{}, err
+			}
+			switch state, err := admissionState(ctx, tx, tq, st); {
+			case err != nil:
+				return idempotency.Result{}, err
+			case state == estabelecimento.EntryFull:
+				return idempotency.Result{}, conflict("queue_full", "Fila de destino cheia",
+					"A fila de "+tq.ProfessionalName+" está cheia. O cliente continua na fila atual, no mesmo lugar.", nil)
+			case state == estabelecimento.EntryClosedManual:
+				return idempotency.Result{}, conflict("queue_entry_closed", "Entrada da fila de destino fechada",
+					"A entrada da fila de "+tq.ProfessionalName+" está fechada. O cliente continua na fila atual, no mesmo lugar.", nil)
 			}
 			ids, err := atendimento.ServiceIDs(ctx, tx, p.OrderID)
 			if err != nil {
@@ -530,12 +568,17 @@ func (s *Service) moveParticipation(w http.ResponseWriter, r *http.Request) erro
 				first, second = other, p
 			}
 			if swapsCall {
-				if _, err := tx.Exec(ctx, `UPDATE participation SET status = 'waiting', called_at = NULL, tolerance_ends_at = NULL
-					WHERE id = $1`, first.ID); err != nil {
+				// Quem passa a ser chamado recebe uma NOVA chamada com a tolerância vigente da loja.
+				tol, err := toleranceFor(ctx, tx, p.EstablishmentID)
+				if err != nil {
 					return idempotency.Result{}, err
 				}
-				if _, err := tx.Exec(ctx, `UPDATE participation SET status = 'called', called_at = $2, tolerance_ends_at = $3,
-					late_notice_at = NULL WHERE id = $1`, second.ID, now, now.Add(Tolerance)); err != nil {
+				if _, err := tx.Exec(ctx, `UPDATE participation SET status = 'waiting', called_at = NULL, tolerance_minutes = NULL,
+					tolerance_ends_at = NULL WHERE id = $1`, first.ID); err != nil {
+					return idempotency.Result{}, err
+				}
+				if _, err := tx.Exec(ctx, `UPDATE participation SET status = 'called', called_at = $2, tolerance_minutes = $3,
+					tolerance_ends_at = $4, late_notice_at = NULL WHERE id = $1`, second.ID, now, tol, now.Add(time.Duration(tol)*time.Minute)); err != nil {
 					return idempotency.Result{}, err
 				}
 			}

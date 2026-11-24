@@ -39,8 +39,6 @@ const (
 	ClosedNoShow          = "no_show"
 	ClosedInterruptedZero = "interruption_zero_total"
 	ClosedAdjustedZero    = "adjustment_zero_total"
-
-	maxItems = 10
 )
 
 // pendingStatuses bloqueiam nova entrada da mesma identidade na loja (R-FILA-03). Aguardando só
@@ -92,27 +90,41 @@ func getOrder(ctx context.Context, q database.Querier, estID, orderID uuid.UUID,
 	return scanOrder(q.QueryRow(ctx, sql, estID, orderID))
 }
 
-// itemRow é um item da comanda.
+// itemRow é um item da comanda (serviço ou produto) com as quantidades.
 type itemRow struct {
-	ID         uuid.UUID
-	ServiceID  uuid.UUID
-	Name       string
-	PriceCents int64
-	Status     string
-	Charged    bool
+	ID           uuid.UUID
+	Kind         string
+	ServiceID    *uuid.UUID
+	ProductID    *uuid.UUID
+	Name         string
+	PriceCents   int64
+	Status       string
+	Charged      bool
+	Quantity     int
+	PerformedQty int
+	ChargedQty   int
+}
+
+// key identifica a linha pelo item do catálogo (uma linha por serviço ou produto).
+func (it itemRow) key() lineKey {
+	if it.Kind == catalogo.KindProduct {
+		return lineKey{catalogo.KindProduct, *it.ProductID}
+	}
+	return lineKey{catalogo.KindService, *it.ServiceID}
 }
 
 // liveItems devolve os itens não retirados, em ordem de inclusão.
 func liveItems(ctx context.Context, q database.Querier, orderID uuid.UUID) ([]itemRow, error) {
 	rows, err := q.Query(ctx, `
-		SELECT id, service_id, name, unit_price_cents, status, charged
+		SELECT id, kind, service_id, product_id, name, unit_price_cents, status, charged, quantity, performed_quantity, charged_quantity
 		FROM order_item WHERE order_id = $1 AND status <> 'removed' ORDER BY added_at, name, id`, orderID)
 	if err != nil {
 		return nil, err
 	}
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (itemRow, error) {
 		var it itemRow
-		err := r.Scan(&it.ID, &it.ServiceID, &it.Name, &it.PriceCents, &it.Status, &it.Charged)
+		err := r.Scan(&it.ID, &it.Kind, &it.ServiceID, &it.ProductID, &it.Name, &it.PriceCents, &it.Status, &it.Charged,
+			&it.Quantity, &it.PerformedQty, &it.ChargedQty)
 		return it, err
 	})
 }
@@ -123,13 +135,23 @@ func versionTag(status string, version int64) string {
 	return status + "@" + strconv.FormatInt(version, 10)
 }
 
-// insertItem grava um item com o snapshot do catálogo (R-CMD-05).
-func insertItem(ctx context.Context, q database.Querier, estID, orderID uuid.UUID, s catalogo.Snapshot, now time.Time) (uuid.UUID, error) {
+// insertItem grava uma linha com o snapshot do catálogo (R-CMD-05) e a quantidade pedida.
+// Produto: sem duração e sem pontos (não entra na fila nem na fidelidade nesta versão).
+func insertItem(ctx context.Context, q database.Querier, estID, orderID uuid.UUID, s catalogo.Snapshot, quantity int, now time.Time) (uuid.UUID, error) {
+	var serviceID, productID *uuid.UUID
+	duration, points := s.DurationMinutes, s.Points
+	kind := catalogo.KindService
+	if s.Kind == catalogo.KindProduct {
+		kind, productID, duration, points = catalogo.KindProduct, &s.ID, 0, 0
+	} else {
+		serviceID = &s.ID
+	}
 	var id uuid.UUID
 	err := q.QueryRow(ctx, `
-		INSERT INTO order_item (establishment_id, order_id, service_id, name, unit_price_cents, duration_minutes, points, added_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
-		estID, orderID, s.ID, s.Name, s.PriceCents, s.DurationMinutes, s.Points, now).Scan(&id)
+		INSERT INTO order_item (establishment_id, order_id, kind, service_id, product_id, name, unit_price_cents, duration_minutes,
+		                        points, quantity, added_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
+		estID, orderID, kind, serviceID, productID, s.Name, s.PriceCents, duration, points, quantity, now).Scan(&id)
 	if err != nil {
 		return id, fmt.Errorf("criar item da comanda: %w", err)
 	}
@@ -145,17 +167,18 @@ type NewOrder struct {
 	Identity        Identity
 	// LoyaltyEligible é o snapshot de elegibilidade de pontos da entrada (R-FID-03).
 	LoyaltyEligible bool
-	// Services já validados (ativos, desta loja, habilitados); o preço vem do catálogo, nunca do cliente.
-	Services []catalogo.Snapshot
-	Now      time.Time
+	// Lines já validadas (ativas, desta loja, habilitadas, dentro do limite); o preço vem do
+	// catálogo, nunca do cliente.
+	Lines []Line
+	Now   time.Time
 }
 
 // CreateOrder grava a comanda aberta com uma cópia de cada serviço e devolve o total em centavos,
 // calculado aqui a partir do catálogo (R-CMD-02). Deve rodar na transação da entrada.
 func CreateOrder(ctx context.Context, q database.Querier, in NewOrder, audit auditoria.Event) (int64, error) {
 	var total int64
-	for _, s := range in.Services {
-		total += s.PriceCents
+	for _, l := range in.Lines {
+		total += l.Snap.PriceCents * int64(l.Quantity)
 	}
 	if _, err := q.Exec(ctx, `
 		INSERT INTO service_order (id, establishment_id, participation_id, professional_id, account_id, visitor_id,
@@ -165,8 +188,8 @@ func CreateOrder(ctx context.Context, q database.Querier, in NewOrder, audit aud
 		in.LoyaltyEligible, total, in.Now); err != nil {
 		return 0, fmt.Errorf("criar comanda: %w", err)
 	}
-	for _, s := range in.Services {
-		if _, err := insertItem(ctx, q, in.EstablishmentID, in.ID, s, in.Now); err != nil {
+	for _, l := range in.Lines {
+		if _, err := insertItem(ctx, q, in.EstablishmentID, in.ID, l.Snap, l.Quantity, in.Now); err != nil {
 			return 0, err
 		}
 	}
@@ -245,11 +268,15 @@ func PendingOrderExists(ctx context.Context, q database.Querier, estID uuid.UUID
 	return exists, err
 }
 
-// Summary é o resumo da comanda usado pela fila: nomes dos serviços, duração estimada e se há
-// solicitação de alteração esperando a equipe.
+// Summary é o resumo da comanda usado pela fila: nomes dos serviços (com quantidade, ex.:
+// "Corte ×3"), duração estimada (só serviços, quantidade × duração), unidades de serviço e
+// de produto, e se há solicitação de alteração esperando a equipe. Unidades de serviço NÃO são
+// pessoas: três cortes podem ser uma pessoa com dois filhos ou três cortes da mesma pessoa.
 type Summary struct {
 	ServiceNames            []string
 	DurationMinutes         int
+	ServiceUnits            int
+	ProductUnits            int
 	HasPendingChangeRequest bool
 }
 
@@ -260,7 +287,12 @@ func Summaries(ctx context.Context, q database.Querier, orderIDs []uuid.UUID) (m
 		return out, nil
 	}
 	rows, err := q.Query(ctx, `
-		SELECT i.order_id, array_agg(i.name ORDER BY i.added_at, i.name), sum(i.duration_minutes)::int,
+		SELECT i.order_id,
+		       coalesce(array_agg(CASE WHEN i.quantity > 1 THEN i.name || ' ×' || i.quantity ELSE i.name END ORDER BY i.added_at, i.name)
+		                FILTER (WHERE i.kind = 'service'), '{}'),
+		       coalesce(sum(i.duration_minutes * i.quantity) FILTER (WHERE i.kind = 'service'), 0)::int,
+		       coalesce(sum(i.quantity) FILTER (WHERE i.kind = 'service'), 0)::int,
+		       coalesce(sum(i.quantity) FILTER (WHERE i.kind = 'product'), 0)::int,
 		       EXISTS (SELECT 1 FROM change_request c WHERE c.order_id = i.order_id AND c.status = 'pending')
 		FROM order_item i WHERE i.order_id = ANY($1) AND i.status <> 'removed'
 		GROUP BY i.order_id`, orderIDs)
@@ -271,7 +303,7 @@ func Summaries(ctx context.Context, q database.Querier, orderIDs []uuid.UUID) (m
 	for rows.Next() {
 		var id uuid.UUID
 		var s Summary
-		if err := rows.Scan(&id, &s.ServiceNames, &s.DurationMinutes, &s.HasPendingChangeRequest); err != nil {
+		if err := rows.Scan(&id, &s.ServiceNames, &s.DurationMinutes, &s.ServiceUnits, &s.ProductUnits, &s.HasPendingChangeRequest); err != nil {
 			return nil, err
 		}
 		out[id] = s
@@ -280,8 +312,9 @@ func Summaries(ctx context.Context, q database.Querier, orderIDs []uuid.UUID) (m
 }
 
 // ServiceIDs devolve os serviços aceitos (não retirados) da comanda (usado na transferência).
+// Produtos não dependem do profissional e ficam de fora.
 func ServiceIDs(ctx context.Context, q database.Querier, orderID uuid.UUID) ([]uuid.UUID, error) {
-	rows, err := q.Query(ctx, `SELECT service_id FROM order_item WHERE order_id = $1 AND status <> 'removed'`, orderID)
+	rows, err := q.Query(ctx, `SELECT service_id FROM order_item WHERE order_id = $1 AND status <> 'removed' AND kind = 'service'`, orderID)
 	if err != nil {
 		return nil, err
 	}

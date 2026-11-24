@@ -74,6 +74,8 @@ type publicEstablishmentView struct {
 	Address     *string         `json:"address"`
 	Phone       *string         `json:"phone"`
 	Logo        *midia.ImageRef `json:"logo"`
+	// Ordering: limites e opções públicas do pedido (quantidade, produtos, visitante, meios).
+	Ordering estabelecimento.PublicOrdering `json:"ordering"`
 }
 
 type messageView struct {

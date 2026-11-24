@@ -1084,7 +1084,7 @@ paths:
     post:
       operationId: markNoShow
       tags: [fila]
-      summary: Chamado → ausente, somente após 10 minutos da chamada (relógio do servidor).
+      summary: Chamado → ausente, somente depois do prazo gravado na chamada (tolerância da loja, relógio do servidor).
       security: [{ accountSession: [], csrfToken: [] }]
       x-authz: [{ actor: professional, scope: own_queue }, { actor: owner, scope: establishment }]
       x-transitions: [T-P-06, T-O-05, T-CR-04]
@@ -1147,7 +1147,7 @@ paths:
       summary: Troca a pessoa de lugar com a vizinha de cima ou de baixo na mesma fila (aguardando ou chamada).
       description: |
         Para baixo, a pessoa chamada volta a ser a primeira a aguardar e a primeira que aguardava passa a
-        ser chamada (nova tolerância de 10 minutos). Para cima, a primeira que aguarda troca com a chamada.
+        ser chamada (nova chamada com a tolerância vigente da loja). Para cima, a primeira que aguarda troca com a chamada.
         Entre duas pessoas aguardando, só as posições mudam. Troca que envolve a pessoa chamada exige fila
         aberta. Em atendimento nunca se move.
       security: [{ accountSession: [], csrfToken: [] }]
@@ -1435,6 +1435,11 @@ paths:
             items: { $ref: '#/components/schemas/OrderStatus' }
           style: form
           explode: false
+        - name: q
+          in: query
+          required: false
+          description: Busca no servidor por senha, nick ou nome de item (sem diferenciar maiúsculas nem acentos; até 60 caracteres).
+          schema: { type: string, maxLength: 60 }
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Cursor'
       responses:
@@ -3432,7 +3437,7 @@ paths:
         - name: dimension
           in: path
           required: true
-          schema: { type: string, enum: [payment_methods, outcomes, professionals, services, peak_hours, wait_bands, pending, rewards, recurrence] }
+          schema: { type: string, enum: [payment_methods, outcomes, professionals, services, products, peak_hours, wait_bands, pending, rewards, recurrence] }
         - { $ref: '#/components/parameters/AnalyticsFrom' }
         - { $ref: '#/components/parameters/AnalyticsTo' }
         - { $ref: '#/components/parameters/AnalyticsCompare' }
@@ -3528,6 +3533,695 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         default: { $ref: '#/components/responses/Unexpected' }
 
+  /v1/establishments/{establishmentId}/catalog-categories:
+    get:
+      operationId: listCategories
+      tags: [administracao]
+      summary: Categorias de serviços e produtos da loja (ativas e inativas).
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: professional, scope: establishment_member }, { actor: owner, scope: establishment }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/CatalogCategory' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+    post:
+      operationId: createCategory
+      tags: [administracao]
+      summary: Cria categoria (serviço ou produto). Nome único por tipo, até 50 por tipo.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-CT-01]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CategoryRequest' }
+      responses:
+        '201':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/CatalogCategory' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/catalog-categories/{categoryId}:
+    patch:
+      operationId: updateCategory
+      tags: [administracao]
+      summary: Renomeia ou muda a posição; os itens não mudam.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-CT-02]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/CategoryId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CategoryRequest' }
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/CatalogCategory' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/catalog-categories/{categoryId}/deactivate:
+    post:
+      operationId: deactivateCategory
+      tags: [administracao]
+      summary: "Desativa: sai dos filtros públicos; os itens continuam (sem categoria para o cliente)."
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-CT-03]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/CategoryId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedRequest' }
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/CatalogCategory' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/catalog-categories/{categoryId}/reactivate:
+    post:
+      operationId: reactivateCategory
+      tags: [administracao]
+      summary: Reativa a categoria.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-CT-04]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/CategoryId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedRequest' }
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/CatalogCategory' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/public/establishments/{establishmentId}/catalog-categories:
+    get:
+      operationId: listPublicCategories
+      tags: [publico]
+      summary: Categorias ativas da loja.
+      security: []
+      x-authz: [{ actor: public, scope: none }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/PublicCatalogCategory' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/products:
+    get:
+      operationId: listProducts
+      tags: [administracao]
+      summary: Catálogo de produtos completo (até 500), incluindo inativos.
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: professional, scope: establishment_member }, { actor: owner, scope: establishment }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Product' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+    post:
+      operationId: createProduct
+      tags: [administracao]
+      summary: Cria produto simples (sem estoque).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-PD-01]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProductRequest' }
+      responses:
+        '201':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Product' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/products/{productId}:
+    patch:
+      operationId: updateProduct
+      tags: [administracao]
+      summary: Altera produto; vale só para novas inclusões (comandas guardam o snapshot).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-PD-02]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/ProductId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProductRequest' }
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Product' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/products/{productId}/deactivate:
+    post:
+      operationId: deactivateProduct
+      tags: [administracao]
+      summary: "Desativa: bloqueia novas inclusões; comandas com o produto continuam."
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-PD-03]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/ProductId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedRequest' }
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Product' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/products/{productId}/reactivate:
+    post:
+      operationId: reactivateProduct
+      tags: [administracao]
+      summary: Reativa o produto.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-PD-04]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/ProductId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedRequest' }
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Product' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/public/establishments/{establishmentId}/products:
+    get:
+      operationId: listPublicProducts
+      tags: [publico]
+      summary: Produtos ativos (vazio quando a loja não oferece produtos).
+      security: []
+      x-authz: [{ actor: public, scope: none }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/PublicProduct' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/queues/{queueId}/close-admission:
+    post:
+      operationId: closeAdmission
+      tags: [fila]
+      summary: Fecha a ENTRADA (quem já está continua; a operação segue).
+      description: Dono em qualquer fila; profissional só na própria e só com `professionals_control_admission` ligada.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: professional, scope: own_queue }, { actor: owner, scope: establishment }]
+      x-transitions: [T-Q-06]
+      x-events: [queue.public.updated, queue.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/QueueId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/StaffQueueOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/queues/{queueId}/reopen-admission:
+    post:
+      operationId: reopenAdmission
+      tags: [fila]
+      summary: Reabre a entrada (não ignora a capacidade).
+      description: Dono em qualquer fila; profissional só na própria e só com `professionals_control_admission` ligada.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: professional, scope: own_queue }, { actor: owner, scope: establishment }]
+      x-transitions: [T-Q-07]
+      x-events: [queue.public.updated, queue.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/QueueId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/StaffQueueOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/queues/{queueId}/capacity:
+    put:
+      operationId: setQueueCapacity
+      tags: [fila]
+      summary: Define o limite de participações pendentes da fila (1–200) ou volta ao padrão da loja (null).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-Q-08]
+      x-events: [queue.public.updated, queue.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/QueueId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetQueueCapacityRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/StaffQueueOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/settings:
+    get:
+      operationId: getEstablishmentSettings
+      tags: [administracao]
+      summary: Configurações da loja por seção (catálogo, filas, pagamentos).
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/EstablishmentSettings' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/settings/catalog:
+    patch:
+      operationId: updateCatalogSettings
+      tags: [administracao]
+      summary: Seção Catálogo.
+      description: Só os campos enviados mudam; `expected_version` é a versão da SEÇÃO.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-ST-01]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CatalogSettingsRequest' }
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/EstablishmentSettings' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/settings/queue:
+    patch:
+      operationId: updateQueueSettings
+      tags: [administracao]
+      summary: Seção Filas e atendimento (tolerância vale para chamadas futuras).
+      description: Só os campos enviados mudam; `expected_version` é a versão da SEÇÃO.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-ST-02]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/QueueSettingsRequest' }
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/EstablishmentSettings' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/settings/payments:
+    patch:
+      operationId: updatePaymentSettings
+      tags: [administracao]
+      summary: Seção Pagamentos (nunca sem meio utilizável).
+      description: Só os campos enviados mudam; `expected_version` é a versão da SEÇÃO.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-ST-03]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PaymentSettingsRequest' }
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/EstablishmentSettings' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/orders/{orderId}/items/{itemId}/performed-quantity:
+    put:
+      operationId: setItemPerformedQuantity
+      tags: [atendimento]
+      summary: Registra quantas unidades da linha foram integralmente feitas/entregues (valor absoluto, só cresce).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: professional, scope: own_attendance }, { actor: owner, scope: establishment }]
+      x-transitions: [T-O-14]
+      x-events: [order.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/ItemId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetPerformedQuantityRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/OrderOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/payment-fees:
+    get:
+      operationId: listPaymentFees
+      tags: [pagamento]
+      summary: Custos de recebimento estimados (débito, crédito, Pix), com histórico de versões.
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/PaymentFee' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/payment-fees/{method}:
+    put:
+      operationId: setPaymentFee
+      tags: [pagamento]
+      summary: Nova versão do custo de uma modalidade, a partir de agora (recebimentos antigos não mudam).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-FE-01]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/FeeMethod'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetPaymentFeeRequest' }
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/PaymentFee' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/receipt-costs:
+    get:
+      operationId: getReceiptCosts
+      tags: [pagamento]
+      summary: Recebimentos, estornos e custos do período, com cobertura dos dados (não é lucro).
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - { name: from, in: query, required: false, schema: { $ref: '#/components/schemas/Timestamp' } }
+        - { name: to, in: query, required: false, schema: { $ref: '#/components/schemas/Timestamp' } }
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/ReceiptCosts' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
 components:
   securitySchemes:
     accountSession:
@@ -3678,6 +4372,21 @@ components:
       required: true
       description: Lado desejado em px; entrega a variante desse tamanho, a menor maior que ele ou a maior.
       schema: { type: integer, minimum: 16, maximum: 1024 }
+    CategoryId:
+      name: categoryId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    ProductId:
+      name: productId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    FeeMethod:
+      name: method
+      in: path
+      required: true
+      schema: { type: string, enum: [debit, credit, pix] }
     ServiceId:
       name: serviceId
       in: path
@@ -4322,8 +5031,8 @@ components:
     CreateParticipationRequest:
       type: object
       additionalProperties: false
-      required: [queue_id, service_ids]
-      description: Sem preço, total, papel ou identidade — tudo é derivado no servidor.
+      required: [queue_id]
+      description: Sem preço, total, papel ou identidade — tudo é derivado no servidor. Envie `items` (com quantidade, serviços e produtos) OU `service_ids` (formato anterior, quantidade 1). Pelo menos um serviço; nunca só produtos. Um pedido ocupa UMA posição na fila, mesmo com várias unidades.
       properties:
         queue_id: { $ref: '#/components/schemas/Id' }
         service_ids:
@@ -4332,6 +5041,161 @@ components:
           maxItems: 10
           uniqueItems: true
           items: { $ref: '#/components/schemas/Id' }
+        items: { $ref: '#/components/schemas/OrderLines' }
+
+    OrderLineRequest:
+      type: object
+      additionalProperties: false
+      description: Um item do pedido — exatamente um de `service_id` ou `product_id` — com quantidade (padrão 1). O limite da loja (`ordering.max_service_quantity`, 1–50, padrão 10) vale ao incluir ou aumentar; quantidades já aceitas não são invalidadas.
+      properties:
+        service_id: { $ref: '#/components/schemas/Id' }
+        product_id: { $ref: '#/components/schemas/Id' }
+        quantity: { type: integer, minimum: 1, maximum: 50, default: 1 }
+    OrderLines:
+      type: array
+      maxItems: 20
+      description: Até 10 serviços e 10 produtos diferentes; cada item aparece uma vez (a quantidade fica na mesma linha).
+      items: { $ref: '#/components/schemas/OrderLineRequest' }
+    ItemQuantityRequest:
+      type: object
+      additionalProperties: false
+      required: [item_id, quantity]
+      properties:
+        item_id: { $ref: '#/components/schemas/Id' }
+        quantity: { type: integer, minimum: 1, maximum: 50 }
+    SetQueueCapacityRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version, capacity]
+      properties:
+        expected_version: { $ref: '#/components/schemas/Version' }
+        capacity: { type: [integer, 'null'], minimum: 1, maximum: 200 }
+    SetPerformedQuantityRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version, performed_quantity]
+      properties:
+        expected_version: { $ref: '#/components/schemas/Version' }
+        performed_quantity: { type: integer, minimum: 1, maximum: 50 }
+    EstablishmentSettings:
+      type: object
+      description: Configurações da loja (privadas do dono). docs/configuracoes-da-loja.md descreve tipo, padrão, intervalo e efeito de cada uma.
+      required: [catalog, queue, payments]
+      properties:
+        catalog:
+          type: object
+          required: [max_service_quantity, products_enabled, version]
+          properties:
+            max_service_quantity: { type: integer, minimum: 1, maximum: 50, default: 10 }
+            products_enabled: { type: boolean, default: true }
+            version: { $ref: '#/components/schemas/Version' }
+        queue:
+          type: object
+          required: [visitors_enabled, call_tolerance_minutes, default_queue_capacity, professionals_control_admission, version]
+          properties:
+            visitors_enabled: { type: boolean, default: true }
+            call_tolerance_minutes: { type: integer, minimum: 1, maximum: 60, default: 10 }
+            default_queue_capacity: { type: [integer, 'null'], minimum: 1, maximum: 200, description: null = sem limite (padrão). }
+            professionals_control_admission: { type: boolean, default: true }
+            version: { $ref: '#/components/schemas/Version' }
+        payments:
+          type: object
+          required: [cash_enabled, card_enabled, pix_enabled, pix_available, version]
+          properties:
+            cash_enabled: { type: boolean, default: true }
+            card_enabled: { type: boolean, default: true }
+            pix_enabled: { type: boolean, default: true }
+            pix_available: { type: boolean, description: Integração Pix operacional neste servidor. }
+            version: { $ref: '#/components/schemas/Version' }
+    CatalogSettingsRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      properties:
+        expected_version: { $ref: '#/components/schemas/Version' }
+        max_service_quantity: { type: integer, minimum: 1, maximum: 50 }
+        products_enabled: { type: boolean }
+    QueueSettingsRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      properties:
+        expected_version: { $ref: '#/components/schemas/Version' }
+        visitors_enabled: { type: boolean }
+        call_tolerance_minutes: { type: integer, minimum: 1, maximum: 60 }
+        default_queue_capacity: { type: [integer, 'null'], minimum: 1, maximum: 200 }
+        professionals_control_admission: { type: boolean }
+    PaymentSettingsRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      properties:
+        expected_version: { $ref: '#/components/schemas/Version' }
+        cash_enabled: { type: boolean }
+        card_enabled: { type: boolean }
+        pix_enabled: { type: boolean }
+    PaymentFeeConfig:
+      type: object
+      required: [id, method, version, cleared, percent_basis_points, fixed_cents, effective_from]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        method: { type: string, enum: [debit, credit, pix] }
+        version: { type: integer, minimum: 1 }
+        cleared: { type: boolean, description: Versão que voltou a "não configurado". }
+        percent_basis_points: { type: integer, minimum: 0, maximum: 3000, description: "1 pb = 0,01%." }
+        fixed_cents: { type: integer, minimum: 0, maximum: 10000, description: Por transação (não por unidade). }
+        effective_from: { $ref: '#/components/schemas/Timestamp' }
+    PaymentFee:
+      type: object
+      description: Custo interno ESTIMADO pelo dono para uma modalidade. Nunca aparece para cliente, visitante ou profissional, e não muda o valor cobrado.
+      required: [method, configured, current, version, estimate, history]
+      properties:
+        method: { type: string, enum: [debit, credit, pix] }
+        configured: { type: boolean, description: false = não configurado; zero explícito é configurado. }
+        current: { oneOf: [{ $ref: '#/components/schemas/PaymentFeeConfig' }, { type: 'null' }] }
+        version: { type: integer, minimum: 0, description: Versão vigente (0 = nunca configurado). }
+        estimate: { type: boolean }
+        history: { type: array, items: { $ref: '#/components/schemas/PaymentFeeConfig' } }
+    SetPaymentFeeRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      properties:
+        expected_version: { type: integer, minimum: 0, description: Versão vigente vista pela tela (0 = nunca configurado). }
+        percent_basis_points: { type: integer, minimum: 0, maximum: 3000 }
+        fixed_cents: { type: integer, minimum: 0, maximum: 10000 }
+        clear: { type: boolean, description: Volta a "não configurado" (sem percentual nem fixo). }
+    ReceiptCosts:
+      type: object
+      description: Recebimentos − estornos − custos conhecidos ou estimados. NÃO é lucro. `complete` = false quando há recebimento com custo desconhecido ou não configurado.
+      required: [from, to, gross_cents, receipt_count, refunded_cents, estimated_fees_cents, actual_fees_cents, fee_returned_cents, unknown_fee_count, not_configured_count, refunds_fee_return_unknown, after_known_costs_cents, complete, by_method, note]
+      properties:
+        from: { $ref: '#/components/schemas/Timestamp' }
+        to: { $ref: '#/components/schemas/Timestamp' }
+        gross_cents: { type: integer, format: int64 }
+        receipt_count: { type: integer }
+        refunded_cents: { type: integer, format: int64 }
+        estimated_fees_cents: { type: integer, format: int64 }
+        actual_fees_cents: { type: integer, format: int64 }
+        fee_returned_cents: { type: integer, format: int64 }
+        unknown_fee_count: { type: integer, description: Recebimentos sem custo registrado (anteriores à versão ou cartão sem modalidade). }
+        not_configured_count: { type: integer }
+        refunds_fee_return_unknown: { type: integer, description: Estornos de recebimentos com custo cuja devolução de taxa é desconhecida. }
+        after_known_costs_cents: { type: integer, format: int64 }
+        complete: { type: boolean }
+        note: { type: string }
+        by_method:
+          type: array
+          items:
+            type: object
+            required: [method, gross_cents, count, estimated_fees_cents, actual_fees_cents, unknown_fee_count]
+            properties:
+              method: { type: string, enum: [cash, pix, debit, credit, card_unspecified] }
+              gross_cents: { type: integer, format: int64 }
+              count: { type: integer }
+              estimated_fees_cents: { type: integer, format: int64 }
+              actual_fees_cents: { type: integer, format: int64 }
+              unknown_fee_count: { type: integer }
     VersionedRequest:
       type: object
       additionalProperties: false
@@ -4395,7 +5259,7 @@ components:
         items:
           type: array
           minItems: 1
-          description: Resultado de cada item aceito. Pelo menos um `performed`. `not_performed` exige `reason`.
+          description: Resultado de cada item aceito. Pelo menos uma unidade de serviço `performed`. `not_performed` exige `reason`; `performed` com menos unidades que as pedidas também. Unidade já registrada como feita não pode ser declarada não feita.
           items:
             type: object
             additionalProperties: false
@@ -4403,6 +5267,7 @@ components:
             properties:
               item_id: { $ref: '#/components/schemas/Id' }
               outcome: { type: string, enum: [performed, not_performed] }
+              quantity: { type: integer, minimum: 0, maximum: 50, description: "Unidades integralmente feitas (produto: entregues). Ausente: todas para resultado completo; nenhuma para os outros." }
               reason: { $ref: '#/components/schemas/Reason' }
     InterruptServiceRequest:
       type: object
@@ -4422,10 +5287,12 @@ components:
             properties:
               item_id: { $ref: '#/components/schemas/Id' }
               outcome: { type: string, enum: [fully_performed, partially_performed, not_started] }
+              quantity: { type: integer, minimum: 0, maximum: 50, description: "Unidades integralmente feitas (produto: entregues). Ausente: todas para resultado completo; nenhuma para os outros." }
     ReplaceOrderItemsRequest:
       type: object
       additionalProperties: false
-      required: [expected_version, service_ids]
+      required: [expected_version]
+      description: Conjunto final de itens com quantidade ABSOLUTA (repetir não soma). Envie `items` OU `service_ids` (formato anterior, quantidade 1). Linhas mantidas guardam o preço aceito, também ao aumentar; a quantidade nunca fica abaixo das unidades já realizadas.
       properties:
         expected_version: { $ref: '#/components/schemas/Version' }
         service_ids:
@@ -4434,6 +5301,7 @@ components:
           maxItems: 10
           uniqueItems: true
           items: { $ref: '#/components/schemas/Id' }
+        items: { $ref: '#/components/schemas/OrderLines' }
         reason: { $ref: '#/components/schemas/Reason' }
     CreateChangeRequestRequest:
       type: object
@@ -4446,11 +5314,17 @@ components:
           maxItems: 10
           uniqueItems: true
           items: { $ref: '#/components/schemas/Id' }
+        add_items: { $ref: '#/components/schemas/OrderLines' }
         remove_item_ids:
           type: array
           maxItems: 10
           uniqueItems: true
           items: { $ref: '#/components/schemas/Id' }
+        set_quantities:
+          type: array
+          maxItems: 20
+          description: Nova quantidade (absoluta) de linhas que continuam.
+          items: { $ref: '#/components/schemas/ItemQuantityRequest' }
     CloseInterruptionRequest:
       type: object
       additionalProperties: false
@@ -4461,7 +5335,7 @@ components:
         items:
           type: array
           minItems: 1
-          description: Decisão do dono por item; só `fully_performed` é cobrado pelo preço aceito.
+          description: Decisão do dono por item. Cobra-se `quantity` unidades integralmente feitas pelo preço aceito (`fully_performed` = todas); a unidade parcial e as não iniciadas valem zero.
           items:
             type: object
             additionalProperties: false
@@ -4469,6 +5343,7 @@ components:
             properties:
               item_id: { $ref: '#/components/schemas/Id' }
               outcome: { type: string, enum: [fully_performed, partially_performed, not_started] }
+              quantity: { type: integer, minimum: 0, maximum: 50, description: "Unidades integralmente feitas (produto: entregues). Ausente: todas para resultado completo; nenhuma para os outros." }
     AdjustOrderRequest:
       type: object
       additionalProperties: false
@@ -4488,6 +5363,20 @@ components:
           maxItems: 10
           description: Serviço feito e não registrado; preço atual do catálogo vira snapshot.
           items: { $ref: '#/components/schemas/Id' }
+        add_performed_items:
+          $ref: '#/components/schemas/OrderLines'
+          description: Itens feitos/entregues e não registrados, com quantidade (alternativa a `add_performed_service_ids`).
+        set_charged_quantities:
+          type: array
+          maxItems: 20
+          description: Novas unidades cobradas de linhas existentes (0 = não cobrar a linha). Acima do pedido, a quantidade da linha acompanha.
+          items:
+            type: object
+            additionalProperties: false
+            required: [item_id, quantity]
+            properties:
+              item_id: { $ref: '#/components/schemas/Id' }
+              quantity: { type: integer, minimum: 0, maximum: 50 }
     ChoosePaymentMethodRequest:
       type: object
       additionalProperties: false
@@ -4521,6 +5410,10 @@ components:
           maxLength: 40
           pattern: '^[A-Za-z0-9-]*$'
           description: Referência opcional da maquininha, sem dados do cartão.
+        card_type:
+          type: string
+          enum: [debit, credit]
+          description: Modalidade do cartão (novos registros). Ausente só para clientes antigos durante a atualização - fica "cartão não especificado", sem custo estimado.
     ConfirmRefundRequest:
       type: object
       additionalProperties: false
@@ -4608,7 +5501,7 @@ components:
       description: Paleta do catálogo fechado (padrão purple).
     MediaPurpose:
       type: string
-      enum: [avatar, professional_photo, logo]
+      enum: [avatar, professional_photo, logo, product_photo]
     ImageVariant:
       type: object
       required: [width, height, url]
@@ -4709,6 +5602,8 @@ components:
           type: array
           uniqueItems: true
           items: { $ref: '#/components/schemas/Id' }
+        category_id: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }], description: Categoria de serviço desta loja (null = sem categoria). }
+        display_order: { type: integer, minimum: 0, maximum: 9999 }
     UpdateServiceRequest:
       type: object
       additionalProperties: false
@@ -4719,6 +5614,8 @@ components:
         price_cents: { type: integer, format: int64, minimum: 1, maximum: 10000000 }
         duration_minutes: { type: integer, minimum: 1, maximum: 480 }
         points: { type: integer, minimum: 0, maximum: 100000 }
+        category_id: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }], description: Categoria de serviço desta loja (null = sem categoria). }
+        display_order: { type: integer, minimum: 0, maximum: 9999 }
     SetServiceProfessionalsRequest:
       type: object
       additionalProperties: false
@@ -4883,6 +5780,19 @@ components:
           oneOf:
             - $ref: '#/components/schemas/ImageRef'
             - type: 'null'
+        ordering: { $ref: '#/components/schemas/PublicOrdering' }
+    PublicOrdering:
+      type: object
+      description: Opções públicas do pedido. Nada financeiro interno (custos, chaves) aparece aqui.
+      required: [max_service_quantity, products_enabled, visitors_enabled, payment_methods]
+      properties:
+        max_service_quantity: { type: integer, minimum: 1, maximum: 50 }
+        products_enabled: { type: boolean }
+        visitors_enabled: { type: boolean }
+        payment_methods:
+          type: array
+          description: Meios aceitos agora (Pix só com a integração operacional).
+          items: { $ref: '#/components/schemas/PaymentMethod' }
     PublicService:
       type: object
       required: [id, name, price, duration_minutes, professional_ids]
@@ -4894,10 +5804,84 @@ components:
         professional_ids:
           type: array
           items: { $ref: '#/components/schemas/Id' }
+        category_id: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        display_order: { type: integer, minimum: 0 }
+    CatalogKind:
+      type: string
+      enum: [service, product]
+    CatalogCategory:
+      type: object
+      required: [id, kind, name, display_order, status, version]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        kind: { $ref: '#/components/schemas/CatalogKind' }
+        name: { type: string }
+        display_order: { type: integer, minimum: 0, maximum: 9999 }
+        status: { $ref: '#/components/schemas/ServiceStatus' }
+        version: { $ref: '#/components/schemas/Version' }
+    PublicCatalogCategory:
+      type: object
+      required: [id, kind, name, display_order]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        kind: { $ref: '#/components/schemas/CatalogKind' }
+        name: { type: string }
+        display_order: { type: integer }
+    Product:
+      type: object
+      required: [id, name, description, category_id, price, image, display_order, status, version]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        category_id: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        price: { $ref: '#/components/schemas/Money' }
+        image:
+          oneOf:
+            - $ref: '#/components/schemas/ImageRef'
+            - type: 'null'
+        display_order: { type: integer }
+        status: { $ref: '#/components/schemas/ServiceStatus' }
+        version: { $ref: '#/components/schemas/Version' }
+    PublicProduct:
+      type: object
+      description: Sem estoque (não existe estoque nesta versão) — disponível = ativo.
+      required: [id, name, description, category_id, price, image, display_order]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        category_id: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        price: { $ref: '#/components/schemas/Money' }
+        image:
+          oneOf:
+            - $ref: '#/components/schemas/ImageRef'
+            - type: 'null'
+        display_order: { type: integer }
+    CategoryRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        expected_version: { $ref: '#/components/schemas/Version' }
+        kind: { $ref: '#/components/schemas/CatalogKind' }
+        name: { type: string, minLength: 1, maxLength: 40 }
+        display_order: { type: integer, minimum: 0, maximum: 9999 }
+    ProductRequest:
+      type: object
+      additionalProperties: false
+      description: Criação exige `name` e `price_cents`; alteração exige `expected_version`. `null` limpa descrição, categoria ou foto.
+      properties:
+        expected_version: { $ref: '#/components/schemas/Version' }
+        name: { type: string, minLength: 1, maxLength: 60 }
+        description: { type: [string, 'null'], maxLength: 200 }
+        category_id: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        price_cents: { type: integer, minimum: 1, maximum: 10000000 }
+        display_order: { type: integer, minimum: 0, maximum: 9999 }
+        image_asset_id: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }], description: Envio próprio com finalidade product_photo. }
     PublicQueue:
       type: object
       description: Somente dados públicos. Sem nick, serviços, valores ou contatos.
-      required: [queue_id, professional, status, waiting_count, tickets, estimated_wait, version]
+      required: [queue_id, professional, status, waiting_count, tickets, estimated_wait, entry_state, version]
       properties:
         queue_id: { $ref: '#/components/schemas/Id' }
         professional:
@@ -4922,7 +5906,12 @@ components:
               ticket_code: { type: string }
               status: { type: string, enum: [waiting, called, in_service] }
         estimated_wait: { $ref: '#/components/schemas/Estimate' }
+        entry_state: { $ref: '#/components/schemas/EntryState' }
         version: { $ref: '#/components/schemas/Version' }
+    EntryState:
+      type: string
+      description: "Se a fila aceita nova participação agora: accepting; full (capacidade atingida, volta sozinha quando liberar vaga); closed_manual (entrada fechada pela equipe); operation_paused; operation_closed."
+      enum: [accepting, full, closed_manual, operation_paused, operation_closed]
     Visit:
       type: object
       required: [participation, order]
@@ -4949,6 +5938,7 @@ components:
         loyalty_eligible: { type: boolean, description: Snapshot registrado na entrada. }
         called_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
         tolerance_ends_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+        tolerance_minutes: { type: [integer, 'null'], minimum: 1, maximum: 60, description: Tolerância gravada na chamada (configuração da loja naquele momento). }
         started_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
         finished_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
         end_reason: { type: [string, 'null'] }
@@ -4979,6 +5969,14 @@ components:
         items:
           type: array
           items: { $ref: '#/components/schemas/OrderItem' }
+        totals:
+          type: object
+          description: Unidades de serviço (não são pessoas), unidades de produto e duração estimada (só serviços).
+          required: [service_units, product_units, duration_minutes]
+          properties:
+            service_units: { type: integer, minimum: 0 }
+            product_units: { type: integer, minimum: 0 }
+            duration_minutes: { type: integer, minimum: 0 }
         total:
           $ref: '#/components/schemas/Money'
           description: Soma dos itens cobráveis da versão atual (calculada no servidor).
@@ -5009,16 +6007,24 @@ components:
         closed_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
     OrderItem:
       type: object
-      required: [id, service_id, name, unit_price, duration_minutes, points, status, charged]
+      required: [id, kind, service_id, product_id, name, unit_price, quantity, performed_quantity, charged_quantity, subtotal, duration_minutes, points, status, charged]
+      description: "Uma linha por serviço ou produto. Invariantes: 0 ≤ charged_quantity ≤ performed_quantity ≤ quantity."
       properties:
         id: { $ref: '#/components/schemas/Id' }
-        service_id: { $ref: '#/components/schemas/Id' }
+        kind: { $ref: '#/components/schemas/CatalogKind' }
+        service_id: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        product_id: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
         name: { type: string, description: Snapshot na inclusão. }
         unit_price: { $ref: '#/components/schemas/Money' }
-        duration_minutes: { type: integer }
-        points: { type: integer, minimum: 0 }
+        quantity: { type: integer, minimum: 1, maximum: 50, description: Unidades pedidas (vigentes). }
+        performed_quantity: { type: integer, minimum: 0, description: Unidades integralmente realizadas (serviço) ou entregues (produto). }
+        charged_quantity: { type: integer, minimum: 0, description: Unidades cobradas (só depois de fechado o valor). }
+        reported_quantity: { type: [integer, 'null'], description: Unidades feitas segundo o profissional na interrupção. }
+        subtotal: { $ref: '#/components/schemas/Money', description: Aberta - preço × quantidade; valor fechado - preço × cobradas. }
+        duration_minutes: { type: integer, description: Por unidade; produto = 0 (não entra na fila). }
+        points: { type: integer, minimum: 0, description: Por unidade de serviço; produto = 0. }
         status: { $ref: '#/components/schemas/OrderItemStatus' }
-        charged: { type: boolean, description: Entra no total fechado. }
+        charged: { type: boolean, description: Tem unidades no total fechado (charged_quantity > 0). }
         added_at: { $ref: '#/components/schemas/Timestamp' }
         performed_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
         reported_outcome:
@@ -5036,10 +6042,19 @@ components:
         new_total: { $ref: '#/components/schemas/Money' }
         uncharged_item_ids: { type: array, items: { $ref: '#/components/schemas/Id' } }
         added_item_ids: { type: array, items: { $ref: '#/components/schemas/Id' } }
+        quantity_changes:
+          type: array
+          items:
+            type: object
+            required: [item_id, from, to]
+            properties:
+              item_id: { $ref: '#/components/schemas/Id' }
+              from: { type: integer }
+              to: { type: integer }
         at: { $ref: '#/components/schemas/Timestamp' }
     ChangeRequest:
       type: object
-      required: [id, status, add, remove_item_ids, created_at]
+      required: [id, status, add, remove_item_ids, set_quantities, created_at]
       properties:
         id: { $ref: '#/components/schemas/Id' }
         status: { $ref: '#/components/schemas/ChangeRequestStatus' }
@@ -5047,14 +6062,25 @@ components:
           type: array
           items:
             type: object
-            required: [service_id, name, unit_price]
+            required: [kind, service_id, product_id, name, unit_price, quantity]
             properties:
-              service_id: { $ref: '#/components/schemas/Id' }
+              kind: { $ref: '#/components/schemas/CatalogKind' }
+              service_id: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+              product_id: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
               name: { type: string }
               unit_price: { $ref: '#/components/schemas/Money' }
+              quantity: { type: integer, minimum: 1 }
         remove_item_ids:
           type: array
           items: { $ref: '#/components/schemas/Id' }
+        set_quantities:
+          type: array
+          items:
+            type: object
+            required: [item_id, quantity]
+            properties:
+              item_id: { $ref: '#/components/schemas/Id' }
+              quantity: { type: integer, minimum: 1 }
         created_at: { $ref: '#/components/schemas/Timestamp' }
         decided_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
         decided_by_role: { oneOf: [{ $ref: '#/components/schemas/StaffRole' }, { type: 'null' }] }
@@ -5120,6 +6146,10 @@ components:
         cash_tendered: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }] }
         change_given: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }] }
         card_reference: { type: [string, 'null'] }
+        card_type:
+          type: [string, 'null']
+          enum: [debit, credit, null]
+          description: null = dinheiro, Pix ou cartão registrado antes da modalidade (não especificado).
         refunded: { $ref: '#/components/schemas/Money' }
     Refund:
       type: object
@@ -5152,7 +6182,7 @@ components:
         resolution_note: { type: [string, 'null'] }
     StaffQueue:
       type: object
-      required: [queue_id, professional, status, version, unavailable_signal, entries]
+      required: [queue_id, professional, status, version, unavailable_signal, admission, load, entries]
       properties:
         queue_id: { $ref: '#/components/schemas/Id' }
         professional:
@@ -5171,6 +6201,25 @@ components:
             active: { type: boolean }
             note: { type: [string, 'null'] }
             since: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+        admission:
+          type: object
+          description: Entrada de novas participações, separada da operação (status).
+          required: [status, changed_at, capacity, capacity_override, state, professionals_can_control]
+          properties:
+            status: { type: string, enum: [open, closed], description: closed = fechada manualmente pela equipe. }
+            changed_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+            capacity: { type: [integer, 'null'], description: Limite efetivo de participações pendentes (null = sem limite). }
+            capacity_override: { type: [integer, 'null'], description: Limite próprio da fila (null = padrão da loja). }
+            state: { $ref: '#/components/schemas/EntryState' }
+            professionals_can_control: { type: boolean, description: O profissional pode fechar/reabrir a entrada da PRÓPRIA fila. }
+        load:
+          type: object
+          description: Carga pendente (aguardando + chamado). Participações não são pessoas, nem unidades de serviço.
+          required: [pending_participations, pending_service_units, estimated_minutes]
+          properties:
+            pending_participations: { type: integer, minimum: 0 }
+            pending_service_units: { type: integer, minimum: 0 }
+            estimated_minutes: { type: integer, minimum: 0 }
         entries:
           type: array
           description: Aguardando (ordem FIFO), chamado e em atendimento.
@@ -5261,6 +6310,8 @@ components:
         professional_ids:
           type: array
           items: { $ref: '#/components/schemas/Id' }
+        category_id: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        display_order: { type: integer, minimum: 0 }
         version: { $ref: '#/components/schemas/Version' }
     LoyaltyProgram:
       type: object
@@ -5346,10 +6397,13 @@ components:
           type: array
           items:
             type: object
-            required: [name, unit_price, charged]
+            required: [kind, name, unit_price, quantity, charged_quantity, charged]
             properties:
+              kind: { $ref: '#/components/schemas/CatalogKind' }
               name: { type: string }
               unit_price: { $ref: '#/components/schemas/Money' }
+              quantity: { type: integer, minimum: 1 }
+              charged_quantity: { type: integer, minimum: 0 }
               charged: { type: boolean }
         total: { $ref: '#/components/schemas/Money' }
         order_status: { $ref: '#/components/schemas/OrderStatus' }
@@ -5576,13 +6630,21 @@ components:
         missing: { type: string }
     AnalyticsCash:
       type: object
-      required: [received_cents, refunded_cents, net_cents, receipts, refunds, ignored_filters]
+      required: [received_cents, refunded_cents, net_cents, receipts, refunds, fees_estimated_cents, fees_known_cents, after_costs_cents, fee_coverage, ignored_filters]
       properties:
         received_cents: { $ref: '#/components/schemas/AnalyticsValue' }
         refunded_cents: { $ref: '#/components/schemas/AnalyticsValue' }
         net_cents: { $ref: '#/components/schemas/AnalyticsValue' }
         receipts: { $ref: '#/components/schemas/AnalyticsValue' }
         refunds: { $ref: '#/components/schemas/AnalyticsValue' }
+        fees_estimated_cents: { $ref: '#/components/schemas/AnalyticsValue' }
+        fees_known_cents: { $ref: '#/components/schemas/AnalyticsValue' }
+        after_costs_cents:
+          $ref: '#/components/schemas/AnalyticsValue'
+          description: Recebido − estornos − custos de recebimento conhecidos ou estimados. Não é lucro.
+        fee_coverage:
+          $ref: '#/components/schemas/AnalyticsValue'
+          description: Fração (0–1) dos recebimentos com custo conhecido, estimado ou que não se aplica. Abaixo de 1 o resultado é incompleto.
         ignored_filters: { type: array, items: { type: string } }
     AnalyticsSummaryPart:
       type: object

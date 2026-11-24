@@ -68,6 +68,8 @@ type serviceView struct {
 	Points          int         `json:"points"`
 	Status          string      `json:"status"`
 	ProfessionalIDs []uuid.UUID `json:"professional_ids"`
+	CategoryID      *uuid.UUID  `json:"category_id"`
+	DisplayOrder    int         `json:"display_order"`
 	Version         int64       `json:"version"`
 }
 
@@ -78,17 +80,20 @@ type publicServiceView struct {
 	Price           money       `json:"price"`
 	DurationMinutes int         `json:"duration_minutes"`
 	ProfessionalIDs []uuid.UUID `json:"professional_ids"`
+	CategoryID      *uuid.UUID  `json:"category_id"`
+	DisplayOrder    int         `json:"display_order"`
 }
 
 const serviceSelect = `
-	SELECT s.id, s.name, s.price_cents, s.duration_minutes, s.points, s.status, s.version,
+	SELECT s.id, s.name, s.price_cents, s.duration_minutes, s.points, s.status, s.version, s.category_id, s.display_order,
 	       coalesce(array_agg(sp.professional_id ORDER BY sp.professional_id) FILTER (WHERE sp.professional_id IS NOT NULL), '{}')
 	FROM service s LEFT JOIN service_professional sp ON sp.service_id = s.id`
 
 func scanService(row pgx.Row) (serviceView, error) {
 	var v serviceView
 	var cents int64
-	err := row.Scan(&v.ID, &v.Name, &cents, &v.DurationMinutes, &v.Points, &v.Status, &v.Version, &v.ProfessionalIDs)
+	err := row.Scan(&v.ID, &v.Name, &cents, &v.DurationMinutes, &v.Points, &v.Status, &v.Version, &v.CategoryID, &v.DisplayOrder,
+		&v.ProfessionalIDs)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return v, hs.ErrNotFound()
 	}
@@ -146,7 +151,7 @@ func (s *Service) listServices(w http.ResponseWriter, r *http.Request) error {
 	if _, err := s.Auth.Member(r, estID); err != nil {
 		return err
 	}
-	rows, err := s.Pool.Query(r.Context(), serviceSelect+` WHERE s.establishment_id = $1 GROUP BY s.id ORDER BY s.status, s.name, s.id`, estID)
+	rows, err := s.Pool.Query(r.Context(), serviceSelect+` WHERE s.establishment_id = $1 GROUP BY s.id ORDER BY s.status, s.display_order, lower(s.name), s.id`, estID)
 	if err != nil {
 		return err
 	}
@@ -177,7 +182,7 @@ func (s *Service) listPublicServices(w http.ResponseWriter, r *http.Request) err
 	if err != nil {
 		return err
 	}
-	rows, err := s.Pool.Query(ctx, serviceSelect+` WHERE s.establishment_id = $1 AND s.status = 'active' GROUP BY s.id ORDER BY s.name, s.id`, estID)
+	rows, err := s.Pool.Query(ctx, serviceSelect+` WHERE s.establishment_id = $1 AND s.status = 'active' GROUP BY s.id ORDER BY s.display_order, lower(s.name), s.id`, estID)
 	if err != nil {
 		return err
 	}
@@ -193,7 +198,8 @@ func (s *Service) listPublicServices(w http.ResponseWriter, r *http.Request) err
 				ids = append(ids, id)
 			}
 		}
-		out = append(out, publicServiceView{ID: v.ID, Name: v.Name, Price: v.Price, DurationMinutes: v.DurationMinutes, ProfessionalIDs: ids})
+		out = append(out, publicServiceView{ID: v.ID, Name: v.Name, Price: v.Price, DurationMinutes: v.DurationMinutes, ProfessionalIDs: ids,
+			CategoryID: v.CategoryID, DisplayOrder: v.DisplayOrder})
 	}
 	hs.WriteJSON(w, http.StatusOK, hs.Data[[]publicServiceView]{Data: out})
 	return nil
@@ -203,10 +209,12 @@ func (s *Service) listPublicServices(w http.ResponseWriter, r *http.Request) err
 // Escrita (sempre dono; Idempotency-Key; versão esperada nas alterações)
 
 type serviceFields struct {
-	Name            *string `json:"name"`
-	PriceCents      *int64  `json:"price_cents"`
-	DurationMinutes *int64  `json:"duration_minutes"`
-	Points          *int64  `json:"points"`
+	Name            *string      `json:"name"`
+	PriceCents      *int64       `json:"price_cents"`
+	DurationMinutes *int64       `json:"duration_minutes"`
+	Points          *int64       `json:"points"`
+	CategoryID      optionalUUID `json:"category_id"`
+	DisplayOrder    *int64       `json:"display_order"`
 }
 
 func (f serviceFields) validate(v *validate.Collector, required bool) (name string) {
@@ -226,6 +234,9 @@ func (f serviceFields) validate(v *validate.Collector, required bool) (name stri
 	check("/price_cents", f.PriceCents, 1, MaxPriceCents)
 	check("/duration_minutes", f.DurationMinutes, 1, MaxDuration)
 	check("/points", f.Points, 0, MaxPoints)
+	if f.DisplayOrder != nil {
+		v.IntRange("/display_order", f.DisplayOrder, 0, MaxDisplayOrder)
+	}
 	return name
 }
 
@@ -265,12 +276,19 @@ func (s *Service) createService(w http.ResponseWriter, r *http.Request) error {
 		if err := s.checkProfessionals(ctx, tx, estID, profs, true); err != nil {
 			return idempotency.Result{}, err
 		}
+		if err := checkCategory(ctx, tx, estID, req.CategoryID.Value, KindService); err != nil {
+			return idempotency.Result{}, err
+		}
+		order := int64(0)
+		if req.DisplayOrder != nil {
+			order = *req.DisplayOrder
+		}
 		now := s.Clock.Now()
 		var id uuid.UUID
 		if err := tx.QueryRow(ctx, `
-			INSERT INTO service (establishment_id, name, price_cents, duration_minutes, points, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $6) RETURNING id`,
-			estID, name, *req.PriceCents, *req.DurationMinutes, *req.Points, now).Scan(&id); err != nil {
+			INSERT INTO service (establishment_id, name, price_cents, duration_minutes, points, category_id, display_order, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8) RETURNING id`,
+			estID, name, *req.PriceCents, *req.DurationMinutes, *req.Points, req.CategoryID.Value, order, now).Scan(&id); err != nil {
 			return idempotency.Result{}, err
 		}
 		if err := setProfessionals(ctx, tx, estID, id, profs); err != nil {
@@ -325,10 +343,20 @@ func (s *Service) updateService(w http.ResponseWriter, r *http.Request) error {
 		if req.Points != nil {
 			next.Points = int(*req.Points)
 		}
+		if req.CategoryID.Set {
+			if err := checkCategory(ctx, tx, estID, req.CategoryID.Value, KindService); err != nil {
+				return idempotency.Result{}, err
+			}
+			next.CategoryID = req.CategoryID.Value
+		}
+		if req.DisplayOrder != nil {
+			next.DisplayOrder = int(*req.DisplayOrder)
+		}
 		if _, err := tx.Exec(ctx, `
-			UPDATE service SET name = $2, price_cents = $3, duration_minutes = $4, points = $5,
-			       version = version + 1, updated_at = $6 WHERE id = $1`,
-			serviceID, next.Name, next.Price.AmountCents, next.DurationMinutes, next.Points, s.Clock.Now()); err != nil {
+			UPDATE service SET name = $2, price_cents = $3, duration_minutes = $4, points = $5, category_id = $6, display_order = $7,
+			       version = version + 1, updated_at = $8 WHERE id = $1`,
+			serviceID, next.Name, next.Price.AmountCents, next.DurationMinutes, next.Points, next.CategoryID, next.DisplayOrder,
+			s.Clock.Now()); err != nil {
 			return idempotency.Result{}, err
 		}
 		return s.finish(ctx, tx, actor, estID, serviceID, "T-SV-02", cur.Status, cur.Status, http.StatusOK)
@@ -520,7 +548,7 @@ func uniqueIDs(v *validate.Collector, field string, ids []uuid.UUID) {
 func (s *Service) Routes() []hs.Route {
 	owner := []hs.Grant{hs.GrantOwner}
 	const base = "/v1/establishments/{establishmentId}/services"
-	return []hs.Route{
+	routes := []hs.Route{
 		{Operation: "listServices", Method: http.MethodGet, Path: base,
 			Grants: []hs.Grant{{Actor: "professional", Scope: "establishment_member"}, hs.GrantOwner}, Handler: s.listServices},
 		{Operation: "createService", Method: http.MethodPost, Path: base, Grants: owner, Handler: s.createService},
@@ -531,4 +559,24 @@ func (s *Service) Routes() []hs.Route {
 		{Operation: "listPublicServices", Method: http.MethodGet, Path: "/v1/public/establishments/{establishmentId}/services",
 			Grants: []hs.Grant{hs.GrantPublic}, Handler: s.listPublicServices},
 	}
+	const cat = "/v1/establishments/{establishmentId}/catalog-categories"
+	const prod = "/v1/establishments/{establishmentId}/products"
+	member := []hs.Grant{{Actor: "professional", Scope: "establishment_member"}, hs.GrantOwner}
+	routes = append(routes,
+		hs.Route{Operation: "listCategories", Method: http.MethodGet, Path: cat, Grants: member, Handler: s.listCategories},
+		hs.Route{Operation: "createCategory", Method: http.MethodPost, Path: cat, Grants: owner, Handler: s.createCategory},
+		hs.Route{Operation: "updateCategory", Method: http.MethodPatch, Path: cat + "/{categoryId}", Grants: owner, Handler: s.updateCategory},
+		hs.Route{Operation: "deactivateCategory", Method: http.MethodPost, Path: cat + "/{categoryId}/deactivate", Grants: owner, Handler: s.deactivateCategory},
+		hs.Route{Operation: "reactivateCategory", Method: http.MethodPost, Path: cat + "/{categoryId}/reactivate", Grants: owner, Handler: s.reactivateCategory},
+		hs.Route{Operation: "listPublicCategories", Method: http.MethodGet, Path: "/v1/public/establishments/{establishmentId}/catalog-categories",
+			Grants: []hs.Grant{hs.GrantPublic}, Handler: s.listPublicCategories},
+		hs.Route{Operation: "listProducts", Method: http.MethodGet, Path: prod, Grants: member, Handler: s.listProducts},
+		hs.Route{Operation: "createProduct", Method: http.MethodPost, Path: prod, Grants: owner, Handler: s.createProduct},
+		hs.Route{Operation: "updateProduct", Method: http.MethodPatch, Path: prod + "/{productId}", Grants: owner, Handler: s.updateProduct},
+		hs.Route{Operation: "deactivateProduct", Method: http.MethodPost, Path: prod + "/{productId}/deactivate", Grants: owner, Handler: s.deactivateProduct},
+		hs.Route{Operation: "reactivateProduct", Method: http.MethodPost, Path: prod + "/{productId}/reactivate", Grants: owner, Handler: s.reactivateProduct},
+		hs.Route{Operation: "listPublicProducts", Method: http.MethodGet, Path: "/v1/public/establishments/{establishmentId}/products",
+			Grants: []hs.Grant{hs.GrantPublic}, Handler: s.listPublicProducts},
+	)
+	return routes
 }

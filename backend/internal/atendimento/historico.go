@@ -58,9 +58,12 @@ func ClosedOrders(ctx context.Context, q database.Querier, ids []uuid.UUID) (map
 }
 
 type historyItem struct {
-	Name      string `json:"name"`
-	UnitPrice Money  `json:"unit_price"`
-	Charged   bool   `json:"charged"`
+	Kind            string `json:"kind"`
+	Name            string `json:"name"`
+	UnitPrice       Money  `json:"unit_price"`
+	Quantity        int    `json:"quantity"`
+	ChargedQuantity int    `json:"charged_quantity"`
+	Charged         bool   `json:"charged"`
 }
 
 // historyEntry segue HistoryEntry.
@@ -155,7 +158,7 @@ func (s *Service) listMyHistory(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	items := map[uuid.UUID][]historyItem{}
-	irows, err := s.Pool.Query(ctx, `SELECT order_id, name, unit_price_cents, charged FROM order_item
+	irows, err := s.Pool.Query(ctx, `SELECT order_id, kind, name, unit_price_cents, quantity, charged_quantity, charged FROM order_item
 		WHERE order_id = ANY($1) AND status <> 'removed' ORDER BY added_at, name`, orderIDs)
 	if err != nil {
 		return err
@@ -165,7 +168,7 @@ func (s *Service) listMyHistory(w http.ResponseWriter, r *http.Request) error {
 		var oid uuid.UUID
 		var it historyItem
 		var price int64
-		if err := irows.Scan(&oid, &it.Name, &price, &it.Charged); err != nil {
+		if err := irows.Scan(&oid, &it.Kind, &it.Name, &price, &it.Quantity, &it.ChargedQuantity, &it.Charged); err != nil {
 			return err
 		}
 		it.UnitPrice = brl(price)

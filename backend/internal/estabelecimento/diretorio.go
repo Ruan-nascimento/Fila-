@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"fila/internal/midia"
+	"fila/internal/platform/busca"
 	"fila/internal/platform/database"
 	"fila/internal/platform/httpserver"
 )
@@ -59,35 +60,6 @@ const (
 	// Raio da Terra (m) para a distância em linha reta (haversine). É "em linha reta", não rota.
 	earthRadius = 6371000.0
 )
-
-// fold normaliza para busca sem acento e sem maiúsculas (o mesmo do lado do SQL).
-const foldFrom = "áàâãäéèêëíìîïóòôõöúùûüçñÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇÑ"
-const foldTo = "aaaaaeeeeiiiiooooouuuucnaaaaaeeeeiiiiooooouuuucn"
-
-func foldSQL(expr string) string {
-	return fmt.Sprintf("translate(lower(%s), '%s', '%s')", expr, foldFrom, foldTo)
-}
-
-func foldGo(s string) string {
-	from, to := []rune(foldFrom), []rune(foldTo)
-	m := make(map[rune]rune, len(from))
-	for i, r := range from {
-		m[r] = to[i]
-	}
-	var b strings.Builder
-	for _, r := range strings.ToLower(s) {
-		if t, ok := m[r]; ok {
-			r = t
-		}
-		b.WriteRune(r)
-	}
-	return b.String()
-}
-
-// likeEscape protege os curingas do LIKE (% e _) digitados na busca.
-func likeEscape(s string) string {
-	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s)
-}
 
 type directoryQuery struct {
 	search   string
@@ -221,8 +193,8 @@ func (s *Service) directory(ctx context.Context, tx pgx.Tx, d directoryQuery) ([
 	}
 	where := "e.status = 'active'"
 	if d.search != "" {
-		pat := arg("%" + likeEscape(foldGo(d.search)) + "%")
-		where += fmt.Sprintf(" AND (%s LIKE %s OR %s LIKE %s)", foldSQL("e.name"), pat, foldSQL("coalesce(e.public_address, '')"), pat)
+		pat := arg(busca.Contains(d.search))
+		where += fmt.Sprintf(" AND (%s LIKE %s OR %s LIKE %s)", busca.FoldSQL("e.name"), pat, busca.FoldSQL("coalesce(e.public_address, '')"), pat)
 	}
 	distance := "NULL::double precision"
 	if d.lat != nil {

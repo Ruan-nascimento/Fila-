@@ -104,11 +104,21 @@ func explained(t *testing.T, order map[string]any) {
 	for _, it := range order["items"].([]any) {
 		m := it.(map[string]any)
 		price := num(m["unit_price"].(map[string]any)["amount_cents"])
-		if (frozen && m["charged"] == true) || (!frozen && m["status"] != "removed") {
-			sum += price
+		qty, charged, performed := num(m["quantity"]), num(m["charged_quantity"]), num(m["performed_quantity"])
+		switch {
+		case frozen && m["charged"] == true:
+			sum += price * charged
+		case !frozen && m["status"] != "removed":
+			sum += price * qty
 		}
 		if m["charged"] == true && m["status"] != "performed" {
 			t.Errorf("item cobrado sem estar realizado: %v", m)
+		}
+		if charged < 0 || charged > performed || performed > qty {
+			t.Errorf("quantidades incoerentes (0 ≤ cobradas ≤ realizadas ≤ pedidas): %v", m)
+		}
+		if sub := num(m["subtotal"].(map[string]any)["amount_cents"]); m["status"] != "removed" && ((frozen && sub != price*charged) || (!frozen && sub != price*qty)) {
+			t.Errorf("subtotal da linha: %v", m)
 		}
 	}
 	if sum != total(order) {

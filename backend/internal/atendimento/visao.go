@@ -19,21 +19,36 @@ type Money struct {
 
 func brl(c int64) Money { return Money{AmountCents: c, Currency: "BRL"} }
 
-// ItemView segue OrderItem. O valor cobrado é explicável item a item: entra no total só o item
-// com charged = true, pelo unit_price aceito na inclusão.
+// ItemView segue OrderItem. O valor é explicável item a item: com a comanda aberta, subtotal =
+// preço unitário aceito × quantidade; com o valor fechado, × unidades cobradas. Produto não tem
+// duração nem pontos; performed_quantity de produto são unidades ENTREGUES.
 type ItemView struct {
-	ID              uuid.UUID  `json:"id"`
-	ServiceID       uuid.UUID  `json:"service_id"`
-	Name            string     `json:"name"`
-	UnitPrice       Money      `json:"unit_price"`
-	DurationMinutes int        `json:"duration_minutes"`
-	Points          int        `json:"points"`
-	Status          string     `json:"status"`
-	Charged         bool       `json:"charged"`
-	AddedAt         time.Time  `json:"added_at"`
-	PerformedAt     *time.Time `json:"performed_at"`
-	ReportedOutcome *string    `json:"reported_outcome"`
-	OutcomeReason   *string    `json:"outcome_reason"`
+	ID                uuid.UUID  `json:"id"`
+	Kind              string     `json:"kind"`
+	ServiceID         *uuid.UUID `json:"service_id"`
+	ProductID         *uuid.UUID `json:"product_id"`
+	Name              string     `json:"name"`
+	UnitPrice         Money      `json:"unit_price"`
+	Quantity          int        `json:"quantity"`
+	PerformedQuantity int        `json:"performed_quantity"`
+	ChargedQuantity   int        `json:"charged_quantity"`
+	ReportedQuantity  *int       `json:"reported_quantity"`
+	Subtotal          Money      `json:"subtotal"`
+	DurationMinutes   int        `json:"duration_minutes"`
+	Points            int        `json:"points"`
+	Status            string     `json:"status"`
+	Charged           bool       `json:"charged"`
+	AddedAt           time.Time  `json:"added_at"`
+	PerformedAt       *time.Time `json:"performed_at"`
+	ReportedOutcome   *string    `json:"reported_outcome"`
+	OutcomeReason     *string    `json:"outcome_reason"`
+}
+
+// orderTotals resume as unidades e a duração da comanda (participação ≠ unidades ≠ pessoas).
+type orderTotals struct {
+	ServiceUnits    int `json:"service_units"`
+	ProductUnits    int `json:"product_units"`
+	DurationMinutes int `json:"duration_minutes"`
 }
 
 type amounts struct {
@@ -58,11 +73,20 @@ type PaymentView struct {
 	OpenIssueKinds []string `json:"open_issue_kinds"`
 }
 
-// AdditionView é um serviço pedido numa solicitação, com o preço visto pelo cliente.
+// AdditionView é um item pedido numa solicitação, com o preço visto pelo cliente e a quantidade.
 type AdditionView struct {
-	ServiceID uuid.UUID `json:"service_id"`
-	Name      string    `json:"name"`
-	UnitPrice Money     `json:"unit_price"`
+	Kind      string     `json:"kind"`
+	ServiceID *uuid.UUID `json:"service_id"`
+	ProductID *uuid.UUID `json:"product_id"`
+	Name      string     `json:"name"`
+	UnitPrice Money      `json:"unit_price"`
+	Quantity  int        `json:"quantity"`
+}
+
+// QuantityView é uma nova quantidade pedida para uma linha existente.
+type QuantityView struct {
+	ItemID   uuid.UUID `json:"item_id"`
+	Quantity int       `json:"quantity"`
 }
 
 // ChangeRequestView segue ChangeRequest.
@@ -71,6 +95,7 @@ type ChangeRequestView struct {
 	Status         string         `json:"status"`
 	Add            []AdditionView `json:"add"`
 	RemoveItemIDs  []uuid.UUID    `json:"remove_item_ids"`
+	SetQuantities  []QuantityView `json:"set_quantities"`
 	CreatedAt      time.Time      `json:"created_at"`
 	DecidedAt      *time.Time     `json:"decided_at"`
 	DecidedByRole  *string        `json:"decided_by_role"`
@@ -81,13 +106,14 @@ type ChangeRequestView struct {
 
 // AdjustmentView segue OrderAdjustment: correção do dono depois de fechado o valor (T-O-11).
 type AdjustmentView struct {
-	ID               uuid.UUID   `json:"id"`
-	Reason           string      `json:"reason"`
-	PreviousTotal    Money       `json:"previous_total"`
-	NewTotal         Money       `json:"new_total"`
-	UnchargedItemIDs []uuid.UUID `json:"uncharged_item_ids"`
-	AddedItemIDs     []uuid.UUID `json:"added_item_ids"`
-	At               time.Time   `json:"at"`
+	ID               uuid.UUID        `json:"id"`
+	Reason           string           `json:"reason"`
+	PreviousTotal    Money            `json:"previous_total"`
+	NewTotal         Money            `json:"new_total"`
+	UnchargedItemIDs []uuid.UUID      `json:"uncharged_item_ids"`
+	AddedItemIDs     []uuid.UUID      `json:"added_item_ids"`
+	QuantityChanges  []quantityChange `json:"quantity_changes"`
+	At               time.Time        `json:"at"`
 }
 
 // OrderView segue Order.
@@ -98,6 +124,7 @@ type OrderView struct {
 	Status               string              `json:"status"`
 	Version              int64               `json:"version"`
 	Items                []ItemView          `json:"items"`
+	Totals               orderTotals         `json:"totals"`
 	Total                Money               `json:"total"`
 	TotalFrozenAt        *time.Time          `json:"total_frozen_at"`
 	PendingChangeRequest *ChangeRequestView  `json:"pending_change_request"`
@@ -156,18 +183,28 @@ func LoadOrder(ctx context.Context, q database.Querier, estID, orderID uuid.UUID
 	}
 
 	rows, err := q.Query(ctx, `
-		SELECT id, service_id, name, unit_price_cents, duration_minutes, points, status, charged, added_at, performed_at,
-		       reported_outcome, outcome_reason
+		SELECT id, kind, service_id, product_id, name, unit_price_cents, quantity, performed_quantity, charged_quantity,
+		       reported_quantity, duration_minutes, points, status, charged, added_at, performed_at, reported_outcome, outcome_reason
 		FROM order_item WHERE order_id = $1 ORDER BY added_at, name, id`, orderID)
 	if err != nil {
 		return v, err
 	}
+	frozen := v.TotalFrozenAt != nil
 	v.Items, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (ItemView, error) {
 		var it ItemView
 		var price int64
-		err := r.Scan(&it.ID, &it.ServiceID, &it.Name, &price, &it.DurationMinutes, &it.Points, &it.Status, &it.Charged,
-			&it.AddedAt, &it.PerformedAt, &it.ReportedOutcome, &it.OutcomeReason)
+		err := r.Scan(&it.ID, &it.Kind, &it.ServiceID, &it.ProductID, &it.Name, &price, &it.Quantity, &it.PerformedQuantity,
+			&it.ChargedQuantity, &it.ReportedQuantity, &it.DurationMinutes, &it.Points, &it.Status, &it.Charged, &it.AddedAt,
+			&it.PerformedAt, &it.ReportedOutcome, &it.OutcomeReason)
 		it.UnitPrice = brl(price)
+		switch {
+		case it.Status == ItemRemoved:
+			it.Subtotal = brl(0)
+		case frozen:
+			it.Subtotal = brl(price * int64(it.ChargedQuantity))
+		default:
+			it.Subtotal = brl(price * int64(it.Quantity))
+		}
 		return it, err
 	})
 	if err != nil {
@@ -176,13 +213,33 @@ func LoadOrder(ctx context.Context, q database.Querier, estID, orderID uuid.UUID
 	if v.Items == nil {
 		v.Items = []ItemView{}
 	}
-	// Pontos previstos (R-FID-03/05): só conta elegível; interrupção nunca gera pontos.
+	for _, it := range v.Items {
+		if it.Status == ItemRemoved {
+			continue
+		}
+		n := it.Quantity
+		if frozen {
+			n = it.ChargedQuantity
+		}
+		if it.Kind == "product" {
+			v.Totals.ProductUnits += n
+		} else {
+			v.Totals.ServiceUnits += n
+			v.Totals.DurationMinutes += n * it.DurationMinutes
+		}
+	}
+	// Pontos previstos (R-FID-03/05): só conta elegível; interrupção nunca gera pontos. Pontos
+	// por unidade de serviço (pedidas enquanto aberta; cobradas depois); produto não pontua.
 	if eligible {
 		pts := 0
 		if v.InterruptedAt == nil {
 			for _, it := range v.Items {
-				if (v.TotalFrozenAt == nil && it.Status != ItemRemoved) || it.Charged {
-					pts += it.Points
+				switch {
+				case it.Kind == "product" || it.Status == ItemRemoved:
+				case !frozen:
+					pts += it.Points * it.Quantity
+				case it.Charged:
+					pts += it.Points * it.ChargedQuantity
 				}
 			}
 		}
@@ -200,7 +257,7 @@ func LoadOrder(ctx context.Context, q database.Querier, estID, orderID uuid.UUID
 		}
 	}
 	rows, err = q.Query(ctx, `
-		SELECT id, reason, previous_total_cents, new_total_cents, uncharged_item_ids, added_item_ids, at
+		SELECT id, reason, previous_total_cents, new_total_cents, uncharged_item_ids, added_item_ids, quantity_changes, at
 		FROM order_adjustment WHERE order_id = $1 ORDER BY at, id`, orderID)
 	if err != nil {
 		return v, err
@@ -208,8 +265,11 @@ func LoadOrder(ctx context.Context, q database.Querier, estID, orderID uuid.UUID
 	v.Adjustments, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (AdjustmentView, error) {
 		var a AdjustmentView
 		var prev, next int64
-		err := r.Scan(&a.ID, &a.Reason, &prev, &next, &a.UnchargedItemIDs, &a.AddedItemIDs, &a.At)
+		err := r.Scan(&a.ID, &a.Reason, &prev, &next, &a.UnchargedItemIDs, &a.AddedItemIDs, &a.QuantityChanges, &a.At)
 		a.PreviousTotal, a.NewTotal = brl(prev), brl(next)
+		if a.QuantityChanges == nil {
+			a.QuantityChanges = []quantityChange{}
+		}
 		return a, err
 	})
 	if v.Adjustments == nil {
@@ -229,33 +289,53 @@ func changeRequests(ctx context.Context, q database.Querier, orderID uuid.UUID) 
 	list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (ChangeRequestView, error) {
 		var c ChangeRequestView
 		err := r.Scan(&c.ID, &c.orderID, &c.Status, &c.RemoveItemIDs, &c.version, &c.CreatedAt, &c.DecidedAt, &c.DecidedByRole, &c.DecisionReason)
-		c.Add = []AdditionView{}
+		c.Add, c.SetQuantities = []AdditionView{}, []QuantityView{}
 		return c, err
 	})
 	if err != nil || len(list) == 0 {
 		return []ChangeRequestView{}, err
 	}
-	rows, err = q.Query(ctx, `
-		SELECT a.change_request_id, a.service_id, a.name, a.unit_price_cents
-		FROM change_request_addition a JOIN change_request c ON c.id = a.change_request_id
-		WHERE c.order_id = $1 ORDER BY a.name, a.service_id`, orderID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
 	idx := map[uuid.UUID]int{}
 	for i := range list {
 		idx[list[i].ID] = i
+	}
+	rows, err = q.Query(ctx, `
+		SELECT a.change_request_id, a.kind, a.service_id, a.product_id, a.name, a.unit_price_cents, a.quantity
+		FROM change_request_addition a JOIN change_request c ON c.id = a.change_request_id
+		WHERE c.order_id = $1 ORDER BY a.kind DESC, a.name, coalesce(a.service_id, a.product_id)`, orderID)
+	if err != nil {
+		return nil, err
 	}
 	for rows.Next() {
 		var crID uuid.UUID
 		var a AdditionView
 		var price int64
-		if err := rows.Scan(&crID, &a.ServiceID, &a.Name, &price); err != nil {
+		if err := rows.Scan(&crID, &a.Kind, &a.ServiceID, &a.ProductID, &a.Name, &price, &a.Quantity); err != nil {
+			rows.Close()
 			return nil, err
 		}
 		a.UnitPrice = brl(price)
 		list[idx[crID]].Add = append(list[idx[crID]].Add, a)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows, err = q.Query(ctx, `
+		SELECT q.change_request_id, q.item_id, q.quantity
+		FROM change_request_item_quantity q JOIN change_request c ON c.id = q.change_request_id
+		WHERE c.order_id = $1 ORDER BY q.item_id`, orderID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var crID uuid.UUID
+		var qv QuantityView
+		if err := rows.Scan(&crID, &qv.ItemID, &qv.Quantity); err != nil {
+			return nil, err
+		}
+		list[idx[crID]].SetQuantities = append(list[idx[crID]].SetQuantities, qv)
 	}
 	return list, rows.Err()
 }

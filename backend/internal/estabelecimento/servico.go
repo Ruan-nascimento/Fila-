@@ -55,6 +55,8 @@ type Deps struct {
 	Media *midia.Service
 	// AvatarOf devolve a foto pessoal associada da conta (módulo identidade).
 	AvatarOf func(ctx context.Context, q database.Querier, accountID uuid.UUID) (*uuid.UUID, error)
+	// PixOperational informa se a integração Pix está ligada neste servidor (módulo pagamento).
+	PixOperational func() bool
 }
 
 // Service implementa loja, equipe e filas.
