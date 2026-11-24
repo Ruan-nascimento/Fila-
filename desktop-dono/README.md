@@ -115,7 +115,7 @@ O dono só precisa do instalador: nada de Node, Rust, Go ou Docker.
 ### Máquina de build Linux (uma vez)
 
 ```bash
-sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev build-essential curl
+sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev build-essential curl
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 # Node 26: https://nodejs.org/
 ```
@@ -135,7 +135,7 @@ Arquivo produzido: `desktop-dono/src-tauri/target/release/bundle/deb/Fila Gestao
 sudo apt install ./"Fila Gestao_0.2.0_amd64.deb"
 ```
 
-Também dá para abrir o `.deb` com dois cliques (Instalador de pacotes). O programa aparece no menu como **Fila Gestão**. As dependências (`libwebkit2gtk-4.1-0`, `libgtk-3-0`) vêm do próprio Mint. Para remover: `sudo apt remove fila-gestao`.
+Também dá para abrir o `.deb` com dois cliques (Instalador de pacotes). O programa aparece no menu como **Fila Gestão**. As dependências (`libwebkit2gtk-4.1-0`, `libgtk-3-0` e `libayatana-appindicator3-1`, do ícone na bandeja) vêm do próprio Mint. Para remover: `sudo apt remove fila-gestao`.
 
 ## 5. Testes
 

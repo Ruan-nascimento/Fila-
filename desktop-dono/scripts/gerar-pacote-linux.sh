@@ -11,7 +11,7 @@ for cmd in node npm cargo pkg-config; do
 done
 if ! pkg-config --exists webkit2gtk-4.1 gtk+-3.0; then
   echo "Faltam as bibliotecas de desenvolvimento. Instale com:" >&2
-  echo "  sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev build-essential" >&2
+  echo "  sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev build-essential" >&2
   exit 2
 fi
 if [[ $# -ge 1 ]]; then export FILA_PAINEL_URL="$1"; fi
