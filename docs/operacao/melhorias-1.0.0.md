@@ -14,12 +14,12 @@ Decisões: [ADR-0032](../adr/0032-produtos-simples-e-categorias.md) a [ADR-0037]
 | Entrada × operação, capacidade, tolerância | backend, contrato, web e testes (inclui concorrência) |
 | Busca (comandas no servidor; listas locais) | feita e medida |
 | Indicadores (unidades, produtos, custos, cobertura) | backend e Dashboard do desktop |
-| Desktop em segundo plano | feito; testado no Linux (ver evidências); Windows não testado |
+| Desktop em segundo plano | feito; testado no Linux (ver evidências); instaladores Windows e Linux gerados no CI; Windows não executado |
 | Documentação (regras, matrizes, cenários, contrato, SSE) | atualizada; verificadores OK |
 
 ## 2. Pendências objetivas
 
-1. Commit, PR e revisão (aguardam autorização).
+1. Revisão e merge do PR #24 (base) e do PR #25 (melhorias).
 2. Navegador real: larguras 320–1440 px, teclado e leitor de tela nas telas novas; cenário §41 completo em homologação.
 3. Desktop: teste manual com bandeja real (Linux Mint/Cinnamon) e **Windows** (compilar, instalar, X, bandeja, notificação escondida, suspensão).
 4. Pix em sandbox depois desta mudança (custo estimado gravado na confirmação).

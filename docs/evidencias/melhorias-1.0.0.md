@@ -38,7 +38,7 @@ Roteiro: `desktop-dono/testes/segundo-plano.sh` — build de depuração, painel
 | Segunda instância | sai com código 0 e reabre a janela existente (`IsViewable`) |
 | Sair do Fila | processo encerra com código 0 |
 
-**Não verificado:** clique físico no X e no menu da bandeja num ambiente com área de notificação real; exibição real da notificação com a janela escondida (o D-Bus isolado não tem servidor de notificações); suspensão e retorno do computador; perda de internet com a janela escondida; logout/revogação com a janela escondida (o comportamento vem da página, que já trata `stream.session_ended`). **Windows não foi testado** (nem compilado nesta entrega).
+**Não verificado:** clique físico no X e no menu da bandeja num ambiente com área de notificação real; exibição real da notificação com a janela escondida (o D-Bus isolado não tem servidor de notificações); suspensão e retorno do computador; perda de internet com a janela escondida; logout/revogação com a janela escondida (o comportamento vem da página, que já trata `stream.session_ended`). **Windows:** o instalador compila e é gerado no CI (workflow *Fila Gestão (instaladores)*, run 45318452168, que também gerou o `.deb`), mas **não foi executado** num Windows: bandeja, segundo plano e notificações seguem não testados lá.
 
 ## O que não foi validado nesta entrega
 
