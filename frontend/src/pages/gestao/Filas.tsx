@@ -146,7 +146,8 @@ export function Filas({ ctx }: { ctx: StaffContext }) {
               const current = q.entries.find((e) => e.status === "called" || e.status === "in_service");
               const waiting = q.entries.filter((e) => e.status === "waiting").length;
               return (
-                <li key={q.queue_id} className="shrink-0">
+                // No computador a coluna tem largura fixa: o texto quebra em vez de invadir a fila ao lado.
+                <li key={q.queue_id} className="shrink-0 lg:min-w-0">
                   <NavLink
                     to={`${base}/${q.queue_id}`}
                     aria-current={q.queue_id === selected.queue_id ? "page" : undefined}
@@ -158,7 +159,7 @@ export function Filas({ ctx }: { ctx: StaffContext }) {
                     )}
                   >
                     <span className="font-semibold">{q.professional.display_name}</span>
-                    <span className="text-xs whitespace-nowrap text-fg-muted">
+                    <span className="text-xs whitespace-nowrap text-fg-muted lg:whitespace-normal">
                       {queueStatus[q.status].text}
                       {q.admission && q.status === "open" && q.admission.state !== "accepting"
                         ? ` · ${entryText[q.admission.state]?.text.toLowerCase()}`

@@ -221,9 +221,15 @@ function ServicoLinha({
         <div className="grid min-w-0 flex-1 gap-0.5">
           <h2 className="m-0 text-base font-semibold">{s.name}</h2>
           <p className="m-0 text-sm text-fg-muted tabular-nums">
-            {s.duration_minutes} min · {s.points} pontos ·{" "}
-            {categories.find((c) => c.id === s.category_id)?.name ?? "sem categoria"} · posição{" "}
-            {s.display_order ?? 0}
+            {[
+              `${s.duration_minutes} min`,
+              `${s.points} pontos`,
+              // Só o que foi definido: sem categoria e posição 0 são o padrão e não poluem a lista.
+              categories.find((c) => c.id === s.category_id)?.name,
+              s.display_order ? `posição ${s.display_order}` : undefined,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           </p>
           {ctx.isOwner && (
             <p className="m-0 text-sm text-fg-muted">Atendem: {names || "ninguém (ninguém pode atender)"}</p>

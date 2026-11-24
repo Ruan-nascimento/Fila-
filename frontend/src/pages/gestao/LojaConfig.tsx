@@ -138,7 +138,7 @@ export function LojaConfig({ ctx }: { ctx: StaffContext }) {
     ? (asked as (typeof secoes)[number]["value"])
     : "identidade";
   const tabs = (
-    <nav aria-label="Seções das configurações" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+    <nav aria-label="Seções das configurações" className="flex flex-wrap gap-2">
       {secoes.map((x) => (
         <button
           key={x.value}
