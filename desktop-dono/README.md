@@ -36,6 +36,8 @@ O que decide a permissão continua sendo **o servidor**: cada pedido é autoriza
 
 **Notificações.** A gestão avisa quando alguém entra na fila, sai, avisa que vai atrasar ou pede mudança na comanda ([docs/notificacoes.md](../docs/notificacoes.md)). No programa, o `tauri-plugin-notification` troca a notificação do navegador pela nativa do Windows/Linux. A página remota recebe, por uma capability criada em `src/lib.rs` (`painel-notificacoes`), **só** as permissões `notification:allow-is-permission-granted`, `allow-request-permission` e `allow-notify`, **só** para a origem do painel e **só** na janela principal. Com o programa em primeiro plano, o aviso aparece dentro da tela; minimizado ou atrás de outra janela, vira notificação do sistema.
 
+**Segundo plano (ADR-0037).** Preferência do computador, desligada por padrão, no menu da bandeja (`src/segundo_plano.rs`). Ligada, o X esconde a janela e a página continua recebendo o fluxo de avisos; *Sair do Fila* encerra o processo. Sem bandeja funcional, fechar sempre encerra. Instância única (`tauri-plugin-single-instance`): abrir de novo mostra a janela existente. O som é gravado na página por `webview.eval` (a página remota continua sem acesso a comando nenhum). Teste no Linux: `testes/segundo-plano.sh` (X aninhado e D-Bus isolado).
+
 ## Dashboard: como a mesma sessão chega aos gráficos
 
 1. Na gestão (página remota, cookie HttpOnly da sessão de dono), o item **Dashboard** pede ao servidor um ticket de 60 s e navega para `/dono/painel-analitico#t=…`.

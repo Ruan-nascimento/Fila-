@@ -76,7 +76,7 @@ export type Consulta =
 export type Metrica = "cash" | "ticket" | "movement" | "wait" | "duration" | "loyalty";
 export type Gran = "hour" | "day" | "week" | "month";
 export type Dimensao =
-  | "payment_methods" | "outcomes" | "professionals" | "services" | "peak_hours"
+  | "payment_methods" | "outcomes" | "professionals" | "services" | "products" | "peak_hours"
   | "wait_bands" | "pending" | "rewards" | "recurrence";
 export type Registro =
   | "receipts" | "refunds" | "orders" | "participations" | "service_items" | "financial_issues" | "loyalty_entries";

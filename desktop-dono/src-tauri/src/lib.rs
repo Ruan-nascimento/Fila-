@@ -10,6 +10,7 @@
 
 mod api;
 mod chave;
+mod segundo_plano;
 
 use std::{sync::Arc, sync::OnceLock, time::Duration};
 
@@ -17,6 +18,7 @@ use serde::Serialize;
 use serde_json::Value;
 use tauri::{
     ipc::CapabilityBuilder, webview::PageLoadEvent, AppHandle, Manager, State, Url, WebviewUrl, WebviewWindowBuilder,
+    WindowEvent,
 };
 use tauri_plugin_opener::OpenerExt;
 
@@ -89,6 +91,11 @@ fn ticket_do_atalho(url: &Url) -> Option<(String, String)> {
 /// A janela só navega pela origem configurada e pelas telas locais.
 fn permitido(url: &Url) -> bool {
     local(url) || url.origin() == origem().origin()
+}
+
+/// A página é a gestão remota (origem do painel).
+pub(crate) fn na_origem(url: &Url) -> bool {
+    url.origin() == origem().origin()
 }
 
 #[derive(Serialize)]
@@ -276,6 +283,10 @@ fn esquecer_instalacao(app: AppHandle, estado: State<'_, Arc<Estado>>) -> Result
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // Primeiro plugin: abrir o programa de novo só traz a janela existente (e a reabre se
+        // estava escondida na bandeja). Duas instâncias gerariam avisos duplicados.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| segundo_plano::mostrar(app)))
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         // Notificações da gestão (entrou na fila, saiu, avisou atraso, pediu mudança). O plugin
         // troca `window.Notification` da página pela notificação nativa do sistema.
@@ -295,7 +306,45 @@ pub fn run() {
             sair_dashboard,
             esquecer_instalacao
         ])
+        .on_window_event(|window, event| {
+            // X com o segundo plano ligado: esconde (a página e o fluxo de avisos continuam).
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                if let Some(sp) = window.app_handle().try_state::<segundo_plano::SegundoPlano>() {
+                    if sp.esconder_ao_fechar() {
+                        api.prevent_close();
+                        let _ = window.hide();
+                    }
+                }
+            }
+        })
         .setup(|app| {
+            let arquivo = app.path().app_config_dir().ok().map(|d| d.join("segundo-plano.json"));
+            app.manage(segundo_plano::SegundoPlano::carregar(arquivo));
+            if let Err(e) = segundo_plano::criar_bandeja(app.handle()) {
+                // Sem bandeja: fechar encerra (nunca esconder sem um jeito confiável de reabrir).
+                eprintln!("bandeja indisponível ({e}); segundo plano desligado nesta sessão");
+            }
+            // Só em build de depuração: aciona "fechar a janela" e "Sair do Fila" por tempo, pelo
+            // MESMO caminho do clique (CloseRequested e segundo_plano::sair), para o teste
+            // automatizado de segundo plano (desktop-dono/testes/segundo-plano.sh). Não existe no
+            // pacote de release.
+            #[cfg(debug_assertions)]
+            {
+                let h = app.handle().clone();
+                std::thread::spawn(move || {
+                    let secs = |v: &str| std::env::var(v).ok().and_then(|s| s.parse::<u64>().ok());
+                    if let Some(n) = secs("FILA_TESTE_FECHAR_APOS") {
+                        std::thread::sleep(Duration::from_secs(n));
+                        if let Some(w) = h.get_webview_window("principal") {
+                            let _ = w.close();
+                        }
+                    }
+                    if let Some(n) = secs("FILA_TESTE_SAIR_APOS") {
+                        std::thread::sleep(Duration::from_secs(n));
+                        segundo_plano::sair(&h);
+                    }
+                });
+            }
             // A gestão é uma página REMOTA (origem do painel). Ela não tem acesso a nenhum comando
             // do programa (capability "carregador" é só local); a única exceção são as três
             // permissões de notificação, e só para a origem do painel nesta janela.
@@ -353,6 +402,12 @@ pub fn run() {
                     false
                 })
                 .on_page_load(|webview, payload| {
+                    // Gestão carregada: grava nela a preferência de som deste computador.
+                    if payload.event() == PageLoadEvent::Finished && na_origem(payload.url()) {
+                        if let Some(sp) = webview.app_handle().try_state::<segundo_plano::SegundoPlano>() {
+                            let _ = webview.eval(segundo_plano::script_som(sp.prefs().som));
+                        }
+                    }
                     if payload.event() == PageLoadEvent::Finished && !permitido(payload.url()) {
                         // Garantia extra: nunca fica em página fora da origem configurada (inclui a
                         // página de erro do próprio WebView): volta à tela local, que confere o painel

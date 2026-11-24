@@ -198,12 +198,15 @@ export function Financeiro() {
 
 type Prof = { professional_id: string; name: string; active: boolean; completed: number; wait_median_seconds: Valor; duration_median_seconds: Valor; services_performed: number; transferred_in: number };
 type Serv = { service_id: string; name: string; requested: number; performed: number; performed_value_cents: number };
+type Prod = { product_id: string; name: string; requested: number; delivered: number; delivered_value_cents: number };
 
 export function ProfissionaisServicos() {
   const ctx = useDash();
   const [ordem, setOrdem] = useState<"completed" | "services_performed">("completed");
   const prof = useDados<Breakdown<Prof[]>>((c) => ({ tipo: "detalhamento", loja: c.loja, dimensao: "professionals", filtros: c.filtros }), ["professionals"]);
   const serv = useDados<Breakdown<Serv[]>>((c) => ({ tipo: "detalhamento", loja: c.loja, dimensao: "services", filtros: c.filtros }), ["services"]);
+  const prod = useDados<Breakdown<Prod[]>>((c) => ({ tipo: "detalhamento", loja: c.loja, dimensao: "products", filtros: { ...c.filtros, service_id: null } }), ["products"]);
+  const pp = prod.dados?.data.status === "ok" ? prod.dados.data.rows : [];
   const ps = prof.dados?.data.status === "ok" ? [...prof.dados.data.rows].sort((a, b) => b[ordem] - a[ordem] || a.name.localeCompare(b.name)) : [];
   const ss = serv.dados?.data.status === "ok" ? serv.dados.data.rows : [];
   return (
@@ -222,12 +225,18 @@ export function ProfissionaisServicos() {
           <Barras unidade="count" linhas={ps.map((p): Linha => ({ chave: p.professional_id, rotulo: p.name, valor: p[ordem], secundario: `espera ${textoValor(p.wait_median_seconds, "seconds")}` }))}
             aoSelecionar={(l) => ctx.abrirDetalhe({ titulo: `Concluídos: ${l.rotulo}`, registro: "participations", recorte: { ref: "finished", status: "completed" } })} />)}
       </Cartao>
-      <Cartao titulo="Serviços" definicao="Solicitados (incluídos na comanda) e realizados, separados. Valor = preço registrado nos itens cobrados, não dinheiro recebido (sem rateio)."
+      <Cartao titulo="Serviços" definicao="UNIDADES solicitadas e realizadas (3 cortes de uma comanda = 3 unidades, 1 participação). Valor = preço registrado × unidades cobradas, não dinheiro recebido (sem rateio). Registros antigos valem 1 unidade."
         tabela={<Tabela cabecalho={["Serviço", "Solicitados", "Realizados", "Valor dos itens"]} linhas={ss.map((s) => [s.name, s.requested, s.performed, formatar(s.performed_value_cents, "cents")])} />}>
         <Estado carregando={serv.carregando && !serv.dados} erro={serv.erro} />
         {serv.dados && (serv.dados.data.status !== "ok" ? <Vazio>{textoStatus(serv.dados.data.status)}</Vazio> : ss.length === 0 ? <Vazio /> :
           <Barras unidade="cents" linhas={ss.map((s) => ({ chave: s.service_id, rotulo: s.name, valor: s.performed_value_cents, secundario: `${s.performed} realizados · ${s.requested} solicitados` }))}
             aoSelecionar={(l) => ctx.abrirDetalhe({ titulo: `Itens realizados: ${l.rotulo}`, registro: "service_items", recorte: { ref: "performed" } })} />)}
+      </Cartao>
+      <Cartao titulo="Produtos" definicao="Unidades pedidas e entregues e valor das unidades cobradas. Produtos não existiam antes da versão 1.0.0: períodos anteriores ficam vazios."
+        tabela={<Tabela cabecalho={["Produto", "Pedidos", "Entregues", "Valor"]} linhas={pp.map((p) => [p.name, p.requested, p.delivered, formatar(p.delivered_value_cents, "cents")])} />}>
+        <Estado carregando={prod.carregando && !prod.dados} erro={prod.erro} />
+        {prod.dados && (prod.dados.data.status !== "ok" ? <Vazio>{textoStatus(prod.dados.data.status)}</Vazio> : pp.length === 0 ? <Vazio /> :
+          <Barras unidade="cents" linhas={pp.map((p) => ({ chave: p.product_id, rotulo: p.name, valor: p.delivered_value_cents, secundario: `${p.delivered} entregues · ${p.requested} pedidos` }))} />)}
       </Cartao>
     </div>
   );

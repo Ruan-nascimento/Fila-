@@ -297,6 +297,7 @@ pub enum Dimensao {
     Outcomes,
     Professionals,
     Services,
+    Products,
     PeakHours,
     WaitBands,
     Pending,
