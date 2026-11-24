@@ -36,3 +36,9 @@ Para mudar uma decisão, crie um novo ADR que substitua o anterior (não reescre
 | [ADR-0029](0029-mudar-de-lugar-na-fila-e-endereco-acompanha-o-nome.md) | Mudar de lugar na fila (T-P-11) e endereço da loja que acompanha o nome, com endereços antigos válidos | Aceita |
 | [ADR-0030](0030-notificacoes-pelo-fluxo-sse.md) | Notificações derivadas do fluxo SSE (sem push), permissão por aparelho, plugin nativo no desktop e aviso de atraso do cliente | Aceita |
 | [ADR-0031](0031-painel-do-cliente-e-diretorio-de-barbearias.md) | Painel do cliente (minhas filas em todas as lojas) e diretório de barbearias por distância, com busca e paginação | Aceita |
+| [ADR-0032](0032-produtos-simples-e-categorias.md) | Catálogo simples de produtos e categorias do catálogo (1.0.0) | Aceita (substitui parcialmente R-ESC-03) |
+| [ADR-0033](0033-quantidades-na-comanda.md) | Quantidades na comanda, execução parcial e grupos numa única participação | Aceita |
+| [ADR-0034](0034-configuracoes-da-loja-e-custos-de-recebimento.md) | Configurações da loja por seção e custos de recebimento | Aceita |
+| [ADR-0035](0035-entrada-capacidade-e-tolerancia.md) | Entrada na fila separada da operação, capacidade e tolerância configurável | Aceita (substitui R-FILA-09/10/18) |
+| [ADR-0036](0036-pesquisa-e-organizacao-das-listas.md) | Pesquisa e organização das listas | Aceita |
+| [ADR-0037](0037-desktop-em-segundo-plano.md) | Programa desktop em segundo plano (bandeja, instância única) | Aceita |

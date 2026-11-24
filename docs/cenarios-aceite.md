@@ -1168,6 +1168,89 @@ Dado o dono, então paleta fora do catálogo, texto longo, telefone inválido e 
 
 Dado o painel do QR, então os três destinos geram exatamente o link esperado (decodificado por biblioteca independente), sem segredo; abrir o QR não cria visita; cliente logado que abre o QR de visitante não é desconectado; o login de cliente mostra "Entrar sem conta" mesmo sem Google; loja inexistente mostra indisponibilidade.
 
+## Melhorias da versão 1.0.0 (ADR-0032 a ADR-0037)
+
+### C-QTD-01 — Três cortes e uma barba numa única participação
+- Regras: R-QTD-01, R-QTD-02, R-CMD-02 · Transições: T-P-01, T-O-01, T-O-02 · Contrato: `createParticipation`, `replaceOrderItems` · Tipo: integração
+
+Dado o limite padrão (10)
+Quando o responsável entra com Corte ×3 e Barba ×1
+Então há UMA participação e o total é 3 × 45,00 + 30,00 com 110 min estimados e 4 unidades de serviço
+E quantidade negativa, zero, fracionária, gigante, repetida ou com preço no corpo é recusada (400)
+E aumentar a quantidade mantém o preço aceito; repetir o comando não soma de novo
+E reduzir o limite da loja não invalida a quantidade já aceita, mas impede aumentar além dele.
+
+### C-QTD-02 — Dois de três cortes, interrupção revisada e pontos por unidade
+- Regras: R-QTD-03, R-QTD-04, R-CMD-13 · Transições: T-O-14, T-O-04, T-O-06, T-O-07, T-LG-01 · Contrato: `setItemPerformedQuantity`, `completeService`, `closeInterruptedOrder` · Tipo: integração
+
+Dado Corte ×3 em atendimento
+Quando o profissional registra 2 realizados (repetir não soma; diminuir é recusado)
+Então concluir com 2 exige motivo e cobra 2 unidades; pontos = 2 × 10 para o titular com conta
+E numa interrupção com 2 completos o dono cobra só 2; a interrupção não gera pontos.
+
+### C-QTD-03 — Pedido de mudança com quantidade
+- Regras: R-QTD-01, R-CMD-07 · Transições: T-CR-01, T-CR-02, T-CR-03 · Contrato: `createChangeRequest`, `approveChangeRequest` · Tipo: integração
+
+Dado Maria chamada com Corte ×1
+Quando pede Corte ×2 e uma pomada
+Então o total não muda até a aprovação; aprovar recalcula total e duração e registra o histórico; recusar mantém tudo.
+
+### C-PROD-01 — Produto como complemento
+- Regras: R-PROD-01, R-PROD-02 · Transições: T-PD-01, T-PD-03, T-CT-01 · Contrato: `createProduct`, `listPublicProducts`, `createCategory` · Tipo: integração
+
+Dado uma pomada ativa numa categoria
+Quando um visitante tenta entrar só com a pomada
+Então é recusado; só o dono cadastra; outra loja não vê; entrar só com produto é recusado; produto não entra na duração nem pontua; desativado continua na comanda e bloqueia novas inclusões; produtos desligados esvaziam a lista pública; entrega é registrada à parte do serviço.
+
+### C-ENT-01 — Capacidade, lotação, entrada fechada e transferência
+- Regras: R-ENT-01, R-ENT-02, R-ENT-03 · Transições: T-Q-06, T-Q-07, T-Q-08, T-P-07 · Contrato: `closeAdmission`, `reopenAdmission`, `setQueueCapacity` · Tipo: concorrência
+
+Dado a fila de Beto com limite 2 e uma participação
+Quando seis pessoas disputam a última vaga ao mesmo tempo
+Então só uma entra; chamado ocupa vaga, em atendimento libera; o profissional fecha a entrada e a operação continua; desistência não reabre; sem permissão o profissional não reabre; reabrir lotada continua `full`; transferir para fila lotada é recusado e a pessoa fica no mesmo lugar.
+
+### C-ENT-02 — Tolerância configurável
+- Regras: R-ENT-04, R-FILA-10 · Transições: T-P-02, T-P-06, T-ST-02 · Contrato: `callNext`, `markNoShow`, `updateQueueSettings` · Tipo: integração
+
+Dado a tolerância da loja em 3 minutos
+Quando Beto chama Lia
+Então a chamada grava 3 e o prazo; mudar para 20 não altera esse prazo; ausência antes de 3 min é recusada; a chamada seguinte usa 20.
+
+### C-LOJA-01 — Configurações por seção
+- Regras: R-LOJA-01 · Transições: T-ST-01, T-ST-02, T-ST-03 · Contrato: `getEstablishmentSettings`, `updatePaymentSettings` · Tipo: integração
+
+Dado a loja com os padrões
+Quando o dono salva seções diferentes
+Então só o dono lê e altera; versões por seção não conflitam entre si e conflitam na mesma seção; não se salva loja sem meio de pagamento; a página pública mostra só as opções públicas; visitante desligado recusa sessões e entradas novas e preserva a visita ativa.
+
+### C-TAXA-01 — Custos de recebimento
+- Regras: R-TAXA-01, R-TAXA-02 · Transições: T-FE-01, T-RC-01 · Contrato: `setPaymentFee`, `getReceiptCosts`, `registerInPersonReceipt` · Tipo: integração
+
+Dado débito com 2,5% + R$ 0,50
+Quando a equipe registra R$ 100,00 no débito
+Então o custo é R$ 3,00; três cortes numa transação = um fixo; mudar o custo não recalcula o passado; dinheiro não se aplica; crédito não configurado e cartão sem modalidade deixam o resumo incompleto; profissional e cliente não veem custo; meio desligado recusa nova escolha.
+
+### C-IND-01 — Indicadores com quantidade, produtos e custos
+- Regras: R-QTD-02, R-TAXA-02 · Transições: T-RC-01 · Contrato: `getAnalyticsSummary`, `getAnalyticsBreakdown` · Tipo: integração
+
+Dado uma comanda com 3 cortes e 1 produto paga no débito
+Quando o dono abre o Dashboard do dia
+Então vê 1 participação concluída, 3 unidades de corte realizadas, 1 produto entregue, custo estimado e cobertura 100%.
+
+### C-BUSCA-01 — Busca de comandas no servidor
+- Regras: R-BUSCA-01 · Transições: — · Contrato: `listOrders` · Tipo: integração
+
+Dado comandas de João Paulo (Barba) e Ana (Corte)
+Quando o dono busca por senha, nick ou item
+Então encontra sem diferenciar acento nem maiúsculas; curinga digitado é literal; o profissional só encontra os próprios atendimentos.
+
+### C-DESK-01 — Segundo plano no programa do dono
+- Regras: R-DESK-01 · Transições: — · Contrato: — · Tipo: manual + roteiro automatizado (desktop-dono/testes/segundo-plano.sh)
+
+Dado a preferência de segundo plano ligada
+Quando o dono fecha a janela
+Então o processo continua e a página escondida continua recebendo o fluxo; abrir de novo reabre a janela sem segunda instância; "Sair do Fila" encerra o processo.
+
 ## Critérios de pronto do anexo (§15) → cenários
 
 | Critério do anexo | Cenários |

@@ -42,7 +42,7 @@ A coluna **Referências** cita operações do OpenAPI (`operationId`), eventos, 
 |---|---|---|
 | R-ESC-01 | A primeira entrega é **somente web responsiva** (celular, tablet, computador). Desktop instalável, apps Android/iOS, PWA e push ficam para depois. | ADR-0003 |
 | R-ESC-02 | Dados separados por estabelecimento desde o início: toda rota privada carrega `establishmentId` e o servidor confere vínculo. | `x-authz`, ADR-0006 |
-| R-ESC-03 | Fora do MVP: agendamento, venda de produtos/estoque comercial, cartão online, pagamento dividido, fiado, descontos livres, cupons, promoções, sorteios. O contrato **não tem campos** para isso. | `AdjustOrderRequest`, `CreateParticipationRequest` |
+| R-ESC-03 | Fora do MVP: agendamento, estoque comercial e venda avulsa de produtos (**1.0.0, ADR-0032**: catálogo simples de produtos como complemento da visita passou a existir; estoque continua fora), cartão online, pagamento dividido, fiado, descontos livres, cupons, promoções, sorteios. O contrato **não tem campos** para isso. | `AdjustOrderRequest`, `CreateParticipationRequest` |
 
 ## 2. Arquitetura (decisões 01–07 do anexo)
 
@@ -107,10 +107,10 @@ A coluna **Referências** cita operações do OpenAPI (`operationId`), eventos, 
 | R-FILA-04 | Entrar exige fila aberta e pelo menos um serviço ativo habilitado para o profissional. | `createParticipation`, T-P-01 |
 | R-FILA-05 | A ordem é a de chegada registrada pelo servidor (FIFO determinístico). Só a equipe da fila (profissional ou dono) pode trocar uma pessoa de lugar com a vizinha de cima ou de baixo — por exemplo, quem foi chamado e avisou que vai atrasar desce uma posição e o próximo passa a ser o chamado. Cliente nunca reordena. | `callNext`, `moveParticipation`, T-P-02, T-P-11 |
 | R-FILA-06 | Aberta: aceita entrada e chamada. Pausada: bloqueia novas entradas e chamadas, permite iniciar quem já foi chamado e concluir. Fechada: bloqueia entradas e chamadas; para fechar, ninguém pode estar aguardando ou chamado; atendimento iniciado pode concluir. | `openQueue`, `pauseQueue`, `closeQueue`, T-Q-01…04 |
-| R-FILA-07 | Só o dono abre, pausa, fecha e transfere. O profissional opera a própria fila e pode sinalizar indisponibilidade ao dono. | `x-authz`, `signalAvailability`, T-Q-05 |
+| R-FILA-07 | Só o dono abre, pausa, fecha (encerra a operação) e transfere; a ENTRADA também pode ser fechada/reaberta pelo profissional da própria fila (R-ENT-02). O profissional opera a própria fila e pode sinalizar indisponibilidade ao dono. | `x-authz`, `signalAvailability`, T-Q-05 |
 | R-FILA-08 | Não se desativa profissional com cliente aguardando, chamado ou em atendimento. Comandas anteriores continuam disponíveis ao dono. | `deactivateProfessional`, T-PR-02 |
-| R-FILA-09 | Ao chamar, começa uma tolerância fixa de 10 minutos, contada pelo servidor; atualizar a página não reinicia. | `callNext`, `tolerance_ends_at` |
-| R-FILA-10 | Ausência só depois dos 10 minutos, por ação do profissional/dono; não há cancelamento automático silencioso. Voltar depois de ausente = nova entrada no fim. | `markNoShow`, T-P-06 |
+| R-FILA-09 | **Substituída na 1.0.0 por R-ENT-04** (texto original: ao chamar, começa uma tolerância fixa de 10 minutos, contada pelo servidor; atualizar a página não reinicia). | `callNext`, `tolerance_ends_at` |
+| R-FILA-10 | Ausência só depois do prazo gravado na chamada (R-ENT-04; antes: 10 minutos fixos), por ação do profissional/dono; não há cancelamento automático silencioso. Voltar depois de ausente = nova entrada no fim. | `markNoShow`, T-P-06 |
 | R-FILA-11 | Antes de marcar ausência, o profissional pode iniciar normalmente se o cliente chegou (mesmo após os 10 minutos). | `startService`, T-P-03 |
 | R-FILA-12 | O cliente pode desistir aguardando ou chamado, sem multa nem perda de pontos. Depois de iniciado, só interrupção pela equipe. | `cancelParticipation`, T-P-04 |
 | R-FILA-13 | Transferência: só dono, com concordância do cliente registrada, estado aguardando, destino aberto e compatível com todos os serviços; entra no fim do destino; mantém preços; motivo auditado; estimativa recalculada. | `transferParticipation`, T-P-07 |
@@ -118,7 +118,7 @@ A coluna **Referências** cita operações do OpenAPI (`operationId`), eventos, 
 | R-FILA-15 | Quem age com tela antiga recebe conflito com os dados atuais; mudança inválida nunca é aplicada. | `Problem.current`, `version_conflict` |
 | R-FILA-16 | Previsão de espera é sempre identificada como estimativa. | `Estimate` |
 | R-FILA-17 | O dono pode cancelar participação aguardando/chamada com motivo (ex.: antes de fechar a fila). | `cancelParticipation`, T-P-05 |
-| R-FILA-18 | O MVP não tem limite de vagas por fila; a disputa concorrente é pela posição, pela cadeira e pelo estado da fila. _(detalhe da etapa 00 — o anexo não define capacidade)_ | `createParticipation` |
+| R-FILA-18 | **Substituída na 1.0.0 por R-ENT-03** (texto original: o MVP não tem limite de vagas por fila; a disputa concorrente é pela posição, pela cadeira e pelo estado da fila. _(detalhe da etapa 00 — o anexo não define capacidade)_). | `createParticipation` |
 | R-FILA-19 | O cliente pode avisar pelo app que vai se atrasar (aguardando ou chamado). O aviso não muda estado, posição nem tolerância; a equipe vê e é notificada, e decide o que fazer (por exemplo, descer a pessoa uma posição). Nova chamada limpa o aviso. | `noticeLate`, T-P-12 |
 
 ## 7. Serviços, comanda e atendimento
@@ -128,7 +128,7 @@ A coluna **Referências** cita operações do OpenAPI (`operationId`), eventos, 
 | R-CMD-01 | Serviço tem nome, preço positivo em centavos, duração estimada, pontos inteiros ≥ 0 e profissionais habilitados. | `createService`, `updateService`, `setServiceProfessionals` |
 | R-CMD-02 | Preço e total são calculados no servidor. Não há item livre nem preço digitado pelo cliente; campos não previstos são rejeitados. | `CreateParticipationRequest`, `validation_failed` |
 | R-CMD-03 | Serviço inativado não aceita nova inclusão; itens já aceitos permanecem e são resolvidos pela equipe. | `deactivateService`, T-SV-03 |
-| R-CMD-04 | Cada serviço aparece no máximo uma vez por comanda. | `duplicate_service` |
+| R-CMD-04 | Cada serviço (ou produto) aparece no máximo uma vez por comanda — **com quantidade na mesma linha** desde a 1.0.0 (R-QTD-01). | `duplicate_service` |
 | R-CMD-05 | Cada item guarda nome, preço, duração e pontos aceitos na inclusão; mudanças futuras do catálogo não reescrevem a visita. | `OrderItem`, T-SV-02 |
 | R-CMD-06 | Aguardando: o cliente inclui/remove serviços compatíveis e vê novo total e estimativa; mantém ≥ 1 item (para tirar todos, desiste). | `replaceOrderItems`, T-O-02 |
 | R-CMD-07 | Depois da chamada: o cliente cria uma solicitação; só uma pendente por comanda; o total anterior vale até a decisão. | `createChangeRequest`, T-CR-01 |
@@ -236,6 +236,27 @@ A coluna **Referências** cita operações do OpenAPI (`operationId`), eventos, 
 | R-SEG-10 | Auditoria mínima das ações relevantes, sem dados pessoais expostos. | `listAuditEvents`, `AuditEvent` |
 | R-SEG-11 | O worker retoma tarefas após falha (reconciliação, expirações, outbox, exclusão). | ADR-0010 |
 
+
+## 14. Melhorias da versão 1.0.0 (ADR-0032 a ADR-0037)
+
+| ID | Regra | Referências |
+|---|---|---|
+| R-QTD-01 | Uma linha por serviço ou produto, com quantidade inteira (1–50; limite da loja 1–50, padrão 10, conferido ao incluir ou aumentar, nunca retroativo). Subtotal = quantidade × preço registrado; duração = quantidade × duração (só serviços). Mudanças por quantidade ABSOLUTA com versão esperada; histórico imutável de cada mudança. | `replaceOrderItems`, `createParticipation`, ADR-0033 |
+| R-QTD-02 | Um pedido com várias unidades ocupa UMA posição na fila; um profissional faz os serviços em sequência; o titular responde pelo pedido e pelo pagamento; acompanhantes não têm conta nem dados; unidades de serviço não são pessoas. | `createParticipation`, ADR-0033 |
+| R-QTD-03 | 0 ≤ cobradas ≤ realizadas ≤ pedidas. A quantidade nunca fica abaixo das unidades realizadas; a equipe registra "2 de 3" (só cresce); interrupção e revisão consideram só unidades completas; concluir com menos unidades exige motivo. | `setItemPerformedQuantity`, `completeService`, `closeInterruptedOrder`, T-O-14 |
+| R-QTD-04 | Pontos = unidades de serviço cobradas × pontos registrados, para o titular com conta, uma vez, após liquidação; produtos não pontuam. | T-LG-01, ADR-0033 |
+| R-PROD-01 | Catálogo simples de produtos (sem estoque): disponível = ativo; nunca entrar na fila só com produtos; produto não aumenta a espera; entrega registrada à parte; desativar ou desligar produtos não tira produtos de comandas existentes. | `createProduct`, `listPublicProducts`, T-PD-01…04 |
+| R-PROD-02 | Categorias por loja e tipo; desativar não apaga nem esconde itens; ordem estável (posição, nome, id). | `createCategory`, T-CT-01…04 |
+| R-TAXA-01 | Custos de recebimento são estimativas do dono por modalidade (débito, crédito, Pix): pontos-base + fixo por transação, arredondamento único no servidor; gravados no recebimento (sem recálculo); desconhecido ≠ não configurado ≠ zero; nunca mudam o valor cobrado; só o dono vê. | `setPaymentFee`, `getReceiptCosts`, T-FE-01, ADR-0034 |
+| R-TAXA-02 | Cartão registra débito ou crédito; recebimentos antigos ficam "não especificado" sem custo fabricado. Resultado após custos não é lucro e mostra a cobertura dos dados. | `registerInPersonReceipt`, `getReceiptCosts` |
+| R-ENT-01 | Entrada na fila separada da operação: fechar a entrada só impede novas participações; desistência não reabre; a operação (chamar, atender, receber) continua. | `closeAdmission`, `reopenAdmission`, T-Q-06/07, ADR-0035 |
+| R-ENT-02 | O profissional controla a entrada da própria fila quando a loja permite (padrão: permite); isso não libera capacidade, transferência, preços, outras filas nem encerrar a operação. | `closeAdmission`, `updateQueueSettings` |
+| R-ENT-03 | Capacidade opcional de participações pendentes (aguardando + chamado) por fila (padrão da loja ou da fila, 1–200), garantida em transação na entrada e na transferência; lotação libera sozinha; reabrir não ignora a capacidade. | `setQueueCapacity`, `createParticipation`, `transferParticipation`, T-Q-08 |
+| R-ENT-04 | Tolerância depois da chamada configurável (1–60 min, padrão 10), gravada em cada chamada com o prazo; mudar a configuração vale para chamadas futuras. | `callNext`, `updateQueueSettings`, `markNoShow` |
+| R-LOJA-01 | Configurações da loja por seção, cada uma com versão própria, só o dono altera, auditoria; visitante pode ser desligado só para novas entradas; meios de pagamento nunca todos desligados; desligar não invalida o que existe. | `updateCatalogSettings`, `updateQueueSettings`, `updatePaymentSettings`, T-ST-01…03 |
+| R-BUSCA-01 | Busca sem diferenciar maiúsculas nem acentos; listas paginadas buscam no servidor (nunca só a página atual); localizar na fila não muda a ordem; nada privado na busca pública. | `listOrders`, ADR-0036 |
+| R-DESK-01 | Programa desktop: segundo plano por preferência do computador (desligada por padrão), bandeja com Abrir, Som, Segundo plano e Sair do Fila (encerra de verdade), instância única, mesma sessão e mesmo fluxo da página. | ADR-0037 |
+
 ---
 
 ## Decisões já tomadas (não são dúvidas)
@@ -246,7 +267,7 @@ As decisões abaixo vêm do anexo e **não devem ser reabertas** nas próximas e
 2. Go monólito modular + PostgreSQL + React/TS/Vite (ADR-0001…0003).
 3. HTTP para comandos, SSE para atualizações (ADR-0004).
 4. Fila, atendimento, comanda, recebimento e conferência separados (ADR-0005).
-5. Sem penalidade de pontos por desistência ou ausência; tolerância fixa de 10 minutos (R-FILA-09/10/12).
+5. Sem penalidade de pontos por desistência ou ausência; tolerância de 10 minutos (R-FILA-09/10/12) — **na 1.0.0 passou a ser configurável, padrão 10 (R-ENT-04, ADR-0035)**.
 6. Recuperação do visitante por código secreto com os prazos definidos (R-VIS-*).
 7. Interrupção cobra só serviços integralmente feitos; parcial vale zero (R-CMD-13).
 8. Pix confirmado só pelo provedor; conferência humana separada (ADR-0007).

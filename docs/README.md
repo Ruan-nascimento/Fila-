@@ -13,7 +13,9 @@ Regras, decisões e contrato do MVP (etapa 00), usados pelo backend (`backend/`,
 | [contrato/openapi.yaml](contrato/openapi.yaml) | Contrato HTTP (OpenAPI 3.1) — fonte única para backend e frontend |
 | [contrato/convencoes.md](contrato/convencoes.md) | Envelopes, erros (RFC 9457), paginação, IDs, dinheiro em centavos, datas UTC, idempotência, sessões e CSRF |
 | [contrato/eventos-sse.md](contrato/eventos-sse.md) | Eventos SSE: versão, audiência, cursor pós-commit, snapshot e recuperação |
-| [adr/](adr/README.md) | Decisões de arquitetura (ADR-0001…0028) |
+| [adr/](adr/README.md) | Decisões de arquitetura (ADR-0001…0037) |
+| [configuracoes-da-loja.md](configuracoes-da-loja.md) | Cada configuração da loja e do aparelho: tipo, padrão, intervalo, quem altera, visibilidade, quando vale e efeito no que já existe (1.0.0) |
+| [melhorias-1.0.0-impacto.md](melhorias-1.0.0-impacto.md) | Matriz de impacto das melhorias 1.0.0 (quantidades, produtos, custos, entrada/capacidade, desktop) |
 | [notificacoes.md](notificacoes.md) | Notificações do cliente e da equipe: o que avisa, onde aparece, permissão, aviso de atraso, limites (sem push) |
 | [configuracoes-e-identidade.md](configuracoes-e-identidade.md) | Minha conta, fotos (visibilidade, arquitetura, cache, medições), login com Google só para cliente (com passo a passo do Google Cloud), identidade da loja (16 paletas e contrastes), QR Code, matriz de sessão, ativação e volta atrás, checklist manual |
 | [evidencias.md](evidencias.md) | **Revisão final (etapa 13):** o que foi executado, onde, quando e com que resultado; o que não foi testado e o que depende de fora |
@@ -22,6 +24,7 @@ Regras, decisões e contrato do MVP (etapa 00), usados pelo backend (`backend/`,
 | [guia-por-papel.md](guia-por-papel.md) | Guia curto para cliente, profissional, dono e operador |
 | [piloto.md](piloto.md) | Plano de piloto, critérios de parada e volta atrás |
 | [operacao/](operacao/README.md) | Implantação, monitoramento e alertas, backup e restauração, rotinas de incidente e evidências (etapa 12) |
+| [evidencias/melhorias-1.0.0.md](evidencias/melhorias-1.0.0.md) | Evidências das melhorias 1.0.0: testes, desempenho medido da busca, segundo plano do desktop, o que não foi validado |
 | [retencao.md](retencao.md) | Matriz de retenção por categoria (o que o sistema faz hoje; prazos legais pendentes de validação) |
 | [tools/verificar_contrato.py](tools/verificar_contrato.py) | Verificador de rastreabilidade regra → cenário → transição → operação |
 
