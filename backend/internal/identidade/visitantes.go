@@ -190,6 +190,14 @@ func (s *Service) createVisitorSession(w http.ResponseWriter, r *http.Request) e
 	} else if err != nil {
 		return err
 	}
+	// Entrada como visitante desligada pela loja (ADR-0034): nenhuma sessão NOVA; visitas já
+	// ativas continuam (credencial e código de recuperação seguem valendo).
+	if st, err := estabelecimento.LoadSettings(ctx, s.pool, estID); err != nil {
+		return err
+	} else if !st.VisitorsEnabled {
+		return &httpserver.Error{Status: 409, Code: "visitors_disabled", Title: "Entrada como visitante desligada",
+			Detail: "Esta barbearia não aceita entrada como visitante no momento. Entre com a sua conta."}
+	}
 	p := PrincipalFrom(ctx)
 	limits := []limitCheck{lim(ruleVisitorCreateIP, estID.String()+"|"+s.clientIP(r))}
 	if p.BrowserID != nil {

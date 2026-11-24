@@ -119,7 +119,7 @@ export function Loja() {
         icon={shop.logo?.variants[0]?.url}
       >
         <PublicShell width="wide" store={shop} actions={identified ? <Sino /> : undefined}>
-          <StoreDataProvider shopId={shop.id}>
+          <StoreDataProvider shopId={shop.id} ordering={shop.ordering}>
             <LojaConteudo shop={shop} />
           </StoreDataProvider>
         </PublicShell>

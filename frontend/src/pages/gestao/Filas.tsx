@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Navigate, NavLink, useParams } from "react-router";
-import { CirclePause, CirclePlay, CircleStop, Coffee, RefreshCw, UsersRound } from "lucide-react";
+import {
+  CirclePause,
+  CirclePlay,
+  CircleStop,
+  Coffee,
+  DoorClosed,
+  DoorOpen,
+  Gauge,
+  RefreshCw,
+  UsersRound,
+} from "lucide-react";
 import { api } from "../../api/client";
 import { call, problemMessage } from "../../api/problem";
 import type { components } from "../../api/schema.gen";
@@ -15,10 +25,30 @@ import { Entradas } from "./Entradas";
 type StaffQueue = components["schemas"]["StaffQueue"];
 
 const queueStatus: Record<StaffQueue["status"], { text: string; tone: "success" | "warning" | "neutral" }> = {
-  open: { text: "Fila aberta", tone: "success" },
-  paused: { text: "Fila pausada", tone: "warning" },
-  closed: { text: "Fila fechada", tone: "neutral" },
+  open: { text: "Operação aberta", tone: "success" },
+  paused: { text: "Operação pausada", tone: "warning" },
+  closed: { text: "Operação encerrada", tone: "neutral" },
 };
+
+/** Situação da ENTRADA (separada da operação, ADR-0035), sempre em texto. */
+const entryText: Record<string, { text: string; tone: "success" | "warning" | "neutral" }> = {
+  accepting: { text: "Entrada aberta", tone: "success" },
+  full: { text: "Fila cheia", tone: "warning" },
+  closed_manual: { text: "Entrada fechada", tone: "warning" },
+  operation_paused: { text: "Sem novas entradas (pausada)", tone: "neutral" },
+  operation_closed: { text: "Sem novas entradas", tone: "neutral" },
+};
+
+function loadLine(q: StaffQueue): string {
+  const l = q.load;
+  if (!l || l.pending_participations === 0) return "Ninguém aguardando ou chamado";
+  const parts = [
+    `${l.pending_participations} ${l.pending_participations === 1 ? "participação pendente" : "participações pendentes"}`,
+    `${l.pending_service_units} ${l.pending_service_units === 1 ? "unidade de serviço" : "unidades de serviço"}`,
+  ];
+  if (l.estimated_minutes > 0) parts.push(`~${l.estimated_minutes} min acumulados (estimativa)`);
+  return parts.join(" · ");
+}
 
 /**
  * Filas da loja. O profissional cai direto na própria fila; o dono escolhe a fila (lista ao lado
@@ -130,6 +160,9 @@ export function Filas({ ctx }: { ctx: StaffContext }) {
                     <span className="font-semibold">{q.professional.display_name}</span>
                     <span className="text-xs whitespace-nowrap text-fg-muted">
                       {queueStatus[q.status].text}
+                      {q.admission && q.status === "open" && q.admission.state !== "accepting"
+                        ? ` · ${entryText[q.admission.state]?.text.toLowerCase()}`
+                        : ""}
                       {current ? (current.status === "called" ? " · chamando" : " · atendendo") : ""} ·{" "}
                       {waiting} aguardando
                     </span>
@@ -170,6 +203,39 @@ function FilaDetalhe({
 }) {
   const cmd = useCommand();
   const st = queueStatus[q.status];
+  const adm = q.admission;
+  const entry = adm ? entryText[adm.state] : undefined;
+  const canControlEntry =
+    adm !== undefined &&
+    (ctx.isOwner || (adm.professionals_can_control && ctx.professionalId === q.professional.id));
+  const [entryNote, setEntryNote] = useState<string | null>(null);
+
+  async function admission(op: "close" | "reopen") {
+    const path =
+      op === "close"
+        ? ("/v1/establishments/{establishmentId}/queues/{queueId}/close-admission" as const)
+        : ("/v1/establishments/{establishmentId}/queues/{queueId}/reopen-admission" as const);
+    const out = await cmd.run(`entrada:${op}:${q.queue_id}:${q.version}`, (key) =>
+      api.POST(path, {
+        params: {
+          path: { establishmentId: ctx.estId, queueId: q.queue_id },
+          header: { "Idempotency-Key": key },
+        },
+        body: { expected_version: q.version },
+      }),
+    );
+    if (out.ok) {
+      const state = out.data.data.admission?.state;
+      setEntryNote(
+        op === "close"
+          ? "Entrada fechada. Quem já está na fila continua e será atendido normalmente."
+          : state === "full"
+            ? "Entrada reaberta. Novas participações serão aceitas quando houver vaga."
+            : "Entrada reaberta.",
+      );
+    }
+    if (out.ok || out.problem?.status === 409) await onReload();
+  }
 
   async function change(op: "open" | "pause" | "close") {
     const path = {
@@ -201,6 +267,11 @@ function FilaDetalhe({
             <Badge tone={st.tone} dot>
               {st.text}
             </Badge>
+            {entry && q.status === "open" && (
+              <Badge tone={entry.tone} dot>
+                {entry.text}
+              </Badge>
+            )}
             {q.professional.status === "inactive" && <Badge>Profissional desativado</Badge>}
             {stale && <Badge tone="warning">Última informação conhecida</Badge>}
           </div>
@@ -217,46 +288,163 @@ function FilaDetalhe({
             </span>
           </p>
         )}
-        {ctx.isOwner && (
+        <p className="m-0 text-sm text-fg-muted" aria-live="polite">
+          {loadLine(q)}
+          {adm?.capacity != null && ` · limite de ${adm.capacity} participações pendentes`}
+        </p>
+        {(ctx.isOwner || (canControlEntry && q.status === "open")) && (
           <div className="grid gap-2">
             <div className="flex flex-wrap gap-2">
-              {q.status !== "open" && (
-                <Button icon={CirclePlay} disabled={cmd.busy !== null} onClick={() => void change("open")}>
-                  Abrir fila
+              {/* Entrada: só faz sentido com a operação aberta. */}
+              {canControlEntry && q.status === "open" && adm?.status === "open" && (
+                <Button
+                  variant="secondary"
+                  icon={DoorClosed}
+                  disabled={cmd.busy !== null}
+                  onClick={() => void admission("close")}
+                >
+                  Fechar entrada
                 </Button>
               )}
-              {q.status === "open" && (
+              {canControlEntry && q.status === "open" && adm?.status === "closed" && (
+                <Button icon={DoorOpen} disabled={cmd.busy !== null} onClick={() => void admission("reopen")}>
+                  Reabrir entrada
+                </Button>
+              )}
+              {ctx.isOwner && q.status === "closed" && (
+                <Button icon={CirclePlay} disabled={cmd.busy !== null} onClick={() => void change("open")}>
+                  Abrir operação
+                </Button>
+              )}
+              {ctx.isOwner && q.status === "paused" && (
+                <Button icon={CirclePlay} disabled={cmd.busy !== null} onClick={() => void change("open")}>
+                  Retomar operação
+                </Button>
+              )}
+              {ctx.isOwner && q.status === "open" && (
                 <Button
                   variant="secondary"
                   icon={CirclePause}
                   disabled={cmd.busy !== null}
                   onClick={() => void change("pause")}
                 >
-                  Pausar fila
+                  Pausar operação
                 </Button>
               )}
-              {q.status !== "closed" && (
+              {ctx.isOwner && q.status !== "closed" && (
                 <Button
-                  variant="secondary"
+                  variant="ghost"
                   icon={CircleStop}
                   disabled={cmd.busy !== null}
                   onClick={() => void change("close")}
                 >
-                  Fechar fila
+                  Encerrar operação
                 </Button>
               )}
             </div>
+            {entryNote && (
+              <p role="status" className="m-0 text-sm">
+                {entryNote}
+              </p>
+            )}
             <p className="m-0 text-xs text-fg-muted">
-              Pausar bloqueia novas entradas e chamadas; quem já foi chamado ainda pode ser atendido. Para
-              fechar, ninguém pode estar aguardando ou chamado.
+              Fechar a entrada só impede novas participações: a equipe continua chamando, atendendo e
+              recebendo. Pausar a operação bloqueia novas entradas e chamadas; quem já foi chamado ainda pode
+              ser atendido. Para encerrar a operação, ninguém pode estar aguardando ou chamado.
             </p>
           </div>
         )}
+        {ctx.isOwner && adm && <Capacidade ctx={ctx} queue={q} onDone={onReload} />}
         <CommandError problem={cmd.problem} offline={cmd.offline} />
       </header>
       <Entradas ctx={ctx} queue={q} queues={queues} now={now} onDone={onReload} />
       {ctx.professionalId === q.professional.id && <Sinal ctx={ctx} queue={q} onDone={onReload} />}
     </section>
+  );
+}
+
+/** Limite de participações pendentes desta fila (só o dono): 1–200 ou o padrão da loja. */
+function Capacidade({
+  ctx,
+  queue: q,
+  onDone,
+}: {
+  ctx: StaffContext;
+  queue: StaffQueue;
+  onDone: () => Promise<void>;
+}) {
+  const cmd = useCommand();
+  const panel = useInlinePanel();
+  const override = q.admission?.capacity_override ?? null;
+  const [value, setValue] = useState(override === null ? "" : String(override));
+  const [error, setError] = useState<string | null>(null);
+  async function save(capacity: number | null) {
+    const out = await cmd.run(`capacidade:${q.queue_id}:${q.version}:${capacity ?? "padrao"}`, (key) =>
+      api.PUT("/v1/establishments/{establishmentId}/queues/{queueId}/capacity", {
+        params: {
+          path: { establishmentId: ctx.estId, queueId: q.queue_id },
+          header: { "Idempotency-Key": key },
+        },
+        body: { expected_version: q.version, capacity },
+      }),
+    );
+    if (out.ok) panel.hide();
+    if (out.ok || out.problem?.status === 409) await onDone();
+  }
+  function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!/^\d{1,3}$/.test(value) || Number(value) < 1 || Number(value) > 200) {
+      setError("Use um número de 1 a 200.");
+      return;
+    }
+    setError(null);
+    void save(Number(value));
+  }
+  if (!panel.open)
+    return (
+      <Button
+        id={panel.triggerId}
+        variant="ghost"
+        icon={Gauge}
+        className="justify-self-start"
+        onClick={() => panel.show("aberto")}
+      >
+        Limite desta fila:{" "}
+        {override === null
+          ? q.admission?.capacity == null
+            ? "sem limite (padrão da loja)"
+            : `padrão da loja (${q.admission.capacity})`
+          : override}
+      </Button>
+    );
+  return (
+    <form
+      id={panel.panelId}
+      onKeyDown={panel.onKeyDown}
+      onSubmit={onSubmit}
+      noValidate
+      aria-label="Limite da fila"
+      className="grid max-w-xl gap-3 rounded-xl border border-line bg-surface p-4"
+    >
+      <CommandError problem={cmd.problem} offline={cmd.offline} />
+      <Field
+        label="Limite de participações pendentes (1 a 200)"
+        inputMode="numeric"
+        value={value}
+        error={error ?? undefined}
+        hint="Aguardando e chamado contam; em atendimento não. Um pedido com 3 cortes ocupa 1 vaga. Reduzir não tira ninguém."
+        onChange={(e) => setValue(e.target.value)}
+      />
+      <div className="flex flex-wrap gap-2">
+        <Submit busy={cmd.busy !== null}>Salvar limite</Submit>
+        <Button variant="secondary" disabled={cmd.busy !== null} onClick={() => void save(null)}>
+          Usar o padrão da loja
+        </Button>
+        <Button variant="ghost" onClick={panel.hide}>
+          Cancelar
+        </Button>
+      </div>
+    </form>
   );
 }
 

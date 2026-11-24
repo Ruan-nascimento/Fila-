@@ -25,6 +25,8 @@ import { useInlinePanel } from "../../ui/useInlinePanel";
 import { ItensDaComanda, OrderBadge } from "../comanda/comanda";
 import { liveItems, reportedText, type Order } from "../comanda/textos";
 import { ReceberPagamento } from "../pagamento/ReceberPagamento";
+import { CampoBusca } from "../../features/catalogo/CampoBusca";
+import { fold, useDebounced } from "../../features/catalogo/busca";
 import { isId, useCommand } from "./comando";
 import { CommandError, type StaffContext } from "./comum";
 
@@ -70,19 +72,29 @@ export function Comandas({ ctx }: { ctx: StaffContext }) {
   const [next, setNext] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [busca, setBusca] = useState("");
+  // Busca no SERVIDOR (lista paginada, ADR-0036): ~250 ms depois de parar de digitar.
+  const term = useDebounced(fold(busca));
+  const [searching, setSearching] = useState(false);
   const who = useWho(ctx.estId);
 
   const fetchPage = useCallback(
-    (cursor: string | null) =>
+    (cursor: string | null, signal?: AbortSignal) =>
       call(() =>
         api.GET("/v1/establishments/{establishmentId}/orders", {
           params: {
             path: { establishmentId: ctx.estId },
-            query: { ...(filter ? { status: [filter] } : {}), limit: 20, ...(cursor ? { cursor } : {}) },
+            query: {
+              ...(filter ? { status: [filter] } : {}),
+              ...(term ? { q: term } : {}),
+              limit: 20,
+              ...(cursor ? { cursor } : {}),
+            },
           },
+          ...(signal ? { signal } : {}),
         }),
       ),
-    [ctx.estId, filter],
+    [ctx.estId, filter, term],
   );
   const reload = useCallback(async () => {
     const out = await fetchPage(null);
@@ -93,18 +105,18 @@ export function Comandas({ ctx }: { ctx: StaffContext }) {
     } else setError(problemMessage(out.problem, out.offline));
   }, [fetchPage]);
   useEffect(() => {
-    let active = true;
-    void fetchPage(null).then((out) => {
-      if (!active) return;
+    // Busca nova cancela a anterior: uma resposta velha nunca substitui a mais recente.
+    const ctl = new AbortController();
+    void fetchPage(null, ctl.signal).then((out) => {
+      if (ctl.signal.aborted) return;
+      setSearching(false);
       if (out.ok) {
         setOrders(out.data.data);
         setNext(out.data.page.next_cursor ?? null);
         setError(null);
       } else setError(problemMessage(out.problem, out.offline));
     });
-    return () => {
-      active = false;
-    };
+    return () => ctl.abort();
   }, [fetchPage]);
 
   async function more() {
@@ -168,11 +180,30 @@ export function Comandas({ ctx }: { ctx: StaffContext }) {
               </option>
             ))}
           </SelectField>
+          <CampoBusca
+            label="Buscar comanda"
+            placeholder="Buscar por senha, nome ou item"
+            value={busca}
+            busy={searching || fold(busca) !== term}
+            onChange={(v) => {
+              setBusca(v);
+              setSearching(true);
+            }}
+          />
           {error && <LoadError message={error} onRetry={() => void reload()} />}
           {!orders && !error && <Loading>Carregando comandas…</Loading>}
           {orders?.length === 0 && (
-            <EmptyState icon={ReceiptText} title="Nenhuma comanda aqui">
-              <p>{filter ? `Nada em “${filterText[filter]}” agora.` : "Ainda não há comandas."}</p>
+            <EmptyState
+              icon={ReceiptText}
+              title={term ? "Nenhuma comanda encontrada" : "Nenhuma comanda aqui"}
+            >
+              <p>
+                {term
+                  ? `Nada para “${busca.trim()}”${filter ? ` em “${filterText[filter]}”` : ""}. A busca considera todas as páginas.`
+                  : filter
+                    ? `Nada em “${filterText[filter]}” agora.`
+                    : "Ainda não há comandas."}
+              </p>
             </EmptyState>
           )}
           {orders && orders.length > 0 && (

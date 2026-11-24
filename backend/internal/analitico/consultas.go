@@ -48,6 +48,20 @@ WHERE r.establishment_id = $1 AND r.registered_at >= $4 AND r.registered_at < $5
   AND ($8 = '' OR r.method = $8)
 GROUP BY 1`
 
+// Custos de recebimento do período (mesmos filtros dos recebimentos): estimados, efetivos e
+// cobertura (recebimentos com custo registrado ou que não se aplicam; anteriores à versão 1.0.0 e
+// cartão sem modalidade ficam descobertos, nunca estimados às cegas).
+const sqlFees = `
+SELECT coalesce(sum(f.estimated_cents) FILTER (WHERE f.status = 'estimated'), 0)::bigint,
+       coalesce(sum(f.actual_cents) FILTER (WHERE f.status = 'actual'), 0)::bigint,
+       count(*) FILTER (WHERE f.status IN ('estimated', 'actual', 'not_applicable')),
+       count(*)
+FROM receipt r LEFT JOIN receipt_fee f ON f.receipt_id = r.id
+WHERE r.establishment_id = $1 AND r.registered_at >= $4 AND r.registered_at < $5
+  AND ($2::text IS NOT NULL) AND ($3::text IS NOT NULL)
+  AND ($6::uuid IS NULL OR EXISTS (SELECT 1 FROM service_order o WHERE o.id = r.order_id AND o.professional_id = $6)) AND ($7::uuid IS NULL OR true)
+  AND ($8 = '' OR r.method = $8)`
+
 // Estornos efetivados (status confirmed) pela data de efetivação. Solicitado, em análise ou
 // falho não reduz o líquido.
 const sqlRefunds = `

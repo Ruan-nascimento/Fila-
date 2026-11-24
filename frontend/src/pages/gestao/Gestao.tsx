@@ -111,7 +111,7 @@ const groups: Group[] = [
   {
     title: "Cadastros",
     items: [
-      { path: "servicos", label: "Serviços", icon: Scissors },
+      { path: "servicos", label: "Catálogo", icon: Scissors },
       { path: "profissionais", label: "Profissionais", icon: UserRound, owner: true },
       { path: "loja", label: "Configurações da loja", icon: Store, owner: true },
     ],

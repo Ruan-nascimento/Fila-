@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"fila/internal/platform/busca"
 	hs "fila/internal/platform/httpserver"
 )
 
@@ -103,6 +104,12 @@ func (s *Service) listOrders(w http.ResponseWriter, r *http.Request) error {
 		}
 		limit = n
 	}
+	// Busca (ADR-0036): senha, nick ou item da comanda, sem diferenciar maiúsculas nem acentos.
+	// Sempre no servidor (a lista é paginada): nunca só na página atual.
+	term := busca.Fold(q.Get("q"))
+	if len([]rune(term)) > busca.MaxTerm {
+		fe = append(fe, hs.FieldError{Field: "q", Code: hs.FieldTooLong})
+	}
 	var afterAt time.Time
 	var afterID uuid.UUID
 	hasCursor := false
@@ -130,13 +137,23 @@ func (s *Service) listOrders(w http.ResponseWriter, r *http.Request) error {
 		args = append(args, statuses)
 		sql += ` AND status = ANY($` + strconv.Itoa(len(args)) + `)`
 	}
+	ctx := r.Context()
+	if term != "" {
+		pattern := busca.Contains(term)
+		parts, err := s.Visits.Matching(ctx, s.Pool, estID, pattern, 500)
+		if err != nil {
+			return err
+		}
+		args = append(args, parts, pattern)
+		sql += ` AND (participation_id = ANY($` + strconv.Itoa(len(args)-1) + `) OR EXISTS (SELECT 1 FROM order_item i
+			WHERE i.order_id = service_order.id AND i.status <> 'removed' AND i.search_name LIKE $` + strconv.Itoa(len(args)) + `))`
+	}
 	if hasCursor {
 		args = append(args, afterAt, afterID)
 		sql += ` AND (created_at, id) < ($` + strconv.Itoa(len(args)-1) + `, $` + strconv.Itoa(len(args)) + `)`
 	}
 	args = append(args, limit+1)
 	sql += ` ORDER BY created_at DESC, id DESC LIMIT $` + strconv.Itoa(len(args))
-	ctx := r.Context()
 	rows, err := s.Pool.Query(ctx, sql, args...)
 	if err != nil {
 		return err

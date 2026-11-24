@@ -26,6 +26,7 @@ const (
 	PurposeAvatar            = "avatar"
 	PurposeProfessionalPhoto = "professional_photo"
 	PurposeLogo              = "logo"
+	PurposeProductPhoto      = "product_photo"
 )
 
 // Formatos aceitos: JPEG, PNG e WebP estáticos. SVG, GIF, animações, HEIC e desconhecidos não.

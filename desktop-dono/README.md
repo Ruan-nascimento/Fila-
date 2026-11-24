@@ -36,6 +36,8 @@ O que decide a permissão continua sendo **o servidor**: cada pedido é autoriza
 
 **Notificações.** A gestão avisa quando alguém entra na fila, sai, avisa que vai atrasar ou pede mudança na comanda ([docs/notificacoes.md](../docs/notificacoes.md)). No programa, o `tauri-plugin-notification` troca a notificação do navegador pela nativa do Windows/Linux. A página remota recebe, por uma capability criada em `src/lib.rs` (`painel-notificacoes`), **só** as permissões `notification:allow-is-permission-granted`, `allow-request-permission` e `allow-notify`, **só** para a origem do painel e **só** na janela principal. Com o programa em primeiro plano, o aviso aparece dentro da tela; minimizado ou atrás de outra janela, vira notificação do sistema.
 
+**Segundo plano (ADR-0037).** Preferência do computador, desligada por padrão, no menu da bandeja (`src/segundo_plano.rs`). Ligada, o X esconde a janela e a página continua recebendo o fluxo de avisos; *Sair do Fila* encerra o processo. Sem bandeja funcional, fechar sempre encerra. Instância única (`tauri-plugin-single-instance`): abrir de novo mostra a janela existente. O som é gravado na página por `webview.eval` (a página remota continua sem acesso a comando nenhum). Teste no Linux: `testes/segundo-plano.sh` (X aninhado e D-Bus isolado).
+
 ## Dashboard: como a mesma sessão chega aos gráficos
 
 1. Na gestão (página remota, cookie HttpOnly da sessão de dono), o item **Dashboard** pede ao servidor um ticket de 60 s e navega para `/dono/painel-analitico#t=…`.
@@ -113,7 +115,7 @@ O dono só precisa do instalador: nada de Node, Rust, Go ou Docker.
 ### Máquina de build Linux (uma vez)
 
 ```bash
-sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev build-essential curl
+sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev build-essential curl
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 # Node 26: https://nodejs.org/
 ```
@@ -133,7 +135,7 @@ Arquivo produzido: `desktop-dono/src-tauri/target/release/bundle/deb/Fila Gestao
 sudo apt install ./"Fila Gestao_0.2.0_amd64.deb"
 ```
 
-Também dá para abrir o `.deb` com dois cliques (Instalador de pacotes). O programa aparece no menu como **Fila Gestão**. As dependências (`libwebkit2gtk-4.1-0`, `libgtk-3-0`) vêm do próprio Mint. Para remover: `sudo apt remove fila-gestao`.
+Também dá para abrir o `.deb` com dois cliques (Instalador de pacotes). O programa aparece no menu como **Fila Gestão**. As dependências (`libwebkit2gtk-4.1-0`, `libgtk-3-0` e `libayatana-appindicator3-1`, do ícone na bandeja) vêm do próprio Mint. Para remover: `sudo apt remove fila-gestao`.
 
 ## 5. Testes
 

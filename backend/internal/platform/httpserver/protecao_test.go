@@ -83,7 +83,8 @@ func TestChainWithLimitsAndObserves(t *testing.T) {
 			t.Errorf("faltou %q:\n%s", want, out)
 		}
 	}
-	if strings.Contains(out, "123") || strings.Contains(out, "9.9.9.9") {
+	// Procura o caminho com o id real (não "123" solto: uma soma de duração como 0.000123 casaria).
+	if strings.Contains(out, "/v1/x/123") || strings.Contains(out, "9.9.9.9") {
 		t.Fatal("métrica não pode ter id real nem IP")
 	}
 }

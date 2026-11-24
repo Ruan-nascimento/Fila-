@@ -297,6 +297,28 @@ describe("Recebimento pela equipe", () => {
     expect(requests).toHaveLength(0);
   });
 
+  it("cartão: exige débito ou crédito e envia a modalidade (custo interno é calculado no servidor)", async () => {
+    const bodies: unknown[] = [];
+    fakeApi({
+      [`POST ${base}/receipts`]: (_r, body) => {
+        bodies.push(body);
+        return Response.json({ data: order({}, { status: "settled" }) }, { status: 201 });
+      },
+    });
+    const saved = vi.fn();
+    render(<ReceberPagamento ctx={ctx} order={order()} onSaved={saved} onConflict={async () => {}} />);
+    fireEvent.click(screen.getByLabelText("Cartão (maquininha)"));
+    fireEvent.click(screen.getByRole("button", { name: /Registrar/ }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Escolha débito ou crédito.");
+    expect(bodies).toHaveLength(0);
+    fireEvent.click(screen.getByLabelText("Crédito"));
+    fireEvent.click(screen.getByRole("button", { name: /Registrar/ }));
+    await waitFor(() => expect(saved).toHaveBeenCalled());
+    expect(bodies).toEqual([
+      { expected_version: 5, method: "card", amount_cents: 7500, card_type: "credit" },
+    ]);
+  });
+
   it("Pix em aberto: não recebe na loja sem trocar o meio; Pix verificando: espera", () => {
     fakeApi({});
     const { rerender } = render(

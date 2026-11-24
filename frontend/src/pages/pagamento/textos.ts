@@ -10,6 +10,11 @@ export const methodText: Record<PaymentMethod, string> = {
   card: "Cartão (maquininha)",
 };
 
+/** Modalidade do cartão do recebimento; null = registrado antes da modalidade. */
+export function cardTypeText(t: "debit" | "credit" | null | undefined): string {
+  return t === "debit" ? "débito" : t === "credit" ? "crédito" : "não especificado";
+}
+
 export const chargeStatusText: Record<PixCharge["status"], string> = {
   creating: "gerando",
   pending: "aguardando pagamento",

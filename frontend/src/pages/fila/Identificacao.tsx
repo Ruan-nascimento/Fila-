@@ -6,6 +6,7 @@ import { call, problemMessage } from "../../api/problem";
 import type { components } from "../../api/schema.gen";
 import { Button, ButtonLink, Card, ConfirmPanel, CopyButton, Field, Notice, Submit } from "../../ui/ui";
 import { useInlinePanel } from "../../ui/useInlinePanel";
+import { useStoreData } from "./dadosContexto";
 import { useForm } from "../../ui/useForm";
 
 type VisitorCreated = components["schemas"]["VisitorSessionCreated"];
@@ -75,6 +76,27 @@ function NovoVisitante({
 }) {
   const form = useForm();
   const [nick, setNick] = useState("");
+  const { ordering } = useStoreData();
+  // Loja sem entrada como visitante (ADR-0034): explica e leva à conta, sem formulário de apelido.
+  if (!ordering.visitors_enabled)
+    return (
+      <div className="grid gap-3" role="region" aria-labelledby="titulo-nick">
+        <h2 id="titulo-nick" className="m-0 text-lg font-semibold">
+          Entre com a sua conta
+        </h2>
+        <p className="m-0 text-sm text-fg-muted">
+          {shopName} não está aceitando entrada como visitante no momento. Entre ou crie uma conta para entrar
+          na fila.
+        </p>
+        <p className="m-0">
+          <ButtonLink
+            to={`/entrar?${new URLSearchParams({ voltar: globalThis.location?.pathname ?? "/" }).toString()}`}
+          >
+            Entrar ou criar conta
+          </ButtonLink>
+        </p>
+      </div>
+    );
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     const out = await form.run(() =>

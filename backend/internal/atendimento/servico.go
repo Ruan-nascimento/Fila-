@@ -43,6 +43,9 @@ type Visits interface {
 	QueueChanged(ctx context.Context, tx pgx.Tx, estID, queueID uuid.UUID) error
 	// Statuses devolve o estado de cada participação (histórico do cliente).
 	Statuses(ctx context.Context, q database.Querier, participationIDs []uuid.UUID) (map[uuid.UUID]string, error)
+	// Matching devolve as participações da loja cuja senha ou nick contém o padrão (LIKE já
+	// normalizado por platform/busca), as mais recentes primeiro, até limit (busca de comandas).
+	Matching(ctx context.Context, q database.Querier, estID uuid.UUID, pattern string, limit int) ([]uuid.UUID, error)
 }
 
 // Situações de cobrança Pix que impedem corrigir uma comanda fechada (R-CMD-12).
@@ -94,6 +97,7 @@ func (s *Service) Routes() []hs.Route {
 		{Operation: "getOrder", Method: http.MethodGet, Path: one, Grants: all, Handler: s.getOrder},
 		{Operation: "replaceOrderItems", Method: http.MethodPut, Path: one + "/items", Grants: all, Handler: s.replaceOrderItems},
 		{Operation: "markItemPerformed", Method: http.MethodPost, Path: one + "/items/{itemId}/mark-performed", Grants: staff, Handler: s.markItemPerformed},
+		{Operation: "setItemPerformedQuantity", Method: http.MethodPut, Path: one + "/items/{itemId}/performed-quantity", Grants: staff, Handler: s.setItemPerformedQuantity},
 		{Operation: "createChangeRequest", Method: http.MethodPost, Path: one + "/change-requests", Grants: visitOwner, Handler: s.createChangeRequest},
 		{Operation: "approveChangeRequest", Method: http.MethodPost, Path: one + "/change-requests/{changeRequestId}/approve", Grants: staff, Handler: s.approveChangeRequest},
 		{Operation: "rejectChangeRequest", Method: http.MethodPost, Path: one + "/change-requests/{changeRequestId}/reject", Grants: staff, Handler: s.rejectChangeRequest},
@@ -282,11 +286,12 @@ func (s *Service) done(ctx context.Context, tx pgx.Tx, o orderRow, status int) (
 	return idempotency.Result{Status: status, Body: hs.Data[OrderView]{Data: view}}, nil
 }
 
-// bumpOpenTotal recalcula o total da comanda aberta (soma dos itens não retirados) e sobe a versão.
+// bumpOpenTotal recalcula o total da comanda aberta (Σ preço × quantidade dos itens não retirados)
+// e sobe a versão.
 func bumpOpenTotal(ctx context.Context, q database.Querier, orderID uuid.UUID, now time.Time) (int64, error) {
 	var version int64
 	err := q.QueryRow(ctx, `
-		UPDATE service_order SET total_cents = (SELECT coalesce(sum(unit_price_cents), 0) FROM order_item
+		UPDATE service_order SET total_cents = (SELECT coalesce(sum(unit_price_cents * quantity), 0) FROM order_item
 		                                        WHERE order_id = $1 AND status <> 'removed'),
 		       version = version + 1, updated_at = $2
 		WHERE id = $1 RETURNING version`, orderID, now).Scan(&version)

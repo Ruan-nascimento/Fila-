@@ -154,6 +154,10 @@ func New(d Deps, register func(mux *http.ServeMux)) (*API, error) {
 	if d.Charges == nil {
 		atd.Charges = pay // correção de comanda fechada respeita o Pix ativo (R-CMD-12)
 	}
+	// Pix só é oferecido com a integração ligada (configurações da loja e página pública).
+	pixOperational := func() bool { return pay.Provider != nil }
+	est.PixOperational = pixOperational
+	ident.SetPixOperational(pixOperational)
 
 	hub := outbox.NewHub(d.Pool, d.Log)
 	stream := fluxo.New(fluxo.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Hub: hub, Auth: ident, Customers: ident,

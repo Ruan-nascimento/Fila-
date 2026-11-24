@@ -76,6 +76,11 @@ Não edite à mão: rode `python docs/tools/verificar_contrato.py --write`. Cél
 | `getEstablishment` | `GET /v1/establishments/{establishmentId}` | — | — | — | establishment_member | establishment | — | — | — |
 | `updateEstablishment` | `PATCH /v1/establishments/{establishmentId}` | — | — | — | — | establishment | — | — | T-ES-01 |
 | `listAuditEvents` | `GET /v1/establishments/{establishmentId}/audit-events` | — | — | — | — | establishment | — | — | — |
+| `listCategories` | `GET /v1/establishments/{establishmentId}/catalog-categories` | — | — | — | establishment_member | establishment | — | — | — |
+| `createCategory` | `POST /v1/establishments/{establishmentId}/catalog-categories` | — | — | — | — | establishment | — | — | T-CT-01 |
+| `updateCategory` | `PATCH /v1/establishments/{establishmentId}/catalog-categories/{categoryId}` | — | — | — | — | establishment | — | — | T-CT-02 |
+| `deactivateCategory` | `POST /v1/establishments/{establishmentId}/catalog-categories/{categoryId}/deactivate` | — | — | — | — | establishment | — | — | T-CT-03 |
+| `reactivateCategory` | `POST /v1/establishments/{establishmentId}/catalog-categories/{categoryId}/reactivate` | — | — | — | — | establishment | — | — | T-CT-04 |
 | `listDeletionRequests` | `GET /v1/establishments/{establishmentId}/deletion-requests` | — | — | — | — | establishment | — | — | — |
 | `listFinancialIssues` | `GET /v1/establishments/{establishmentId}/financial-issues` | — | — | — | — | establishment | — | — | — |
 | `resolveFinancialIssue` | `POST /v1/establishments/{establishmentId}/financial-issues/{issueId}/resolve` | — | — | — | — | establishment | — | — | T-FI-02 |
@@ -97,6 +102,7 @@ Não edite à mão: rode `python docs/tools/verificar_contrato.py --write`. Cél
 | `closeInterruptedOrder` | `POST /v1/establishments/{establishmentId}/orders/{orderId}/close-interruption` | — | — | — | — | establishment | — | — | T-O-07, T-O-08 |
 | `replaceOrderItems` | `PUT /v1/establishments/{establishmentId}/orders/{orderId}/items` | — | visit_owner | visit_owner | own_attendance | establishment | — | — | T-O-02, T-O-03 |
 | `markItemPerformed` | `POST /v1/establishments/{establishmentId}/orders/{orderId}/items/{itemId}/mark-performed` | — | — | — | own_attendance | establishment | — | — | T-O-13 |
+| `setItemPerformedQuantity` | `PUT /v1/establishments/{establishmentId}/orders/{orderId}/items/{itemId}/performed-quantity` | — | — | — | own_attendance | establishment | — | — | T-O-14 |
 | `choosePaymentMethod` | `POST /v1/establishments/{establishmentId}/orders/{orderId}/payment-method` | — | visit_owner | visit_owner | own_attendance | establishment | — | — | T-O-12 |
 | `createPixCharge` | `POST /v1/establishments/{establishmentId}/orders/{orderId}/pix-charges` | — | visit_owner | visit_owner | own_attendance | establishment | — | — | T-PX-01, T-PX-02, T-PX-03, T-PX-08 |
 | `getPixCharge` | `GET /v1/establishments/{establishmentId}/orders/{orderId}/pix-charges/{chargeId}` | — | visit_owner | visit_owner | own_attendance | establishment | — | — | — |
@@ -117,7 +123,14 @@ Não edite à mão: rode `python docs/tools/verificar_contrato.py --write`. Cél
 | `markNoShow` | `POST /v1/establishments/{establishmentId}/participations/{participationId}/no-show` | — | — | — | own_queue | establishment | — | — | T-P-06, T-O-05, T-CR-04 |
 | `startService` | `POST /v1/establishments/{establishmentId}/participations/{participationId}/start` | — | — | — | own_queue | establishment | — | — | T-P-03 |
 | `transferParticipation` | `POST /v1/establishments/{establishmentId}/participations/{participationId}/transfer` | — | — | — | — | establishment | — | — | T-P-07 |
+| `listPaymentFees` | `GET /v1/establishments/{establishmentId}/payment-fees` | — | — | — | — | establishment | — | — | — |
+| `setPaymentFee` | `PUT /v1/establishments/{establishmentId}/payment-fees/{method}` | — | — | — | — | establishment | — | — | T-FE-01 |
 | `listPendencies` | `GET /v1/establishments/{establishmentId}/pendencies` | — | — | — | — | establishment | — | — | — |
+| `listProducts` | `GET /v1/establishments/{establishmentId}/products` | — | — | — | establishment_member | establishment | — | — | — |
+| `createProduct` | `POST /v1/establishments/{establishmentId}/products` | — | — | — | — | establishment | — | — | T-PD-01 |
+| `updateProduct` | `PATCH /v1/establishments/{establishmentId}/products/{productId}` | — | — | — | — | establishment | — | — | T-PD-02 |
+| `deactivateProduct` | `POST /v1/establishments/{establishmentId}/products/{productId}/deactivate` | — | — | — | — | establishment | — | — | T-PD-03 |
+| `reactivateProduct` | `POST /v1/establishments/{establishmentId}/products/{productId}/reactivate` | — | — | — | — | establishment | — | — | T-PD-04 |
 | `listProfessionals` | `GET /v1/establishments/{establishmentId}/professionals` | — | — | — | — | establishment | — | — | — |
 | `createProfessional` | `POST /v1/establishments/{establishmentId}/professionals` | — | — | — | — | establishment | — | — | T-PR-01 |
 | `updateProfessional` | `PATCH /v1/establishments/{establishmentId}/professionals/{professionalId}` | — | — | — | — | establishment | — | — | T-PR-04 |
@@ -128,9 +141,13 @@ Não edite à mão: rode `python docs/tools/verificar_contrato.py --write`. Cél
 | `listStaffQueues` | `GET /v1/establishments/{establishmentId}/queues` | — | — | — | own_queue | establishment | — | — | — |
 | `signalAvailability` | `POST /v1/establishments/{establishmentId}/queues/{queueId}/availability-signal` | — | — | — | own_queue | — | — | — | T-Q-05 |
 | `callNext` | `POST /v1/establishments/{establishmentId}/queues/{queueId}/call-next` | — | — | — | own_queue | establishment | — | — | T-P-02 |
+| `setQueueCapacity` | `PUT /v1/establishments/{establishmentId}/queues/{queueId}/capacity` | — | — | — | — | establishment | — | — | T-Q-08 |
 | `closeQueue` | `POST /v1/establishments/{establishmentId}/queues/{queueId}/close` | — | — | — | — | establishment | — | — | T-Q-04 |
+| `closeAdmission` | `POST /v1/establishments/{establishmentId}/queues/{queueId}/close-admission` | — | — | — | own_queue | establishment | — | — | T-Q-06 |
 | `openQueue` | `POST /v1/establishments/{establishmentId}/queues/{queueId}/open` | — | — | — | — | establishment | — | — | T-Q-01, T-Q-03 |
 | `pauseQueue` | `POST /v1/establishments/{establishmentId}/queues/{queueId}/pause` | — | — | — | — | establishment | — | — | T-Q-02 |
+| `reopenAdmission` | `POST /v1/establishments/{establishmentId}/queues/{queueId}/reopen-admission` | — | — | — | own_queue | establishment | — | — | T-Q-07 |
+| `getReceiptCosts` | `GET /v1/establishments/{establishmentId}/receipt-costs` | — | — | — | — | establishment | — | — | — |
 | `listCustomerRewards` | `GET /v1/establishments/{establishmentId}/reward-catalog` | — | — | self | — | — | — | — | — |
 | `listRewardReservations` | `GET /v1/establishments/{establishmentId}/reward-reservations` | — | — | — | establishment_member | establishment | — | — | — |
 | `createRewardReservation` | `POST /v1/establishments/{establishmentId}/reward-reservations` | — | — | self | — | — | — | — | T-RW-01 |
@@ -147,6 +164,10 @@ Não edite à mão: rode `python docs/tools/verificar_contrato.py --write`. Cél
 | `deactivateService` | `POST /v1/establishments/{establishmentId}/services/{serviceId}/deactivate` | — | — | — | — | establishment | — | — | T-SV-03 |
 | `setServiceProfessionals` | `PUT /v1/establishments/{establishmentId}/services/{serviceId}/professionals` | — | — | — | — | establishment | — | — | T-SV-05 |
 | `reactivateService` | `POST /v1/establishments/{establishmentId}/services/{serviceId}/reactivate` | — | — | — | — | establishment | — | — | T-SV-04 |
+| `getEstablishmentSettings` | `GET /v1/establishments/{establishmentId}/settings` | — | — | — | — | establishment | — | — | — |
+| `updateCatalogSettings` | `PATCH /v1/establishments/{establishmentId}/settings/catalog` | — | — | — | — | establishment | — | — | T-ST-01 |
+| `updatePaymentSettings` | `PATCH /v1/establishments/{establishmentId}/settings/payments` | — | — | — | — | establishment | — | — | T-ST-03 |
+| `updateQueueSettings` | `PATCH /v1/establishments/{establishmentId}/settings/queue` | — | — | — | — | establishment | — | — | T-ST-02 |
 | `createVisitorSession` | `POST /v1/establishments/{establishmentId}/visitor-sessions` | sim | — | — | — | — | — | — | T-VS-01 |
 | `recoverVisitorSession` | `POST /v1/establishments/{establishmentId}/visitor-sessions/recover` | sim | — | — | — | — | — | — | T-VS-02 |
 | `getMyProfile` | `GET /v1/me` | — | — | self | self | self | — | — | — |
@@ -163,6 +184,8 @@ Não edite à mão: rode `python docs/tools/verificar_contrato.py --write`. Cél
 | `listMyVisits` | `GET /v1/my-visits` | — | self | self | — | — | — | — | — |
 | `getPublicConfig` | `GET /v1/public/config` | sim | — | — | — | — | — | — | — |
 | `listPublicEstablishments` | `GET /v1/public/establishments` | sim | — | — | — | — | — | — | — |
+| `listPublicCategories` | `GET /v1/public/establishments/{establishmentId}/catalog-categories` | sim | — | — | — | — | — | — | — |
+| `listPublicProducts` | `GET /v1/public/establishments/{establishmentId}/products` | sim | — | — | — | — | — | — | — |
 | `listPublicQueues` | `GET /v1/public/establishments/{establishmentId}/queues` | sim | — | — | — | — | — | — | — |
 | `listPublicServices` | `GET /v1/public/establishments/{establishmentId}/services` | sim | — | — | — | — | — | — | — |
 | `getPublicMedia` | `GET /v1/public/media/{assetId}/{size}` | sim | — | — | — | — | — | — | — |

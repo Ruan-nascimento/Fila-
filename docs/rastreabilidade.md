@@ -54,7 +54,7 @@ motivo. Teste citado aqui não quer dizer aprovado: o resultado de cada execuç�
 | R-FILA-07 | C-EST-03, C-EST-07, C-SEG-04 | automatizado |
 | R-FILA-08 | C-EST-05 | automatizado |
 | R-FILA-09 | C-FILA-09 | automatizado |
-| R-FILA-10 | C-FILA-09 | automatizado |
+| R-FILA-10 | C-ENT-02, C-FILA-09 | automatizado |
 | R-FILA-11 | C-FILA-09 | automatizado |
 | R-FILA-12 | C-FILA-10 | automatizado |
 | R-FILA-13 | C-FILA-11, C-FILA-12 | automatizado |
@@ -65,18 +65,18 @@ motivo. Teste citado aqui não quer dizer aprovado: o resultado de cada execuç�
 | R-FILA-18 | C-FILA-03 | automatizado |
 | R-FILA-19 | C-FILA-15 | automatizado |
 | R-CMD-01 | C-EST-02 | automatizado |
-| R-CMD-02 | C-CMD-01, C-FILA-01 | automatizado |
+| R-CMD-02 | C-CMD-01, C-FILA-01, C-QTD-01 | automatizado |
 | R-CMD-03 | C-CMD-02, C-FILA-05 | automatizado |
 | R-CMD-04 | C-CMD-03 | automatizado |
 | R-CMD-05 | C-CMD-02, C-EST-06 | automatizado |
 | R-CMD-06 | C-CMD-03 | automatizado |
-| R-CMD-07 | C-CMD-04 | automatizado |
+| R-CMD-07 | C-CMD-04, C-QTD-03 | automatizado |
 | R-CMD-08 | C-CMD-04 | automatizado |
 | R-CMD-09 | C-CMD-05 | automatizado |
 | R-CMD-10 | C-CMD-06, C-EST-06, C-FILA-13 | automatizado |
 | R-CMD-11 | C-ATD-01, C-ATD-02 | automatizado |
 | R-CMD-12 | C-ATD-05 | automatizado |
-| R-CMD-13 | C-ATD-03, C-ATD-04 | automatizado |
+| R-CMD-13 | C-ATD-03, C-ATD-04, C-QTD-02 | automatizado |
 | R-CMD-14 | C-ATD-04, C-FILA-10 | automatizado |
 | R-CMD-15 | C-CMD-07 | automatizado |
 | R-PAG-01 | C-PAG-01, C-PAG-05 | automatizado |
@@ -144,8 +144,23 @@ motivo. Teste citado aqui não quer dizer aprovado: o resultado de cada execuç�
 | R-SEG-09 | C-OPS-01, C-SSE-07 | automatizado |
 | R-SEG-10 | C-CMD-07, C-SEG-11 | automatizado |
 | R-SEG-11 | C-EXC-03, C-FID-08, C-OPS-02, C-OPS-03 | automatizado |
+| R-QTD-01 | C-QTD-01, C-QTD-03 | automatizado |
+| R-QTD-02 | C-IND-01, C-QTD-01 | automatizado |
+| R-QTD-03 | C-QTD-02 | automatizado |
+| R-QTD-04 | C-QTD-02 | automatizado |
+| R-PROD-01 | C-PROD-01 | automatizado |
+| R-PROD-02 | C-PROD-01 | automatizado |
+| R-TAXA-01 | C-TAXA-01 | automatizado |
+| R-TAXA-02 | C-IND-01, C-TAXA-01 | automatizado |
+| R-ENT-01 | C-ENT-01 | automatizado |
+| R-ENT-02 | C-ENT-01 | automatizado |
+| R-ENT-03 | C-ENT-01 | automatizado |
+| R-ENT-04 | C-ENT-02 | automatizado |
+| R-LOJA-01 | C-LOJA-01 | automatizado |
+| R-BUSCA-01 | C-BUSCA-01 | automatizado |
+| R-DESK-01 | C-DESK-01 (sem teste) | sem teste |
 
-Resumo: automatizado: 130 · parcial: 0 · sem teste: 1 · sem cenário: 0 · automatizado (estrutural): 4
+Resumo: automatizado: 144 · parcial: 0 · sem teste: 2 · sem cenário: 0 · automatizado (estrutural): 4
 
 ## 2. Cenários e testes
 
@@ -276,6 +291,17 @@ Resumo: automatizado: 130 · parcial: 0 · sem teste: 1 · sem cenário: 0 · au
 | C-CFG-06 — Foto profissional: publicação explícita e retirada pelo dono | `backend/internal/api/midia_test.go: TestProfessionalPhotoPublication`<br>`frontend/e2e/configuracoes.spec.ts: profissional publica a foto pública; ela aparece na escolha de profissional` |
 | C-CFG-07 — Identidade da loja: catálogo, versão, escopo e público sem dado privado | `backend/internal/api/midia_test.go: TestMyProfileSettings`<br>`backend/internal/api/midia_test.go: TestStoreBranding`<br>`frontend/e2e/configuracoes.spec.ts: dono muda paleta, logo e informações; visitante anônimo vê a identidade nova`<br>`frontend/src/features/configuracoes.test.tsx: catálogo fechado de 16 identificadores, iguais ao contrato, padrão purple` |
 | C-CFG-08 — QR e entrada sem conta | `backend/internal/api/google_test.go: TestGoogleDisabledKeepsPasswordLogin`<br>`frontend/e2e/configuracoes.spec.ts: QR sem conta: identificação por apelido, sem visita automática; cliente logado não é desconectado`<br>`frontend/src/features/configuracoes.test.tsx: três destinos tipados, montados com URL/URLSearchParams, sem segredo` |
+| C-QTD-01 — Três cortes e uma barba numa única participação | `backend/internal/api/melhorias_test.go: TestQuantitiesInOneParticipation` |
+| C-QTD-02 — Dois de três cortes, interrupção revisada e pontos por unidade | `backend/internal/api/melhorias_test.go: TestPartialExecutionReviewAndPoints` |
+| C-QTD-03 — Pedido de mudança com quantidade | `backend/internal/api/melhorias_test.go: TestChangeRequestWithQuantities` |
+| C-PROD-01 — Produto como complemento | `backend/internal/api/melhorias_test.go: TestProductsAsComplement` |
+| C-ENT-01 — Capacidade, lotação, entrada fechada e transferência | `backend/internal/api/melhorias_test.go: TestAdmissionAndCapacity` |
+| C-ENT-02 — Tolerância configurável | `backend/internal/api/melhorias_test.go: TestConfigurableTolerance` |
+| C-LOJA-01 — Configurações por seção | `backend/internal/api/melhorias_test.go: TestStoreSettingsSections` |
+| C-TAXA-01 — Custos de recebimento | `backend/internal/api/melhorias_test.go: TestReceiptFees` |
+| C-IND-01 — Indicadores com quantidade, produtos e custos | `backend/internal/api/melhorias_test.go: TestAnalyticsWithQuantitiesProductsAndFees` |
+| C-BUSCA-01 — Busca de comandas no servidor | `backend/internal/api/melhorias_test.go: TestOrderSearchOnServer` |
+| C-DESK-01 — Segundo plano no programa do dono | **nenhum** |
 
 ## 3. Cenários sem teste automatizado
 
@@ -285,3 +311,4 @@ Resumo: automatizado: 130 · parcial: 0 · sem teste: 1 · sem cenário: 0 · au
 - C-DON-03 — Escopo por conta, abas e migração (tipo declarado: automatizado (TestOwnerSlotIsPerAccount, TestOwnerSameCookieAndChallengeBinding, TestOwnerSlotLifecycle, TestUpgradeKeepsOneOwnerSessionPerAccount))
 - C-DON-04 — Dashboard só com instalação autorizada, sessão de dono e vínculo com a loja (tipo declarado: automatizado (TestDesktopActivationAndProof, TestDesktopStoreScope, desktop-dono/testes/janela.mjs dashboard))
 - C-DON-05 — Cálculos reconciliam com os registros (tipo declarado: automatizado (TestAnalyticsCalculations, desktop-dono/dashboard/src/dashboard.test.tsx))
+- C-DESK-01 — Segundo plano no programa do dono (tipo declarado: manual + roteiro automatizado (desktop-dono/testes/segundo-plano.sh))

@@ -24,13 +24,11 @@ import (
 
 // Estados da participação (ParticipationStatus).
 const (
-	Waiting     = "waiting"
-	Called      = "called"
-	InService   = "in_service"
-	Cancelled   = "cancelled"
-	NoShow      = "no_show"
-	Tolerance   = 10 * time.Minute // tolerância fixa após a chamada (R-FILA-09)
-	maxServices = 10
+	Waiting   = "waiting"
+	Called    = "called"
+	InService = "in_service"
+	Cancelled = "cancelled"
+	NoShow    = "no_show"
 )
 
 // activeStatuses ocupam a fila; chairStatuses ocupam a cadeira do profissional.
@@ -79,24 +77,27 @@ type row struct {
 	TicketCode      string
 	CalledAt        *time.Time
 	ToleranceEndsAt *time.Time
-	StartedAt       *time.Time
-	FinishedAt      *time.Time
-	EndReason       *string
-	Version         int64
-	CreatedAt       time.Time
-	LateNoticeAt    *time.Time
+	// ToleranceMinutes: tolerância aplicada na chamada (configuração da loja naquele momento).
+	ToleranceMinutes *int
+	StartedAt        *time.Time
+	FinishedAt       *time.Time
+	EndReason        *string
+	Version          int64
+	CreatedAt        time.Time
+	LateNoticeAt     *time.Time
 }
 
 const rowSelect = `
 	SELECT id, establishment_id, queue_id, order_id, account_id, visitor_id, nick, loyalty_eligible, status, position,
-	       ticket_code, called_at, tolerance_ends_at, started_at, finished_at, end_reason, version, created_at, late_notice_at
+	       ticket_code, called_at, tolerance_ends_at, started_at, finished_at, end_reason, version, created_at, late_notice_at,
+	       tolerance_minutes
 	FROM participation`
 
 func scanRow(r pgx.Row) (row, error) {
 	var p row
 	err := r.Scan(&p.ID, &p.EstablishmentID, &p.QueueID, &p.OrderID, &p.AccountID, &p.VisitorID, &p.Nick, &p.LoyaltyEligible,
 		&p.Status, &p.Position, &p.TicketCode, &p.CalledAt, &p.ToleranceEndsAt, &p.StartedAt, &p.FinishedAt, &p.EndReason,
-		&p.Version, &p.CreatedAt, &p.LateNoticeAt)
+		&p.Version, &p.CreatedAt, &p.LateNoticeAt, &p.ToleranceMinutes)
 	return p, err
 }
 

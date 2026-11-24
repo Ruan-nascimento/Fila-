@@ -15,11 +15,16 @@ tauri-build = { version = "=2.7.4", features = [] }
 url = "2"
 
 [dependencies]
-tauri = { version = "=2.12.5", features = [] }
+# tray-icon: ícone na bandeja para o segundo plano (ADR-0037).
+tauri = { version = "=2.12.5", features = ["tray-icon"] }
 tauri-plugin-opener = "=2.7.2"
 # Notificações nativas do sistema para a gestão (troca window.Notification da página pela do
 # sistema). A página remota só recebe as 3 permissões de notificação (capability em lib.rs).
 tauri-plugin-notification = "=2.8.1"
+# Uma instância só: abrir de novo traz a janela existente (sem duas fontes de avisos duplicados).
+tauri-plugin-single-instance = "=2.5.5"
+# Mensagem nativa da primeira ativação do segundo plano (chamada só pelo lado nativo).
+tauri-plugin-dialog = "=2.8.4"
 serde = { version = "1", features = ["derive"] }
 # Só para conferir se o painel responde antes de abri-lo (TLS com raízes embutidas, sem OpenSSL).
 ureq = "=3.5.1"

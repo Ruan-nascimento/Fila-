@@ -78,15 +78,17 @@ var tableOwners = map[string][]string{
 	"identidade": {"account", "account_token", "account_session", "invite", "visitor", "visitor_browser", "visitor_credential",
 		"owner_session_slot", "owner_session_challenge", "desktop_activation_code", "desktop_installation", "desktop_link_ticket",
 		"desktop_binding", "desktop_proof_seen", "external_identity", "oidc_transaction"},
-	"midia":                {"media_asset"},
-	"estabelecimento":      {"establishment", "establishment_slug_alias", "professional", "staff_membership", "queue"},
-	"catalogo":             {"service", "service_professional", "service_revision"},
-	"fila":                 {"participation", "participation_transfer", "queue_counter"},
-	"atendimento":          {"service_order", "order_item", "change_request", "change_request_addition", "order_adjustment"},
-	"auditoria":            {"audit_event"},
-	"exclusao":             {"deletion_request", "deletion_request_block"},
-	"fidelidade":           {"loyalty_program", "loyalty_account", "loyalty_ledger", "reward", "reward_stock_movement", "reward_reservation"},
-	"pagamento":            {"pix_charge", "receipt", "receipt_conferral", "refund", "financial_issue", "provider_event"},
+	"midia":           {"media_asset"},
+	"estabelecimento": {"establishment", "establishment_slug_alias", "professional", "staff_membership", "queue", "establishment_settings"},
+	"catalogo":        {"service", "service_professional", "service_revision", "catalog_category", "product", "product_revision"},
+	"fila":            {"participation", "participation_transfer", "queue_counter"},
+	"atendimento": {"service_order", "order_item", "change_request", "change_request_addition", "order_adjustment",
+		"order_item_quantity_change", "change_request_item_quantity"},
+	"auditoria":  {"audit_event"},
+	"exclusao":   {"deletion_request", "deletion_request_block"},
+	"fidelidade": {"loyalty_program", "loyalty_account", "loyalty_ledger", "reward", "reward_stock_movement", "reward_reservation"},
+	"pagamento": {"pix_charge", "receipt", "receipt_conferral", "refund", "financial_issue", "provider_event",
+		"payment_fee_config", "receipt_fee"},
 	"platform/ratelimit":   {"rate_limit"},
 	"platform/idempotency": {"idempotency_record"},
 	"platform/mail":        {"mail_outbox"},
@@ -99,7 +101,7 @@ var tableOwners = map[string][]string{
 // (TestAnalyticsIsReadOnly) e nenhuma tabela de sessão, credencial ou dado pessoal de contato.
 var analyticsReadTables = []string{"establishment", "professional", "queue", "service", "participation",
 	"participation_transfer", "service_order", "order_item", "order_adjustment", "receipt", "refund",
-	"financial_issue", "pix_charge", "loyalty_program", "loyalty_ledger", "reward", "reward_reservation"}
+	"financial_issue", "pix_charge", "loyalty_program", "loyalty_ledger", "reward", "reward_reservation", "receipt_fee", "product"}
 
 // Pacotes que podem tocar tabelas da plataforma para manutenção técnica.
 var maintenanceTables = map[string][]string{

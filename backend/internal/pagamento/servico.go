@@ -103,6 +103,12 @@ func (s *Service) Routes() []hs.Route {
 			Grants: owner, Handler: s.listFinancialIssues},
 		{Operation: "resolveFinancialIssue", Method: http.MethodPost,
 			Path: "/v1/establishments/{establishmentId}/financial-issues/{issueId}/resolve", Grants: owner, Handler: s.resolveFinancialIssue},
+		{Operation: "listPaymentFees", Method: http.MethodGet, Path: "/v1/establishments/{establishmentId}/payment-fees",
+			Grants: owner, Handler: s.listPaymentFees},
+		{Operation: "setPaymentFee", Method: http.MethodPut, Path: "/v1/establishments/{establishmentId}/payment-fees/{method}",
+			Grants: owner, Handler: s.setPaymentFee},
+		{Operation: "getReceiptCosts", Method: http.MethodGet, Path: "/v1/establishments/{establishmentId}/receipt-costs",
+			Grants: owner, Handler: s.getReceiptCosts},
 		{Operation: "receiveAbacatePayWebhook", Method: http.MethodPost, Path: "/v1/webhooks/abacatepay",
 			Grants: []hs.Grant{{Actor: "provider", Scope: "provider_signature"}}, Handler: s.receiveAbacatePayWebhook},
 	}

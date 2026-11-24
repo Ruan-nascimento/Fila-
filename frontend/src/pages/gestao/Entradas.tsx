@@ -17,6 +17,8 @@ import { Avatar, Badge, Button, Card, Choice, SelectField, Submit, TextArea } fr
 import { cx } from "../../ui/cx";
 import { useInlinePanel } from "../../ui/useInlinePanel";
 import { Atendimento } from "./Atendimento";
+import { CampoBusca } from "../../features/catalogo/CampoBusca";
+import { matches } from "../../features/catalogo/busca";
 import { useCommand } from "./comando";
 import { CommandError, type StaffContext } from "./comum";
 
@@ -46,6 +48,7 @@ export function Entradas({
   onDone: () => Promise<void>;
 }) {
   const cmd = useCommand();
+  const [busca, setBusca] = useState("");
   const canOperate = ctx.isOwner || ctx.professionalId === queue.professional.id;
   const current = queue.entries.find((e) => e.status === "called" || e.status === "in_service");
   const waiting = queue.entries.filter((e) => e.status === "waiting");
@@ -172,24 +175,49 @@ export function Entradas({
               Ninguém na fila.
             </p>
           ) : (
-            <ol className="m-0 grid list-none gap-2 p-0">
-              {waiting.map((e, i) => (
-                <Aguardando
-                  key={e.participation_id}
-                  ctx={ctx}
-                  entry={e}
-                  position={i + 1}
-                  queue={queue}
-                  queues={queues}
-                  canOperate={canOperate}
-                  onDone={onDone}
-                  busyCmd={cmd.busy !== null}
-                  canUp={i > 0 || (calledNow && canSwapCall)}
-                  canDown={i < waiting.length - 1}
-                  onMove={(d) => void mover(e, d)}
-                />
-              ))}
-            </ol>
+            <>
+              {waiting.length > 6 && (
+                <div className="grid gap-1">
+                  <CampoBusca
+                    label="Localizar na fila"
+                    placeholder="Localizar por senha ou nome"
+                    value={busca}
+                    onChange={setBusca}
+                  />
+                  {busca.trim() && (
+                    <p className="m-0 text-sm text-fg-muted" aria-live="polite">
+                      {(() => {
+                        const n = waiting.filter((e) => matches(`${e.ticket_code} ${e.nick}`, busca)).length;
+                        return n === 0
+                          ? "Ninguém encontrado. A ordem da fila não muda."
+                          : `${n} encontrado${n === 1 ? "" : "s"}, na posição real da fila.`;
+                      })()}
+                    </p>
+                  )}
+                </div>
+              )}
+              <ol className="m-0 grid list-none gap-2 p-0">
+                {waiting.map((e, i) =>
+                  // Localizar só esconde quem não combina; a posição mostrada é sempre a real.
+                  !busca.trim() || matches(`${e.ticket_code} ${e.nick}`, busca) ? (
+                    <Aguardando
+                      key={e.participation_id}
+                      ctx={ctx}
+                      entry={e}
+                      position={i + 1}
+                      queue={queue}
+                      queues={queues}
+                      canOperate={canOperate}
+                      onDone={onDone}
+                      busyCmd={cmd.busy !== null}
+                      canUp={i > 0 || (calledNow && canSwapCall)}
+                      canDown={i < waiting.length - 1}
+                      onMove={(d) => void mover(e, d)}
+                    />
+                  ) : null,
+                )}
+              </ol>
+            </>
           )}
         </section>
       </div>

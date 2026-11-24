@@ -358,6 +358,11 @@ func (s *Service) publicEstablishment(w http.ResponseWriter, r *http.Request) er
 	if logo != nil {
 		view.Logo = logo.PublicRef()
 	}
+	st, err := estabelecimento.LoadSettings(r.Context(), s.pool, e.ID)
+	if err != nil {
+		return err
+	}
+	view.Ordering = estabelecimento.PublicOrderingOf(st, s.pixOperational != nil && s.pixOperational())
 	// Dados públicos: cache curto (troca de logo/paleta aparece em até 1 minuto).
 	w.Header().Set("Cache-Control", "public, max-age=60")
 	httpserver.WriteJSON(w, http.StatusOK, httpserver.Data[publicEstablishmentView]{Data: view})

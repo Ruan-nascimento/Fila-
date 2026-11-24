@@ -25,6 +25,7 @@ var breakdowns = map[string]breakdownDef{
 	"outcomes":        {inapplicable: []string{"method"}, run: bdOutcomes},
 	"professionals":   {inapplicable: []string{"method"}, run: bdProfessionals},
 	"services":        {inapplicable: []string{"method"}, run: bdServices},
+	"products":        {inapplicable: []string{"method", "service_id"}, run: bdProducts},
 	"peak_hours":      {inapplicable: []string{"method"}, run: bdPeakHours},
 	"wait_bands":      {inapplicable: []string{"method"}, run: bdWaitBands},
 	"pending":         {inapplicable: []string{"professional_id", "service_id", "method"}, run: bdPending},
@@ -214,8 +215,8 @@ func bdProfessionals(ctx context.Context, q database.Querier, sc *scope) (any, e
 		  (SELECT count(*) FROM participation x WHERE x.queue_id = qu.id AND x.status = 'completed' AND x.finished_at >= $2 AND x.finished_at < $3
 		     AND x.finished_at >= x.started_at
 		     AND ($4::uuid IS NULL OR EXISTS (SELECT 1 FROM order_item i WHERE i.order_id = x.order_id AND i.service_id = $4 AND i.status <> 'removed'))),
-		  (SELECT count(*) FROM order_item i JOIN service_order o ON o.id = i.order_id
-		     WHERE o.establishment_id = $1 AND o.professional_id = pr.id AND i.status = 'performed'
+		  (SELECT coalesce(sum(i.performed_quantity), 0) FROM order_item i JOIN service_order o ON o.id = i.order_id
+		     WHERE o.establishment_id = $1 AND o.professional_id = pr.id AND i.status = 'performed' AND i.kind = 'service'
 		       AND i.performed_at >= $2 AND i.performed_at < $3 AND ($4::uuid IS NULL OR i.service_id = $4)),
 		  (SELECT count(*) FROM participation_transfer t WHERE t.to_queue_id = qu.id AND t.at >= $2 AND t.at < $3)
 		FROM professional pr JOIN queue qu ON qu.professional_id = pr.id
@@ -235,8 +236,10 @@ func bdProfessionals(ctx context.Context, q database.Querier, sc *scope) (any, e
 	})
 }
 
-// Serviços: solicitados (itens incluídos, por data de inclusão, sem os removidos) e realizados
-// (por data de realização). Valor = preço registrado no item cobrado, não dinheiro recebido.
+// Serviços: UNIDADES solicitadas (quantidade das linhas incluídas, por data de inclusão, sem as
+// removidas) e realizadas (por data de realização). Uma comanda com três cortes conta 3 unidades
+// e UMA participação. Valor = preço registrado × unidades cobradas, não dinheiro recebido.
+// Linhas anteriores à versão 1.0.0 valem quantidade 1.
 type serviceRow struct {
 	ServiceID          uuid.UUID `json:"service_id"`
 	Name               string    `json:"name"`
@@ -250,11 +253,11 @@ func bdServices(ctx context.Context, q database.Querier, sc *scope) (any, error)
 	p := sc.q.Period
 	rows, err := q.Query(ctx, `
 		SELECT i.service_id, (array_agg(i.name ORDER BY i.added_at DESC))[1],
-		  count(*) FILTER (WHERE i.status <> 'removed' AND i.added_at >= $2 AND i.added_at < $3),
-		  count(*) FILTER (WHERE i.status = 'performed' AND i.performed_at >= $2 AND i.performed_at < $3),
-		  coalesce(sum(i.unit_price_cents) FILTER (WHERE i.status = 'performed' AND i.charged AND i.performed_at >= $2 AND i.performed_at < $3), 0)::bigint
+		  coalesce(sum(i.quantity) FILTER (WHERE i.status <> 'removed' AND i.added_at >= $2 AND i.added_at < $3), 0)::bigint,
+		  coalesce(sum(i.performed_quantity) FILTER (WHERE i.status = 'performed' AND i.performed_at >= $2 AND i.performed_at < $3), 0)::bigint,
+		  coalesce(sum(i.unit_price_cents * i.charged_quantity) FILTER (WHERE i.status = 'performed' AND i.charged AND i.performed_at >= $2 AND i.performed_at < $3), 0)::bigint
 		FROM order_item i JOIN service_order o ON o.establishment_id = i.establishment_id AND o.id = i.order_id
-		WHERE i.establishment_id = $1
+		WHERE i.establishment_id = $1 AND i.kind = 'service'
 		  AND ((i.added_at >= $2 AND i.added_at < $3) OR (i.performed_at >= $2 AND i.performed_at < $3))
 		  AND ($4::uuid IS NULL OR o.professional_id = $4) AND ($5::uuid IS NULL OR i.service_id = $5)
 		GROUP BY i.service_id
@@ -266,6 +269,40 @@ func bdServices(ctx context.Context, q database.Querier, sc *scope) (any, error)
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (serviceRow, error) {
 		var x serviceRow
 		err := r.Scan(&x.ServiceID, &x.Name, &x.Requested, &x.Performed, &x.PerformedValue)
+		return x, err
+	})
+}
+
+// Produtos (ADR-0032): unidades pedidas e entregues e valor das unidades cobradas. Produtos não
+// existiam antes da versão 1.0.0: períodos anteriores ficam vazios (nada é inventado).
+type productRow struct {
+	ProductID      uuid.UUID `json:"product_id"`
+	Name           string    `json:"name"`
+	Requested      int64     `json:"requested"`
+	Delivered      int64     `json:"delivered"`
+	DeliveredValue int64     `json:"delivered_value_cents"`
+}
+
+func bdProducts(ctx context.Context, q database.Querier, sc *scope) (any, error) {
+	p := sc.q.Period
+	rows, err := q.Query(ctx, `
+		SELECT i.product_id, (array_agg(i.name ORDER BY i.added_at DESC))[1],
+		  coalesce(sum(i.quantity) FILTER (WHERE i.status <> 'removed' AND i.added_at >= $2 AND i.added_at < $3), 0)::bigint,
+		  coalesce(sum(i.performed_quantity) FILTER (WHERE i.status = 'performed' AND i.performed_at >= $2 AND i.performed_at < $3), 0)::bigint,
+		  coalesce(sum(i.unit_price_cents * i.charged_quantity) FILTER (WHERE i.status = 'performed' AND i.charged AND i.performed_at >= $2 AND i.performed_at < $3), 0)::bigint
+		FROM order_item i JOIN service_order o ON o.establishment_id = i.establishment_id AND o.id = i.order_id
+		WHERE i.establishment_id = $1 AND i.kind = 'product'
+		  AND ((i.added_at >= $2 AND i.added_at < $3) OR (i.performed_at >= $2 AND i.performed_at < $3))
+		  AND ($4::uuid IS NULL OR o.professional_id = $4)
+		GROUP BY i.product_id
+		ORDER BY 4 DESC, 3 DESC, 2, 1`,
+		sc.est, p.Start, p.EffectiveEnd, sc.q.Filters.ProfessionalID)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (productRow, error) {
+		var x productRow
+		err := r.Scan(&x.ProductID, &x.Name, &x.Requested, &x.Delivered, &x.DeliveredValue)
 		return x, err
 	})
 }

@@ -9,6 +9,8 @@ import type { Notificacao } from "./regras";
 export type Permissao = "granted" | "denied" | "default" | "unsupported";
 
 const PREF = "fila-notificacoes";
+const SOM = "fila-notificacoes-som";
+const DISCRETO = "fila-notificacoes-discreto";
 const DISPENSADO = "fila-notificacoes-dispensado";
 const SW = "/sw-notificacoes.js";
 
@@ -36,6 +38,58 @@ export function definirLigadas(on: boolean): void {
   } catch {
     // sem armazenamento: só nesta página
   }
+}
+
+/** Som dos avisos neste aparelho (padrão: ligado). No programa, a bandeja controla (ADR-0037). */
+export function somLigado(): boolean {
+  return storage()?.getItem(SOM) !== "off";
+}
+
+export function definirSom(on: boolean): void {
+  try {
+    storage()?.setItem(SOM, on ? "on" : "off");
+  } catch {
+    // sem armazenamento: só nesta página
+  }
+}
+
+/** Conteúdo discreto: a notificação do sistema não mostra nomes nem valores (tela bloqueada). */
+export function discretoLigado(): boolean {
+  return storage()?.getItem(DISCRETO) === "on";
+}
+
+export function definirDiscreto(on: boolean): void {
+  try {
+    storage()?.setItem(DISCRETO, on ? "on" : "off");
+  } catch {
+    // sem armazenamento: só nesta página
+  }
+}
+
+/** Página aberta dentro do programa Fila Gestão (dica de apresentação injetada pelo programa). */
+export function noProgramaDesktop(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    (window as unknown as { __GESTAO_DESKTOP__?: boolean }).__GESTAO_DESKTOP__ === true
+  );
+}
+
+/**
+ * Ponte mínima com o programa: o menu da bandeja liga/desliga o som chamando esta função pela
+ * própria janela (o programa avalia o script; a página não ganha acesso a comando nenhum).
+ */
+export function instalarPonteDesktop(onSom: (on: boolean) => void): () => void {
+  if (!noProgramaDesktop()) return () => {};
+  const w = window as unknown as { __filaDesktop?: { definirSom: (on: boolean) => void } };
+  w.__filaDesktop = {
+    definirSom: (on: boolean) => {
+      definirSom(on);
+      onSom(on);
+    },
+  };
+  return () => {
+    delete w.__filaDesktop;
+  };
 }
 
 /** "Agora não" no convite: não insiste neste aparelho (a pessoa ainda pode ligar pelo sino). */
@@ -94,15 +148,18 @@ export async function mostrarNoSistema(
   onClick?: () => void,
 ): Promise<void> {
   if (!ligadas()) return;
+  // Discreto: nada de nome, serviço ou valor na tela bloqueada; detalhes ao abrir o Fila.
+  const discreto = discretoLigado();
   const opts: NotificationOptions & { renotify?: boolean } = {
-    body: n.body,
+    body: discreto ? "Há uma atualização. Abra o Fila para ver." : n.body,
     tag: n.group ?? n.id,
     data: { url },
+    silent: !somLigado(),
     ...(icon ? { icon } : {}),
     ...(n.important ? { requireInteraction: true, renotify: true } : {}),
   };
   try {
-    const x = new window.Notification(n.title, opts);
+    const x = new window.Notification(discreto ? "Fila" : n.title, opts);
     x.onclick = () => {
       window.focus();
       x.close();
@@ -125,6 +182,7 @@ let audio: AudioContext | null = null;
 
 /** Som curto e vibração para o que é importante (vez do cliente, aviso de atraso). */
 export function alertar(important: boolean): void {
+  if (!somLigado()) return;
   try {
     navigator.vibrate?.(important ? [200, 100, 200] : 120);
   } catch {

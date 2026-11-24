@@ -1,20 +1,24 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Check, CircleCheck, Pause, Pencil, X } from "lucide-react";
+import { Check, CircleCheck, Package, Pause, Pencil, X } from "lucide-react";
 import { api } from "../../api/client";
 import { call, problemMessage } from "../../api/problem";
 import type { components } from "../../api/schema.gen";
 import { formatCents } from "../../money";
 import { useStreamMessages } from "../../stream/context";
-import { Button, Choice, ChoiceGroup, LoadError, Loading, Notice, Submit, TextArea } from "../../ui/ui";
+import { Button, Choice, LoadError, Loading, Notice, Submit, TextArea } from "../../ui/ui";
 import { cx } from "../../ui/cx";
 import { useInlinePanel } from "../../ui/useInlinePanel";
 import { ItensDaComanda } from "../comanda/comanda";
-import { describeRequest, liveItems, reportedText, type Order } from "../comanda/textos";
+import { describeRequest, liveItems, reportedText, unitsText, type Order } from "../comanda/textos";
+import { Quantidade } from "../../features/catalogo/Quantidade";
+import { SeletorItens } from "../fila/SeletorItens";
 import { useCommand } from "./comando";
 import { CommandError, type StaffContext } from "./comum";
 
 type Entry = components["schemas"]["StaffQueue"]["entries"][number];
 type Service = components["schemas"]["Service"];
+type Product = components["schemas"]["Product"];
+type Category = components["schemas"]["CatalogCategory"];
 type Mode = "editar" | "concluir" | "interromper" | "recusar";
 
 /**
@@ -114,12 +118,18 @@ export function Atendimento({
     } else if (out.problem?.status === 409) await onConflict();
   }
 
-  async function marcar(itemId: string) {
-    const out = await cmd.run(`realizado:${itemId}:${o.version}`, (key) =>
-      api.POST("/v1/establishments/{establishmentId}/orders/{orderId}/items/{itemId}/mark-performed", {
-        params: { path: { ...path, itemId }, header: { "Idempotency-Key": key } },
-        body: { expected_version: o.version },
-      }),
+  /** Registra unidades feitas/entregues em valor ABSOLUTO (repetir não soma): T-O-13/T-O-14. */
+  async function marcar(itemId: string, units?: number) {
+    const out = await cmd.run(`realizado:${itemId}:${o.version}:${units ?? "todas"}`, (key) =>
+      units === undefined
+        ? api.POST("/v1/establishments/{establishmentId}/orders/{orderId}/items/{itemId}/mark-performed", {
+            params: { path: { ...path, itemId }, header: { "Idempotency-Key": key } },
+            body: { expected_version: o.version },
+          })
+        : api.PUT("/v1/establishments/{establishmentId}/orders/{orderId}/items/{itemId}/performed-quantity", {
+            params: { path: { ...path, itemId }, header: { "Idempotency-Key": key } },
+            body: { expected_version: o.version, performed_quantity: units },
+          }),
     );
     if (out.ok) setOrder(out.data.data);
     else if (out.problem?.status === 409) await onConflict();
@@ -163,22 +173,53 @@ export function Atendimento({
         </div>
       )}
       {o.status === "open" && inService && toMark.length > 0 && (
-        <div className="grid gap-2" role="group" aria-label="Marcar serviços realizados">
-          <p className="m-0 text-sm font-semibold">Marcar como realizado</p>
-          <div className="flex flex-wrap gap-2">
-            {toMark.map((i) => (
-              <Button
-                key={i.id}
-                variant="secondary"
-                icon={CircleCheck}
-                disabled={cmd.busy !== null}
-                aria-label={`Marcar ${i.name} como realizado`}
-                onClick={() => void marcar(i.id)}
-              >
-                {i.name}
-              </Button>
-            ))}
-          </div>
+        <div className="grid gap-2" role="group" aria-label="Registrar o que foi feito">
+          <p className="m-0 text-sm font-semibold">Registrar o que foi feito</p>
+          <ul className="m-0 grid list-none gap-2 p-0">
+            {toMark.map((i) => {
+              const product = i.kind === "product";
+              const verb = product ? "entregue" : "realizado";
+              return (
+                <li key={i.id} className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="min-w-0">
+                    <strong>{i.name}</strong>
+                    {i.quantity > 1 && <span className="text-fg-muted"> · {unitsText(i)}</span>}
+                  </span>
+                  <span className="flex flex-wrap gap-2">
+                    {i.quantity > 1 && (
+                      <Button
+                        variant="secondary"
+                        disabled={cmd.busy !== null}
+                        aria-label={`Registrar mais 1 ${i.name} ${verb} (${i.performed_quantity + 1} de ${i.quantity})`}
+                        onClick={() => void marcar(i.id, i.performed_quantity + 1)}
+                      >
+                        +1 {verb}
+                      </Button>
+                    )}
+                    <Button
+                      variant="secondary"
+                      icon={product ? Package : CircleCheck}
+                      disabled={cmd.busy !== null}
+                      aria-label={
+                        i.quantity > 1
+                          ? `Marcar todas as ${i.quantity} unidades de ${i.name} como ${verb}s`
+                          : `Marcar ${i.name} como ${verb}`
+                      }
+                      onClick={() => void marcar(i.id)}
+                    >
+                      {product
+                        ? i.quantity > 1
+                          ? "Entregar todos"
+                          : "Entregar"
+                        : i.quantity > 1
+                          ? "Todos realizados"
+                          : "Realizado"}
+                    </Button>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
         </div>
       )}
       {o.status === "open" && !mode && (
@@ -191,7 +232,7 @@ export function Atendimento({
             )}
             {!pending && (
               <Button variant="secondary" icon={Pencil} onClick={() => panel.show("editar")}>
-                Alterar serviços
+                Alterar itens
               </Button>
             )}
             {inService && (
@@ -293,7 +334,10 @@ function Recusar({
   );
 }
 
-/** Alterar serviços pela equipe (T-O-03): motivo obrigatório; item realizado não sai. */
+/**
+ * Alterar itens pela equipe (T-O-03), com quantidade: motivo obrigatório; unidades já realizadas
+ * não saem; linha existente mantém o preço aceito; linha nova entra pelo preço atual.
+ */
 function Editar({
   ctx,
   order,
@@ -309,75 +353,133 @@ function Editar({
   onSaved: (o: Order) => void;
   onConflict: () => Promise<void>;
 } & PanelProps) {
-  const [services, setServices] = useState<Service[] | null>(null);
+  const [catalog, setCatalog] = useState<{
+    services: Service[];
+    products: Product[];
+    categories: Category[];
+  } | null>(null);
   const current = liveItems(order);
-  const [chosen, setChosen] = useState(() => current.map((i) => i.service_id));
+  const [s, setS] = useState<Record<string, number>>(() =>
+    Object.fromEntries(current.filter((i) => i.service_id).map((i) => [i.service_id as string, i.quantity])),
+  );
+  const [p, setP] = useState<Record<string, number>>(() =>
+    Object.fromEntries(current.filter((i) => i.product_id).map((i) => [i.product_id as string, i.quantity])),
+  );
   const [reason, setReason] = useState("");
   const [tried, setTried] = useState(false);
   const cmd = useCommand();
   useEffect(() => {
     let active = true;
-    void call(() =>
-      api.GET("/v1/establishments/{establishmentId}/services", {
-        params: { path: { establishmentId: ctx.estId } },
-      }),
-    ).then((out) => {
-      if (active && out.ok) setServices(out.data.data.filter((s) => s.status === "active"));
+    const path = { params: { path: { establishmentId: ctx.estId } } };
+    void Promise.all([
+      call(() => api.GET("/v1/establishments/{establishmentId}/services", path)),
+      call(() => api.GET("/v1/establishments/{establishmentId}/products", path)),
+      call(() => api.GET("/v1/establishments/{establishmentId}/catalog-categories", path)),
+    ]).then(([sv, pr, ca]) => {
+      if (!active || !sv.ok) return;
+      setCatalog({
+        services: sv.data.data.filter(
+          (x) => x.status === "active" || current.some((i) => i.service_id === x.id),
+        ),
+        products: pr.ok
+          ? pr.data.data.filter((x) => x.status === "active" || current.some((i) => i.product_id === x.id))
+          : [],
+        categories: ca.ok ? ca.data.data.filter((c) => c.status === "active") : [],
+      });
     });
     return () => {
       active = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- lê o catálogo uma vez ao abrir
   }, [ctx.estId]);
-  const performed = new Set(current.filter((i) => i.status === "performed").map((i) => i.service_id));
+  const lineOf = (kind: "service" | "product", id: string) =>
+    current.find((i) => (kind === "product" ? i.product_id === id : i.service_id === id));
+  const services = (catalog?.services ?? []).map((x) => ({
+    id: x.id,
+    name: x.name,
+    price: x.price,
+    duration_minutes: x.duration_minutes,
+    professional_ids: x.professional_ids,
+    category_id: x.category_id ?? null,
+    display_order: x.display_order ?? 0,
+  }));
+  const products = (catalog?.products ?? []).map((x) => ({
+    id: x.id,
+    name: x.name,
+    description: x.description,
+    price: x.price,
+    image: x.image,
+    category_id: x.category_id,
+    display_order: x.display_order,
+  }));
+  const serviceUnits = Object.values(s).reduce((a, b) => a + b, 0);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setTried(true);
-    if (reason.trim().length < 3 || chosen.length === 0) return;
-    const out = await cmd.run(`editar:${order.id}:${order.version}:${[...chosen].sort().join(",")}`, (key) =>
+    if (reason.trim().length < 3 || serviceUnits === 0) return;
+    const items = [
+      ...Object.entries(s).map(([id, n]) => ({ service_id: id, quantity: n })),
+      ...Object.entries(p).map(([id, n]) => ({ product_id: id, quantity: n })),
+    ];
+    const sig = items
+      .map((i) => `${"service_id" in i ? i.service_id : i.product_id}x${i.quantity}`)
+      .sort()
+      .join(",");
+    const out = await cmd.run(`editar:${order.id}:${order.version}:${sig}`, (key) =>
       api.PUT("/v1/establishments/{establishmentId}/orders/{orderId}/items", {
         params: {
           path: { establishmentId: ctx.estId, orderId: order.id },
           header: { "Idempotency-Key": key },
         },
-        body: { expected_version: order.version, service_ids: chosen, reason },
+        body: { expected_version: order.version, items, reason },
       }),
     );
     if (out.ok) onSaved(out.data.data);
     else if (out.problem?.status === 409) await onConflict();
   }
+  const set = (setter: typeof setS) => (id: string, n: number) =>
+    setter((c) => {
+      const next = { ...c };
+      if (n > 0) next[id] = n;
+      else delete next[id];
+      return next;
+    });
   return (
     <form
       id={panelId}
       onKeyDown={onKeyDown}
       onSubmit={onSubmit}
       noValidate
-      aria-label="Alterar serviços da comanda"
-      className={panelForm}
+      aria-label="Alterar itens da comanda"
+      className={cx(panelForm, "min-w-0")}
     >
       <CommandError problem={cmd.problem} offline={cmd.offline} />
-      {!services && <Loading>Carregando serviços…</Loading>}
-      <ChoiceGroup
-        legend="Serviços"
-        hint="Preço registrado na comanda é mantido; serviço novo entra pelo preço atual."
-      >
-        {(services ?? []).map((s) => (
-          <Choice
-            key={s.id}
-            type="checkbox"
-            disabled={performed.has(s.id)}
-            checked={chosen.includes(s.id)}
-            onChange={(e) =>
-              setChosen((c) => (e.target.checked ? [...c, s.id] : c.filter((x) => x !== s.id)))
-            }
-            label={s.name}
-            description={performed.has(s.id) ? "já realizado" : undefined}
-            trailing={formatCents(
-              current.find((i) => i.service_id === s.id)?.unit_price.amount_cents ?? s.price.amount_cents,
-            )}
-          />
-        ))}
-      </ChoiceGroup>
+      {!catalog && <Loading>Carregando catálogo…</Loading>}
+      {catalog && (
+        <SeletorItens
+          title="Serviços"
+          services={services}
+          products={products}
+          categories={catalog.categories}
+          services_chosen={s}
+          products_chosen={p}
+          onService={set(setS)}
+          onProduct={set(setP)}
+          max={50}
+          min={(kind, id) => lineOf(kind, id)?.performed_quantity ?? 0}
+          priceOf={(kind, id) => lineOf(kind, id)?.unit_price.amount_cents}
+        />
+      )}
+      <p className="m-0 text-sm text-fg-muted">
+        Preço registrado na comanda é mantido; item novo entra pelo preço atual. O limite de unidades da loja
+        é conferido pelo servidor.
+      </p>
+      {tried && serviceUnits === 0 && (
+        <p role="alert" className="m-0 text-sm font-semibold text-danger">
+          Mantenha pelo menos um serviço.
+        </p>
+      )}
       <TextArea
         label="Motivo"
         required
@@ -390,7 +492,7 @@ function Editar({
         hint="Ex.: cliente pediu na cadeira."
       />
       <div className="flex flex-wrap gap-2">
-        <Submit busy={cmd.busy !== null}>Salvar serviços</Submit>
+        <Submit busy={cmd.busy !== null}>Salvar itens</Submit>
         <Button variant="secondary" onClick={onBack}>
           Voltar
         </Button>
@@ -424,6 +526,7 @@ function Encerrar({
 } & PanelProps) {
   const items = liveItems(order);
   const [outcome, setOutcome] = useState<Record<string, string>>({});
+  const [units, setUnits] = useState<Record<string, number>>({});
   const [why, setWhy] = useState<Record<string, string>>({});
   const [reason, setReason] = useState("");
   const [tried, setTried] = useState(false);
@@ -433,11 +536,18 @@ function Encerrar({
     : (["performed", "not_performed"] as const);
   const label = (v: string) =>
     v === "performed" ? "realizado" : v === "not_performed" ? "não realizado" : (reportedText[v] ?? v);
+  /** Unidades informadas: conclusão "realizado" = todas por padrão; interrupção = as já registradas. */
+  const unitsOf = (i: (typeof items)[number]) =>
+    units[i.id] ??
+    (interrupt ? (outcome[i.id] === "fully_performed" ? i.quantity : i.performed_quantity) : i.quantity);
+  const needsWhy = (i: (typeof items)[number]) =>
+    !interrupt &&
+    (outcome[i.id] === "not_performed" || (outcome[i.id] === "performed" && unitsOf(i) < i.quantity));
   const complete = items.every((i) => outcome[i.id]);
   const reasonsOk = interrupt
     ? reason.trim().length >= 3
-    : items.every((i) => outcome[i.id] !== "not_performed" || (why[i.id] ?? "").trim().length >= 3);
-  const someDone = interrupt || items.some((i) => outcome[i.id] === "performed");
+    : items.every((i) => !needsWhy(i) || (why[i.id] ?? "").trim().length >= 3);
+  const someDone = interrupt || items.some((i) => outcome[i.id] === "performed" && i.kind !== "product");
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -445,9 +555,14 @@ function Encerrar({
     if (!complete || !reasonsOk) return;
     const list = items.map((i) => {
       const value = outcome[i.id] ?? "";
-      return value === "not_performed"
-        ? { item_id: i.id, outcome: value, reason: why[i.id] ?? "" }
-        : { item_id: i.id, outcome: value };
+      const item: { item_id: string; outcome: string; quantity?: number; reason?: string } = {
+        item_id: i.id,
+        outcome: value,
+      };
+      // Unidades só quando a linha tem mais de uma (quantidade 1 segue a regra anterior).
+      if (i.quantity > 1 && value !== "not_performed") item.quantity = unitsOf(i);
+      if (needsWhy(i)) item.reason = why[i.id] ?? "";
+      return item;
     });
     const base = { establishmentId: ctx.estId, participationId: entry.participation_id };
     const out = interrupt
@@ -461,6 +576,7 @@ function Encerrar({
               items: list as {
                 item_id: string;
                 outcome: "fully_performed" | "partially_performed" | "not_started";
+                quantity?: number;
               }[],
             },
           }),
@@ -471,7 +587,12 @@ function Encerrar({
             body: {
               expected_version: entry.version,
               order_expected_version: order.version,
-              items: list as { item_id: string; outcome: "performed" | "not_performed"; reason?: string }[],
+              items: list as {
+                item_id: string;
+                outcome: "performed" | "not_performed";
+                quantity?: number;
+                reason?: string;
+              }[],
             },
           }),
         );
@@ -494,17 +615,22 @@ function Encerrar({
         </p>
         <p className="m-0 text-sm text-fg-muted">
           {interrupt
-            ? "Use quando o atendimento parou no meio. O dono revisa depois: só serviços feitos por inteiro são cobrados e a interrupção não gera pontos."
-            : "Informe o resultado de cada serviço. A comanda vai para pagamento com o que foi realizado."}
+            ? "Use quando o atendimento parou no meio. Informe quantas unidades de cada item foram feitas por inteiro. O dono revisa depois: só unidades completas são cobradas e a interrupção não gera pontos."
+            : "Informe o resultado de cada item e quantas unidades foram feitas (ou entregues). A comanda vai para pagamento com o que foi realizado."}
         </p>
       </div>
       <CommandError problem={cmd.problem} offline={cmd.offline} />
       {items.map((i) => (
         <fieldset key={i.id} className="m-0 grid gap-2 border-0 p-0">
-          <legend className="mb-2 flex w-full justify-between gap-3 p-0 font-semibold">
+          <legend className="mb-2 flex w-full flex-wrap justify-between gap-3 p-0 font-semibold">
             <span>
+              {i.quantity > 1 ? `${i.quantity} × ` : ""}
               {i.name} — {formatCents(i.unit_price.amount_cents)}
+              {i.kind === "product" && <span className="font-normal text-fg-muted"> (produto)</span>}
             </span>
+            {i.performed_quantity > 0 && (
+              <span className="text-sm font-normal text-fg-muted">{unitsText(i)}</span>
+            )}
           </legend>
           <div className={cx("grid gap-2", options.length === 2 ? "grid-cols-2" : "sm:grid-cols-3")}>
             {options.map((v) => (
@@ -513,14 +639,44 @@ function Encerrar({
                 type="radio"
                 name={`resultado-${i.id}`}
                 checked={outcome[i.id] === v}
-                onChange={() => setOutcome((m) => ({ ...m, [i.id]: v }))}
+                onChange={() => {
+                  setOutcome((m) => ({ ...m, [i.id]: v }));
+                  // Trocar o resultado volta as unidades ao padrão dele (evita combinação inválida).
+                  setUnits((m) => {
+                    const next = { ...m };
+                    delete next[i.id];
+                    return next;
+                  });
+                }}
                 label={label(v)}
               />
             ))}
           </div>
-          {outcome[i.id] === "not_performed" && (
+          {i.quantity > 1 &&
+            outcome[i.id] &&
+            outcome[i.id] !== "not_performed" &&
+            outcome[i.id] !== "fully_performed" && (
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-sm">
+                  {i.kind === "product" ? "Unidades entregues" : "Unidades feitas por inteiro"}
+                </span>
+                <Quantidade
+                  label={`Unidades de ${i.name}`}
+                  value={unitsOf(i)}
+                  min={interrupt ? i.performed_quantity : Math.max(1, i.performed_quantity)}
+                  max={interrupt ? i.quantity - 1 : i.quantity}
+                  onChange={(n) => setUnits((m) => ({ ...m, [i.id]: n }))}
+                />
+                <span className="text-sm text-fg-muted">de {i.quantity}</span>
+              </div>
+            )}
+          {needsWhy(i) && (
             <TextArea
-              label={`Por que ${i.name} não foi feito?`}
+              label={
+                outcome[i.id] === "not_performed"
+                  ? `Por que ${i.name} não foi feito?`
+                  : `Por que só ${unitsOf(i)} de ${i.quantity} ${i.name}?`
+              }
               required
               minLength={3}
               maxLength={500}

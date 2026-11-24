@@ -214,12 +214,20 @@ func write[T any](w http.ResponseWriter, data T, m meta) {
 // GET …/summary: os quatro indicadores da primeira dobra.
 
 type cashKPI struct {
-	Received Value    `json:"received_cents"`
-	Refunded Value    `json:"refunded_cents"`
-	Net      Value    `json:"net_cents"`
-	Receipts Value    `json:"receipts"`
-	Refunds  Value    `json:"refunds"`
-	Ignored  []string `json:"ignored_filters"`
+	Received Value `json:"received_cents"`
+	Refunded Value `json:"refunded_cents"`
+	Net      Value `json:"net_cents"`
+	Receipts Value `json:"receipts"`
+	Refunds  Value `json:"refunds"`
+	// Custos de recebimento (ADR-0034): estimados pela configuração do dono, efetivos quando o
+	// provedor informa. AfterCosts = Net − custos conhecidos ou estimados (NÃO é lucro).
+	// FeeCoverage = fração dos recebimentos com custo conhecido ou estimado (dinheiro conta como
+	// coberto); abaixo de 1, o resultado é incompleto.
+	FeesEstimated Value    `json:"fees_estimated_cents"`
+	FeesKnown     Value    `json:"fees_known_cents"`
+	AfterCosts    Value    `json:"after_costs_cents"`
+	FeeCoverage   Value    `json:"fee_coverage"`
+	Ignored       []string `json:"ignored_filters"`
 }
 
 type countKPI struct {
@@ -299,7 +307,8 @@ func (s *Service) summaryFor(ctx context.Context, q database.Querier, sc *scope,
 	out.Cash.Ignored, out.Completed.Ignored, out.Wait.Ignored = cashIgn, partIgn, partIgn
 	if sc.beforeCollection(p) {
 		nc := status("not_collected")
-		out.Cash = cashKPI{Received: nc, Refunded: nc, Net: nc, Receipts: nc, Refunds: nc, Ignored: cashIgn}
+		out.Cash = cashKPI{Received: nc, Refunded: nc, Net: nc, Receipts: nc, Refunds: nc, FeesEstimated: nc, FeesKnown: nc,
+			AfterCosts: nc, FeeCoverage: nc, Ignored: cashIgn}
 		out.Completed.Count = nc
 		out.Wait.Median, out.Wait.P90 = nc, nc
 		return out, nil
@@ -317,9 +326,21 @@ func (s *Service) summaryFor(ctx context.Context, q database.Querier, sc *scope,
 	out.Cash.Received, out.Cash.Refunded = ok(float64(rt.Cents)), ok(float64(ft.Cents))
 	out.Cash.Net = ok(float64(rt.Cents - ft.Cents))
 	out.Cash.Receipts, out.Cash.Refunds = ok(float64(rt.Count)), ok(float64(ft.Count))
+	var est, known, covered, total int64
+	if err := q.QueryRow(ctx, sqlFees, a.list()...).Scan(&est, &known, &covered, &total); err != nil {
+		return out, err
+	}
+	out.Cash.FeesEstimated, out.Cash.FeesKnown = ok(float64(est)), ok(float64(known))
+	out.Cash.AfterCosts = ok(float64(rt.Cents - ft.Cents - est - known))
+	if total > 0 {
+		out.Cash.FeeCoverage = okN(float64(covered)/float64(total), total)
+	} else {
+		out.Cash.FeeCoverage = empty(0)
+	}
 	if sc.active("service_id") {
 		na := status("not_applicable")
-		out.Cash = cashKPI{Received: na, Refunded: na, Net: na, Receipts: na, Refunds: na, Ignored: cashIgn}
+		out.Cash = cashKPI{Received: na, Refunded: na, Net: na, Receipts: na, Refunds: na, FeesEstimated: na, FeesKnown: na,
+			AfterCosts: na, FeeCoverage: na, Ignored: cashIgn}
 	}
 	done, err := sumByBucket(ctx, q, sqlCompleted, a)
 	if err != nil {

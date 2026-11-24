@@ -231,7 +231,14 @@ function Indicadores() {
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {tile("Recebimentos líquidos", d?.current.cash.net_cents, "cents", d?.compare?.cash.net_cents,
           d && d.current.cash.received_cents?.status === "ok" ? `recebido ${textoValor(d.current.cash.received_cents, "cents")} − estornado ${textoValor(d.current.cash.refunded_cents, "cents")}` : undefined)}
-        {tile("Atendimentos concluídos", d?.current.completed.count, "count", d?.compare?.completed.count)}
+        {tile("Recebido após custos", d?.current.cash.after_costs_cents, "cents", d?.compare?.cash.after_costs_cents,
+          d && d.current.cash.fee_coverage
+            ? `custos estimados ${textoValor(d.current.cash.fees_estimated_cents, "cents")} · informados ${textoValor(d.current.cash.fees_known_cents, "cents")} · ` +
+              (d.current.cash.fee_coverage.status === "ok" && (d.current.cash.fee_coverage.value ?? 1) < 1
+                ? `INCOMPLETO: ${Math.round((d.current.cash.fee_coverage.value ?? 0) * 100)}% dos recebimentos com custo conhecido`
+                : "todos os recebimentos com custo conhecido") + " · não é lucro"
+            : undefined)}
+        {tile("Atendimentos concluídos", d?.current.completed.count, "count", d?.compare?.completed.count, "participações concluídas (uma comanda com 3 cortes conta 1)")}
         {tile("Espera mediana até a chamada", d?.current.wait.median_seconds, "seconds", d?.compare?.wait.median_seconds,
           d?.current.wait.median_seconds.sample !== undefined ? `${d.current.wait.median_seconds.sample} chamada(s) · p90 ${textoValor(d.current.wait.p90_seconds, "seconds")}` : undefined)}
         <div className="grid content-start gap-1 rounded-xl border border-line bg-surface p-4">

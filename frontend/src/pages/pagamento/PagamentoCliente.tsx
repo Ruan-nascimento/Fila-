@@ -21,10 +21,13 @@ export function PagamentoCliente({
   shopId,
   order,
   onReload,
+  methods,
 }: {
   shopId: string;
   order: Order;
   onReload: () => Promise<void>;
+  /** Meios aceitos agora pela loja (página pública). Vazio/ausente = os três (API anterior). */
+  methods?: readonly ("pix" | "cash" | "card")[] | undefined;
 }) {
   const cmd = useCommand();
   // Se o Pix aparece (resposta repetida ou atualização em tempo real depois de a rede cair), o
@@ -127,24 +130,27 @@ export function PagamentoCliente({
         </Notice>
       )}
       <ChoiceGroup legend="Como você vai pagar?" disabled={cmd.busy !== null || pay.verifying}>
-        {(["pix", "cash", "card"] as const).map((m) => {
-          const Icon = methodIcon[m];
-          return (
-            <Choice
-              key={m}
-              type="radio"
-              name={`meio-${order.id}`}
-              checked={(choosing ?? method) === m}
-              onChange={() => void choose(m, false)}
-              label={
-                <span className="inline-flex items-center gap-2">
-                  <Icon aria-hidden="true" className="size-5 text-fg-muted" />
-                  {methodText[m]}
-                </span>
-              }
-            />
-          );
-        })}
+        {(["pix", "cash", "card"] as const)
+          // Meio desligado pela loja some, exceto o já escolhido (a escolha anterior continua valendo).
+          .filter((m) => !methods || methods.length === 0 || methods.includes(m) || pay.method_choice === m)
+          .map((m) => {
+            const Icon = methodIcon[m];
+            return (
+              <Choice
+                key={m}
+                type="radio"
+                name={`meio-${order.id}`}
+                checked={(choosing ?? method) === m}
+                onChange={() => void choose(m, false)}
+                label={
+                  <span className="inline-flex items-center gap-2">
+                    <Icon aria-hidden="true" className="size-5 text-fg-muted" />
+                    {methodText[m]}
+                  </span>
+                }
+              />
+            );
+          })}
       </ChoiceGroup>
       {confirmSwitch && active && (
         <div className="grid gap-3 rounded-xl border border-warning/40 bg-warning-soft p-4" role="alert">

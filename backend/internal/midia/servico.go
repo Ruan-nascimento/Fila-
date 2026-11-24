@@ -276,12 +276,12 @@ func (s *Service) upload(w http.ResponseWriter, r *http.Request) error {
 			return httpserver.ErrValidation(httpserver.FieldError{Field: "/query/establishment_id", Code: httpserver.FieldNotAllowed,
 				Message: "o avatar pessoal não pertence a uma loja"})
 		}
-	case PurposeLogo, PurposeProfessionalPhoto:
+	case PurposeLogo, PurposeProfessionalPhoto, PurposeProductPhoto:
 		id, err := uuid.Parse(q.Get("establishment_id"))
 		if err != nil {
 			return httpserver.ErrValidation(httpserver.FieldError{Field: "/query/establishment_id", Code: httpserver.FieldRequired})
 		}
-		if purpose == PurposeLogo {
+		if purpose == PurposeLogo || purpose == PurposeProductPhoto {
 			if _, err := s.Auth.Owner(r, id); err != nil {
 				return err
 			}
@@ -297,7 +297,7 @@ func (s *Service) upload(w http.ResponseWriter, r *http.Request) error {
 		estID = &id
 	default:
 		return httpserver.ErrValidation(httpserver.FieldError{Field: "/query/purpose", Code: httpserver.FieldNotAllowed,
-			Message: "use avatar, professional_photo ou logo"})
+			Message: "use avatar, professional_photo, logo ou product_photo"})
 	}
 	crop, err := parseCrop(q)
 	if err != nil {

@@ -41,16 +41,34 @@ export function liveItems(order: Order): OrderItem[] {
   return order.items.filter((i) => i.status !== "removed");
 }
 
-/** Texto de uma solicitação: o que incluir e o que retirar. */
+/** "3 × Corte" (quantidade 1 fica só o nome). */
+export function itemLabel(i: { name: string; quantity?: number }): string {
+  return (i.quantity ?? 1) > 1 ? `${i.quantity} × ${i.name}` : i.name;
+}
+
+/** Unidades realizadas (serviço) ou entregues (produto): "2 de 3 realizados". */
+export function unitsText(i: OrderItem): string {
+  const verb = i.kind === "product" ? "entregue" : "realizado";
+  if (i.quantity === 1) return i.performed_quantity === 1 ? verb : `não ${verb}`;
+  return `${i.performed_quantity} de ${i.quantity} ${verb}s`;
+}
+
+/** Texto de uma solicitação: o que incluir, retirar e mudar de quantidade. */
 export function describeRequest(order: Order, cr: ChangeRequest): string {
   const parts: string[] = [];
   if (cr.add.length > 0)
     parts.push(
-      `incluir ${cr.add.map((a) => `${a.name} (${formatCents(a.unit_price.amount_cents)})`).join(", ")}`,
+      `incluir ${cr.add
+        .map((a) => `${itemLabel(a)} (${formatCents(a.unit_price.amount_cents * (a.quantity ?? 1))})`)
+        .join(", ")}`,
     );
   if (cr.remove_item_ids.length > 0) {
     const names = order.items.filter((i) => cr.remove_item_ids.includes(i.id)).map((i) => i.name);
     parts.push(`retirar ${names.join(", ")}`);
+  }
+  for (const q of cr.set_quantities ?? []) {
+    const it = order.items.find((i) => i.id === q.item_id);
+    if (it) parts.push(`${it.name}: de ${it.quantity} para ${q.quantity}`);
   }
   return parts.join(" e ");
 }

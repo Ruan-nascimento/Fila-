@@ -175,6 +175,9 @@ function ReceberNaLoja({
   );
   const [tendered, setTendered] = useState("");
   const [reference, setReference] = useState("");
+  // Modalidade do cartão (ADR-0034): obrigatória em novos registros; nada pré-marcado.
+  const [cardType, setCardType] = useState<"debit" | "credit" | "">("");
+  const [tried, setTried] = useState(false);
   const cmd = useCommand();
   const tenderedCents = tendered.trim() === "" ? due : parseCents(tendered);
   const tenderedError =
@@ -188,9 +191,14 @@ function ReceberNaLoja({
       ? "Só letras, números e hífen (nunca o número do cartão)."
       : undefined;
 
+  const cardTypeError =
+    method === "card" && tried && cardType === "" ? "Escolha débito ou crédito." : undefined;
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    setTried(true);
     if (tenderedError || referenceError || tenderedCents === null) return;
+    if (method === "card" && cardType === "") return;
     const body =
       method === "cash"
         ? { expected_version: order.version, method, amount_cents: due, cash_tendered_cents: tenderedCents }
@@ -198,9 +206,10 @@ function ReceberNaLoja({
             expected_version: order.version,
             method,
             amount_cents: due,
+            card_type: cardType as "debit" | "credit",
             ...(reference ? { card_reference: reference } : {}),
           };
-    const out = await cmd.run(`receber:${order.id}:${order.version}:${method}`, (key) =>
+    const out = await cmd.run(`receber:${order.id}:${order.version}:${method}:${cardType}`, (key) =>
       api.POST("/v1/establishments/{establishmentId}/orders/{orderId}/receipts", {
         params: {
           path: { establishmentId: ctx.estId, orderId: order.id },
@@ -271,6 +280,32 @@ function ReceberNaLoja({
             </p>
           )}
         </>
+      )}
+      {method === "card" && (
+        <ChoiceGroup legend="Modalidade do cartão" hint={cardTypeError}>
+          <div className="grid grid-cols-2 gap-2">
+            {(
+              [
+                ["debit", "Débito"],
+                ["credit", "Crédito"],
+              ] as const
+            ).map(([v, label]) => (
+              <Choice
+                key={v}
+                type="radio"
+                name={`modalidade-${order.id}`}
+                checked={cardType === v}
+                onChange={() => setCardType(v)}
+                label={label}
+              />
+            ))}
+          </div>
+          {cardTypeError && (
+            <p role="alert" className="m-0 text-sm font-semibold text-danger">
+              {cardTypeError}
+            </p>
+          )}
+        </ChoiceGroup>
       )}
       {method === "card" && (
         <Field

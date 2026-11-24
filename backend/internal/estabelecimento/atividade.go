@@ -24,10 +24,24 @@ type QueueInfo struct {
 	Status             string
 	Letter             string
 	Timezone           string
+	// Admission: política de novas entradas (open | closed), independente da operação (Status).
+	Admission string
+	// Capacity: limite próprio da fila (nil = segue o padrão da loja).
+	Capacity *int
+}
+
+// EffectiveCapacity é o limite de participações pendentes (aguardando + chamado) da fila: o da
+// própria fila ou o padrão da loja; nil = sem limite.
+func (qi QueueInfo) EffectiveCapacity(st Settings) *int {
+	if qi.Capacity != nil {
+		return qi.Capacity
+	}
+	return st.DefaultQueueCapacity
 }
 
 const queueInfoSelect = `
-	SELECT q.id, q.establishment_id, p.id, p.display_name, p.status = 'active', q.status, p.queue_letter, e.timezone
+	SELECT q.id, q.establishment_id, p.id, p.display_name, p.status = 'active', q.status, p.queue_letter, e.timezone,
+	       q.admission, q.capacity
 	FROM queue q JOIN professional p ON p.id = q.professional_id JOIN establishment e ON e.id = q.establishment_id
 	WHERE q.establishment_id = $1 AND q.id = ANY($2) AND e.status = 'active'
 	ORDER BY q.id`
@@ -58,7 +72,8 @@ func loadQueues(ctx context.Context, q database.Querier, estID uuid.UUID, ids []
 	}
 	list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (QueueInfo, error) {
 		var v QueueInfo
-		err := r.Scan(&v.ID, &v.EstablishmentID, &v.ProfessionalID, &v.ProfessionalName, &v.ProfessionalActive, &v.Status, &v.Letter, &v.Timezone)
+		err := r.Scan(&v.ID, &v.EstablishmentID, &v.ProfessionalID, &v.ProfessionalName, &v.ProfessionalActive, &v.Status, &v.Letter,
+			&v.Timezone, &v.Admission, &v.Capacity)
 		return v, err
 	})
 	if err != nil {
@@ -108,6 +123,11 @@ type PublicSnapshot struct {
 	WaitingCount    int
 	Tickets         []PublicTicket
 	EstimateMinutes int
+	// Carga pendente (aguardando + chamado): ocupa vagas da capacidade. Unidades de serviço e
+	// duração somam as quantidades das comandas (3 cortes = 1 participação, 3 unidades).
+	PendingCount        int
+	PendingServiceUnits int
+	PendingMinutes      int
 }
 
 // PublicTicket é uma senha visível ao público.

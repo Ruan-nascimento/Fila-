@@ -1,5 +1,5 @@
-import { useEffect, useId, useState, type FormEvent } from "react";
-import { Link } from "react-router";
+import { useEffect, useId, useState, type FormEvent, type ReactNode } from "react";
+import { Link, useSearchParams } from "react-router";
 import { Gift, LocateFixed, MapPin, Store, UsersRound } from "lucide-react";
 import { api } from "../../api/client";
 import { call, fieldErrors, problemMessage } from "../../api/problem";
@@ -24,6 +24,7 @@ import {
 import { useUnsavedWarning } from "../../ui/useUnsavedWarning";
 import { useCommand } from "./comando";
 import { CommandError, type StaffContext } from "./comum";
+import { ConfiguracoesLoja, type SecaoConfig } from "./ConfiguracoesLoja";
 
 type Establishment = components["schemas"]["Establishment"];
 
@@ -116,7 +117,57 @@ function slugDoNome(nome: string): string {
  * pedido leva a loja do contexto e o servidor confere o vínculo. Trocar o nome troca também o
  * link e o QR Code; o endereço antigo continua abrindo a loja (QR Codes já impressos valem).
  */
+const secoes: { value: "identidade" | SecaoConfig; label: string }[] = [
+  { value: "identidade", label: "Identidade e contato" },
+  { value: "catalogo", label: "Catálogo" },
+  { value: "filas", label: "Filas e atendimento" },
+  { value: "pagamentos", label: "Pagamentos e custos" },
+  { value: "fidelidade", label: "Fidelidade" },
+  { value: "equipe", label: "Equipe e permissões" },
+];
+
+/**
+ * Configurações da loja organizadas por assunto (ADR-0034). A seção fica no endereço
+ * (?secao=), então recarregar e Voltar mantêm. Preferências do aparelho (som, notificações,
+ * segundo plano do programa) ficam em Minha conta e no próprio programa, não aqui.
+ */
 export function LojaConfig({ ctx }: { ctx: StaffContext }) {
+  const [params, setParams] = useSearchParams();
+  const asked = params.get("secao");
+  const secao = secoes.some((x) => x.value === asked)
+    ? (asked as (typeof secoes)[number]["value"])
+    : "identidade";
+  const tabs = (
+    <nav aria-label="Seções das configurações" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+      {secoes.map((x) => (
+        <button
+          key={x.value}
+          type="button"
+          aria-current={secao === x.value ? "page" : undefined}
+          onClick={() => setParams({ secao: x.value }, { replace: true })}
+          className={
+            secao === x.value
+              ? "inline-flex min-h-11 shrink-0 items-center rounded-full border border-select-line bg-select px-4 text-sm font-semibold whitespace-nowrap text-accent"
+              : "inline-flex min-h-11 shrink-0 items-center rounded-full border border-line bg-surface px-4 text-sm font-medium whitespace-nowrap hover:bg-surface-2"
+          }
+        >
+          {x.label}
+        </button>
+      ))}
+    </nav>
+  );
+  if (secao !== "identidade")
+    return (
+      <div className="grid max-w-4xl gap-6">
+        <PageHeader title="Configurações da barbearia" description="Cada seção é salva separadamente." />
+        {tabs}
+        <ConfiguracoesLoja ctx={ctx} secao={secao} />
+      </div>
+    );
+  return <IdentidadeContato ctx={ctx} tabs={tabs} />;
+}
+
+function IdentidadeContato({ ctx, tabs }: { ctx: StaffContext; tabs: ReactNode }) {
   const [est, setEst] = useState<Establishment | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -264,6 +315,7 @@ export function LojaConfig({ ctx }: { ctx: StaffContext }) {
   return (
     <div className="grid max-w-4xl gap-8">
       {header}
+      {tabs}
       {conflict && (
         <Notice kind="info" title="As configurações foram alteradas em outra aba ou aparelho">
           <p>
@@ -508,7 +560,10 @@ export function LojaConfig({ ctx }: { ctx: StaffContext }) {
         <StoreQrPanel origin={origin} slug={est.slug} storeName={est.name} logo={est.logo} />
       </Section>
 
-      <Section title="Operação" description="Regras de fila e fidelidade continuam nas telas próprias.">
+      <Section
+        title="Operação"
+        description="Fila, pagamentos, custos e permissões ficam nas outras seções acima."
+      >
         <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
           <li>
             <Link

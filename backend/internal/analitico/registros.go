@@ -164,7 +164,7 @@ var recordKinds = map[string]recordKind{
 		ts: "o.closed_at", idCol: "o.id", cents: "o.total_cents",
 		from: "service_order o LEFT JOIN participation p ON p.id = o.participation_id JOIN professional pr ON pr.id = o.professional_id",
 		cols: "o.id, o.closed_at, o.total_cents, o.payment_method, p.ticket_code, pr.display_name, " +
-			"(SELECT count(*) FROM order_item i WHERE i.order_id = o.id AND i.charged), " +
+			"(SELECT coalesce(sum(i.charged_quantity), 0) FROM order_item i WHERE i.order_id = o.id AND i.charged), " +
 			"EXISTS (SELECT 1 FROM order_adjustment a WHERE a.order_id = o.id)",
 		scan: func(rows pgx.Rows, est uuid.UUID) (any, time.Time, uuid.UUID, error) {
 			var x struct {
@@ -232,9 +232,9 @@ var recordKinds = map[string]recordKind{
 	},
 	"service_items": {
 		extra: []string{"ref"}, inapplicable: []string{"method"},
-		idCol: "i.id", cents: "CASE WHEN i.charged THEN i.unit_price_cents ELSE 0 END",
-		from: "order_item i JOIN service_order o ON o.establishment_id = i.establishment_id AND o.id = i.order_id LEFT JOIN participation p ON p.id = o.participation_id",
-		cols: "i.id, i.service_id, i.name, i.status, i.unit_price_cents, i.charged, i.added_at, i.performed_at, o.id, p.ticket_code",
+		idCol: "i.id", cents: "CASE WHEN i.charged THEN i.unit_price_cents * i.charged_quantity ELSE 0 END",
+		from: "order_item i JOIN service_order o ON o.establishment_id = i.establishment_id AND o.id = i.order_id AND i.kind = 'service' LEFT JOIN participation p ON p.id = o.participation_id",
+		cols: "i.id, i.service_id, i.name, i.status, i.unit_price_cents, i.charged, i.added_at, i.performed_at, o.id, p.ticket_code, i.quantity, i.performed_quantity, i.charged_quantity",
 		scan: func(rows pgx.Rows, est uuid.UUID) (any, time.Time, uuid.UUID, error) {
 			var x struct {
 				ID          uuid.UUID  `json:"id"`
@@ -247,10 +247,14 @@ var recordKinds = map[string]recordKind{
 				PerformedAt *time.Time `json:"performed_at"`
 				OrderID     uuid.UUID  `json:"order_id"`
 				Ticket      *string    `json:"ticket_code"`
+				Quantity    int        `json:"quantity"`
+				Performed   int        `json:"performed_quantity"`
+				ChargedQty  int        `json:"charged_quantity"`
 				GestaoPath  string     `json:"gestao_path"`
 				refAt       time.Time
 			}
-			err := rows.Scan(&x.ID, &x.ServiceID, &x.Name, &x.Status, &x.UnitCents, &x.Charged, &x.AddedAt, &x.PerformedAt, &x.OrderID, &x.Ticket, &x.refAt)
+			err := rows.Scan(&x.ID, &x.ServiceID, &x.Name, &x.Status, &x.UnitCents, &x.Charged, &x.AddedAt, &x.PerformedAt, &x.OrderID, &x.Ticket,
+				&x.Quantity, &x.Performed, &x.ChargedQty, &x.refAt)
 			x.GestaoPath = comanda(est, x.OrderID)
 			return x, x.refAt, x.ID, err
 		},

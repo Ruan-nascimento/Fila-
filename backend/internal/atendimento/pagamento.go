@@ -227,7 +227,7 @@ func CreditInfo(ctx context.Context, q database.Querier, estID, orderID uuid.UUI
 	var interrupted *time.Time
 	err := q.QueryRow(ctx, `
 		SELECT o.establishment_id, o.account_id, o.loyalty_eligible, o.interrupted_at, o.status,
-		       coalesce((SELECT sum(points) FROM order_item WHERE order_id = o.id AND charged AND status = 'performed'), 0)
+		       coalesce((SELECT sum(points * charged_quantity) FROM order_item WHERE order_id = o.id AND charged AND kind = 'service'), 0)
 		FROM service_order o WHERE o.establishment_id = $1 AND o.id = $2`, estID, orderID).
 		Scan(&c.EstablishmentID, &c.AccountID, &c.Eligible, &interrupted, &c.Status, &c.Points)
 	if errors.Is(err, pgx.ErrNoRows) {

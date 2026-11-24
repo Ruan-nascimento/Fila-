@@ -11,6 +11,7 @@ import (
 
 	"fila/internal/atendimento"
 	"fila/internal/auditoria"
+	"fila/internal/estabelecimento"
 	hs "fila/internal/platform/httpserver"
 	"fila/internal/platform/idempotency"
 	"fila/internal/platform/validate"
@@ -50,6 +51,11 @@ func (s *Service) choosePaymentMethod(w http.ResponseWriter, r *http.Request) er
 	}
 	method, ack := *body.Method, body.Acknowledge != nil && *body.Acknowledge
 	ctx := r.Context()
+	if st, err := estabelecimento.LoadSettings(ctx, s.Pool, p.EstablishmentID); err != nil {
+		return err
+	} else if !methodEnabled(st, method) && (p.Method == nil || *p.Method != method) {
+		return methodDisabled(method)
+	}
 	return s.idem.Run(w, r, idempotency.Command{ActorKey: who.Key, Operation: "choosePaymentMethod", Body: raw}, func(tx pgx.Tx) (idempotency.Result, error) {
 		lp, err := atendimento.LockForPayment(ctx, tx, p.EstablishmentID, p.ID)
 		if err != nil {
@@ -126,6 +132,9 @@ func (s *Service) registerInPersonReceipt(w http.ResponseWriter, r *http.Request
 		AmountCents     *int64  `json:"amount_cents"`
 		CashTendered    *int64  `json:"cash_tendered_cents"`
 		CardReference   *string `json:"card_reference"`
+		// CardType: débito ou crédito (ADR-0034). Ausente só durante a janela de atualização
+		// (cliente antigo): o recebimento fica como "cartão não especificado", sem custo estimado.
+		CardType *string `json:"card_type"`
 	}
 	raw, err := hs.DecodeJSON(r, &body)
 	if err != nil {
@@ -151,6 +160,14 @@ func (s *Service) registerInPersonReceipt(w http.ResponseWriter, r *http.Request
 	} else if body.CashTendered != nil {
 		v.Add(&hs.FieldError{Field: "/cash_tendered_cents", Code: hs.FieldInvalidFormat, Message: "só para dinheiro"})
 	}
+	if body.CardType != nil {
+		switch {
+		case method != "card":
+			v.Add(&hs.FieldError{Field: "/card_type", Code: hs.FieldNotAllowed, Message: "só para cartão"})
+		case *body.CardType != FeeDebit && *body.CardType != FeeCredit:
+			v.Add(&hs.FieldError{Field: "/card_type", Code: hs.FieldInvalidFormat, Message: "use debit ou credit"})
+		}
+	}
 	var ref *string
 	if body.CardReference != nil && *body.CardReference != "" {
 		switch {
@@ -174,6 +191,15 @@ func (s *Service) registerInPersonReceipt(w http.ResponseWriter, r *http.Request
 		}
 		if err := payableCheck(ctx, tx, lp, expected); err != nil {
 			return idempotency.Result{}, err
+		}
+		// Meio desligado pela loja: só aceito se já era o meio escolhido antes de desligar (a
+		// cobrança combinada continua valendo; nada existente é invalidado).
+		st, err := estabelecimento.LoadSettings(ctx, tx, p.EstablishmentID)
+		if err != nil {
+			return idempotency.Result{}, err
+		}
+		if !methodEnabled(st, method) && (lp.Method == nil || *lp.Method != method) {
+			return idempotency.Result{}, methodDisabled(method)
 		}
 		due := lp.DueCents()
 		if amount != due {
@@ -208,9 +234,13 @@ func (s *Service) registerInPersonReceipt(w http.ResponseWriter, r *http.Request
 		accountID := who.Staff.AccountID
 		if err := tx.QueryRow(ctx, `
 			INSERT INTO receipt (establishment_id, order_id, method, amount_cents, classification, evidence, registered_by,
-			                     registered_by_account_id, registered_at, cash_tendered_cents, change_cents, card_reference)
-			VALUES ($1, $2, $3, $4, 'principal', 'in_person', $5, $6, $7, $8, $9, $10) RETURNING id`,
-			p.EstablishmentID, p.ID, method, due, who.Role(), accountID, now, tendered, change, ref).Scan(&receiptID); err != nil {
+			                     registered_by_account_id, registered_at, cash_tendered_cents, change_cents, card_reference, card_type)
+			VALUES ($1, $2, $3, $4, 'principal', 'in_person', $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
+			p.EstablishmentID, p.ID, method, due, who.Role(), accountID, now, tendered, change, ref, body.CardType).Scan(&receiptID); err != nil {
+			return idempotency.Result{}, err
+		}
+		// Custo estimado com a configuração vigente agora (uma transação = um componente fixo).
+		if err := recordReceiptFee(ctx, tx, p.EstablishmentID, receiptID, method, body.CardType, due, now); err != nil {
 			return idempotency.Result{}, err
 		}
 		if _, err := tx.Exec(ctx, `

@@ -87,3 +87,16 @@ var _ atendimento.Visits = (*Service)(nil)
 func (s *Service) Statuses(ctx context.Context, q database.Querier, ids []uuid.UUID) (map[uuid.UUID]string, error) {
 	return Statuses(ctx, q, ids)
 }
+
+// Matching implementa atendimento.Visits: participações da loja cuja senha ou nick contém o
+// padrão (já normalizado e protegido por platform/busca), na coluna gerada search_text (00028). Só a equipe chega aqui (listOrders), e
+// o escopo do profissional continua aplicado pela própria listagem.
+func (s *Service) Matching(ctx context.Context, q database.Querier, estID uuid.UUID, pattern string, limit int) ([]uuid.UUID, error) {
+	rows, err := q.Query(ctx, `SELECT id FROM participation WHERE establishment_id = $1
+		AND search_text LIKE $2
+		ORDER BY created_at DESC, id DESC LIMIT $3`, estID, pattern, limit)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+}

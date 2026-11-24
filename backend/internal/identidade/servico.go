@@ -70,8 +70,10 @@ type Service struct {
 	// activeVisit é nil até existirem fila e comanda (etapas 04/05).
 	activeVisit ActiveVisitFunc
 	// media entrega o avatar privado (nil = fotos desligadas).
-	media  *midia.Service
-	google googleClient
+	media *midia.Service
+	// pixOperational: integração Pix ligada (para os meios públicos de pagamento).
+	pixOperational func() bool
+	google         googleClient
 }
 
 // Deps são as dependências do serviço.
@@ -88,6 +90,9 @@ type Deps struct {
 
 // SetMedia liga a entrega de fotos (módulo midia), montada depois do serviço de identidade.
 func (s *Service) SetMedia(m *midia.Service) { s.media = m }
+
+// SetPixOperational informa se a integração Pix está ligada (módulo pagamento, montado depois).
+func (s *Service) SetPixOperational(f func() bool) { s.pixOperational = f }
 
 // New cria o serviço.
 func New(d Deps) *Service {

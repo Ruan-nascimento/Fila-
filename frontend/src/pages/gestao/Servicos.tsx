@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Pencil, Plus, Scissors } from "lucide-react";
+import { Package, Pencil, Plus, Scissors, Tags } from "lucide-react";
 import { api } from "../../api/client";
 import { call, fieldErrors, problemMessage } from "../../api/problem";
 import type { components } from "../../api/schema.gen";
@@ -14,33 +14,53 @@ import {
   LoadError,
   Loading,
   PageHeader,
+  Segmented,
   Submit,
 } from "../../ui/ui";
+import { CategoriasGestao } from "./CategoriasGestao";
+import { BarraFiltros, CampoCategoria, type Category } from "./catalogoFiltros";
+import { useFiltros } from "./usarFiltros";
+import { Produtos } from "./Produtos";
 import { useInlinePanel } from "../../ui/useInlinePanel";
 import { useCommand } from "./comando";
 import { CommandError, type StaffContext } from "./comum";
 
 type Service = components["schemas"]["Service"];
+type Product = components["schemas"]["Product"];
+type Aba = "servicos" | "produtos" | "categorias";
 type Professional = components["schemas"]["Professional"];
 type Pro = { id: string; name: string; active: boolean };
 
-/** Catálogo: a equipe lê; só o dono cria e altera (o servidor confere). */
+/**
+ * Catálogo (serviços, produtos e categorias): a equipe lê; só o dono cria e altera (o servidor
+ * confere). Busca, filtros e ordenação são locais: as listas vêm inteiras e são limitadas.
+ */
 export function Servicos({ ctx }: { ctx: StaffContext }) {
   const [services, setServices] = useState<Service[] | null>(null);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [productsEnabled, setProductsEnabled] = useState<boolean | null>(null);
   const [pros, setPros] = useState<Pro[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [aba, setAba] = useState<Aba>("servicos");
   const novo = useInlinePanel();
+  const f = useFiltros(services);
 
   const fetchAll = useCallback(async () => {
     const path = { establishmentId: ctx.estId };
-    const s = await call(() =>
-      api.GET("/v1/establishments/{establishmentId}/services", { params: { path } }),
-    );
-    // Só o dono lista profissionais; para o profissional, os nomes não são necessários.
-    const p = ctx.isOwner
-      ? await call(() => api.GET("/v1/establishments/{establishmentId}/professionals", { params: { path } }))
-      : null;
-    return { s, p };
+    const [s, pr, ca] = await Promise.all([
+      call(() => api.GET("/v1/establishments/{establishmentId}/services", { params: { path } })),
+      call(() => api.GET("/v1/establishments/{establishmentId}/products", { params: { path } })),
+      call(() => api.GET("/v1/establishments/{establishmentId}/catalog-categories", { params: { path } })),
+    ]);
+    // Só o dono lista profissionais e lê as configurações; para o profissional, não são necessários.
+    const [p, st] = ctx.isOwner
+      ? await Promise.all([
+          call(() => api.GET("/v1/establishments/{establishmentId}/professionals", { params: { path } })),
+          call(() => api.GET("/v1/establishments/{establishmentId}/settings", { params: { path } })),
+        ])
+      : [null, null];
+    return { s, pr, ca, p, st };
   }, [ctx.estId, ctx.isOwner]);
 
   const apply = useCallback((r: Awaited<ReturnType<typeof fetchAll>>) => {
@@ -50,6 +70,9 @@ export function Servicos({ ctx }: { ctx: StaffContext }) {
     }
     setLoadError(null);
     setServices(r.s.data.data);
+    if (r.pr.ok) setProducts(r.pr.data.data);
+    if (r.ca.ok) setCategories(r.ca.data.data);
+    if (r.st?.ok) setProductsEnabled(r.st.data.data.catalog.products_enabled);
     if (r.p?.ok) {
       setPros(
         r.p.data.data.map((x: Professional) => ({
@@ -74,12 +97,14 @@ export function Servicos({ ctx }: { ctx: StaffContext }) {
 
   const header = (
     <PageHeader
-      title="Serviços"
+      title="Catálogo"
       description={
-        ctx.isOwner ? "Preço, duração, pontos e quem atende cada serviço." : "Catálogo da loja (só leitura)."
+        ctx.isOwner
+          ? "Serviços, produtos e categorias: preço, duração, pontos e quem atende cada serviço."
+          : "Catálogo da loja (só leitura)."
       }
       actions={
-        ctx.isOwner && !novo.open ? (
+        ctx.isOwner && aba === "servicos" && !novo.open ? (
           <Button id={novo.triggerId} icon={Plus} onClick={() => novo.show("aberto")}>
             Novo serviço
           </Button>
@@ -101,13 +126,36 @@ export function Servicos({ ctx }: { ctx: StaffContext }) {
         <Loading>Carregando serviços…</Loading>
       </>
     );
+  const serviceCats = categories.filter((c) => c.kind === "service");
   return (
     <div className="grid gap-4">
       {header}
-      {ctx.isOwner && (novo.open || services.length === 0) && (
+      <Segmented<Aba>
+        legend="Parte do catálogo"
+        name="aba-catalogo"
+        value={aba}
+        onChange={setAba}
+        options={[
+          { value: "servicos", label: "Serviços", icon: Scissors },
+          { value: "produtos", label: "Produtos", icon: Package },
+          { value: "categorias", label: "Categorias", icon: Tags },
+        ]}
+      />
+      {aba === "produtos" && (
+        <Produtos
+          ctx={ctx}
+          products={products}
+          categories={categories}
+          productsEnabled={productsEnabled}
+          onChanged={load}
+        />
+      )}
+      {aba === "categorias" && <CategoriasGestao ctx={ctx} categories={categories} onChanged={load} />}
+      {aba === "servicos" && ctx.isOwner && (novo.open || services.length === 0) && (
         <ServicoForm
           ctx={ctx}
           pros={pros}
+          categories={serviceCats}
           panelId={novo.panelId}
           onKeyDown={novo.onKeyDown}
           onDone={async () => {
@@ -117,15 +165,19 @@ export function Servicos({ ctx }: { ctx: StaffContext }) {
           {...(services.length > 0 ? { onCancel: novo.hide } : {})}
         />
       )}
-      {services.length === 0 ? (
-        !ctx.isOwner && <EmptyState icon={Scissors} title="Nenhum serviço cadastrado" />
-      ) : (
-        <ul className="m-0 grid list-none divide-y divide-line rounded-xl border border-line bg-surface p-0">
-          {services.map((s) => (
-            <ServicoLinha key={s.id} ctx={ctx} s={s} pros={pros} onDone={load} />
-          ))}
-        </ul>
-      )}
+      {aba === "servicos" &&
+        (services.length === 0 ? (
+          !ctx.isOwner && <EmptyState icon={Scissors} title="Nenhum serviço cadastrado" />
+        ) : (
+          <>
+            <BarraFiltros f={f} noun="serviço" categories={serviceCats} withDuration />
+            <ul className="m-0 grid list-none divide-y divide-line rounded-xl border border-line bg-surface p-0">
+              {f.list.map((s) => (
+                <ServicoLinha key={s.id} ctx={ctx} s={s} pros={pros} categories={serviceCats} onDone={load} />
+              ))}
+            </ul>
+          </>
+        ))}
     </div>
   );
 }
@@ -134,11 +186,13 @@ function ServicoLinha({
   ctx,
   s,
   pros,
+  categories,
   onDone,
 }: {
   ctx: StaffContext;
   s: Service;
   pros: Pro[];
+  categories: Category[];
   onDone: () => Promise<void>;
 }) {
   const edit = useInlinePanel();
@@ -167,7 +221,9 @@ function ServicoLinha({
         <div className="grid min-w-0 flex-1 gap-0.5">
           <h2 className="m-0 text-base font-semibold">{s.name}</h2>
           <p className="m-0 text-sm text-fg-muted tabular-nums">
-            {s.duration_minutes} min · {s.points} pontos
+            {s.duration_minutes} min · {s.points} pontos ·{" "}
+            {categories.find((c) => c.id === s.category_id)?.name ?? "sem categoria"} · posição{" "}
+            {s.display_order ?? 0}
           </p>
           {ctx.isOwner && (
             <p className="m-0 text-sm text-fg-muted">Atendem: {names || "ninguém (ninguém pode atender)"}</p>
@@ -195,6 +251,7 @@ function ServicoLinha({
         <ServicoForm
           ctx={ctx}
           pros={pros}
+          categories={categories}
           service={s}
           panelId={edit.panelId}
           onKeyDown={edit.onKeyDown}
@@ -214,6 +271,7 @@ function ServicoLinha({
 function ServicoForm({
   ctx,
   pros,
+  categories,
   service,
   onDone,
   onConflict,
@@ -223,6 +281,7 @@ function ServicoForm({
 }: {
   ctx: StaffContext;
   pros: Pro[];
+  categories: Category[];
   service?: Service;
   onDone: () => Promise<void>;
   /** Conflito de versão: relê a lista (o formulário continua aberto com o aviso). */
@@ -237,6 +296,8 @@ function ServicoForm({
   const [duration, setDuration] = useState(service ? String(service.duration_minutes) : "");
   const [points, setPoints] = useState(service ? String(service.points) : "0");
   const [selected, setSelected] = useState<string[]>(service?.professional_ids ?? []);
+  const [category, setCategory] = useState(service?.category_id ?? "");
+  const [order, setOrder] = useState(String(service?.display_order ?? 0));
   const [localErrors, setLocalErrors] = useState<Record<string, string>>({});
 
   async function onSubmit(e: FormEvent) {
@@ -246,9 +307,17 @@ function ServicoForm({
     if (cents === null || cents < 1) errs.price_cents = "Informe um valor maior que zero, ex.: 45,00";
     if (!/^\d+$/.test(duration)) errs.duration_minutes = "Informe os minutos (número inteiro).";
     if (!/^\d+$/.test(points)) errs.points = "Informe um número inteiro de pontos (0 ou mais).";
+    if (!/^\d{1,4}$/.test(order)) errs.display_order = "Use um número de 0 a 9999.";
     setLocalErrors(errs);
     if (Object.keys(errs).length > 0 || cents === null) return;
-    const fields = { name, price_cents: cents, duration_minutes: Number(duration), points: Number(points) };
+    const fields = {
+      name,
+      price_cents: cents,
+      duration_minutes: Number(duration),
+      points: Number(points),
+      category_id: category || null,
+      display_order: Number(order),
+    };
     const path = { establishmentId: ctx.estId };
     let ok: boolean;
     let conflict = false;
@@ -290,6 +359,8 @@ function ServicoForm({
         setDuration("");
         setPoints("0");
         setSelected([]);
+        setCategory("");
+        setOrder("0");
       }
       await onDone();
     }
@@ -339,6 +410,22 @@ function ServicoForm({
           value={points}
           error={errors.points}
           onChange={(e) => setPoints(e.target.value)}
+        />
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <CampoCategoria
+          categories={categories}
+          value={category}
+          onChange={setCategory}
+          error={errors.category_id}
+        />
+        <Field
+          label="Posição"
+          inputMode="numeric"
+          value={order}
+          error={errors.display_order}
+          hint="Menor aparece primeiro (padrão 0)."
+          onChange={(e) => setOrder(e.target.value)}
         />
       </div>
       <p className="m-0 -mt-2 text-sm text-fg-muted">

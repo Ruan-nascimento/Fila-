@@ -1,5 +1,12 @@
 import { createContext, useContext } from "react";
-import type { PublicQueue, PublicService, Selection } from "./selecao";
+import type {
+  Ordering,
+  PublicCategory,
+  PublicProduct,
+  PublicQueue,
+  PublicService,
+  Selection,
+} from "./selecao";
 
 export type StoreData = {
   shopId: string;
@@ -9,6 +16,11 @@ export type StoreData = {
   services: PublicService[] | null;
   servicesError: string | null;
   retryServices: () => void;
+  /** Produtos ativos (vazio quando a loja não oferece); null enquanto carrega. */
+  products: PublicProduct[] | null;
+  categories: PublicCategory[];
+  /** Opções públicas do pedido (limite de quantidade, produtos, visitante, meios). */
+  ordering: Ordering;
   /** Escolha do visitante (profissional e serviços): sobrevive à identificação e à troca de layout. */
   selection: Selection;
   setSelection: (s: Selection) => void;

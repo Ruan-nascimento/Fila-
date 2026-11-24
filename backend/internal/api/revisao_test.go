@@ -58,8 +58,14 @@ func TestAuthorizationSweepAllRoutes(t *testing.T) {
 	inv := b.owner.mustStatus(b.owner.cmd("POST", estPath(b.id, "/professionals/"+duda.String()+"/invites"),
 		map[string]any{"email": "outro-beto@exemplo.com"}), 201).data()
 	items := order["items"].([]any)
+	// Catálogo novo (ADR-0032): categoria e produto reais da loja A.
+	categoria := b.owner.mustStatus(b.owner.cmd("POST", estPath(b.id, "/catalog-categories"),
+		map[string]any{"kind": "product", "name": "Finalizadores"}), 201).data()
+	produto := b.owner.mustStatus(b.owner.cmd("POST", estPath(b.id, "/products"),
+		map[string]any{"name": "Pomada modeladora", "price_cents": 3500}), 201).data()
 
 	ids := map[string]string{
+		"categoryId": categoria["id"].(string), "productId": produto["id"].(string),
 		"establishmentId": b.id.String(), "queueId": b.filaBeto.String(), "participationId": pm["id"].(string),
 		"orderId": om["id"].(string), "professionalId": b.beto.String(), "serviceId": b.corte, "rewardId": reward["id"].(string),
 		"reservationId": res["id"].(string), "receiptId": rec["id"].(string), "chargeId": ch["id"].(string),
@@ -138,7 +144,7 @@ func TestAuthorizationSweepAllRoutes(t *testing.T) {
 	}
 	alheios := []string{pm["id"].(string), om["id"].(string), res["id"].(string), rec["id"].(string), ch["id"].(string),
 		b.filaBeto.String(), "maria@exemplo.com"}
-	versao := map[string]string{"queueId": "queue", "professionalId": "professional", "serviceId": "service",
+	versao := map[string]string{"categoryId": "catalog_category", "productId": "product", "queueId": "queue", "professionalId": "professional", "serviceId": "service",
 		"rewardId": "reward", "reservationId": "reward_reservation", "participationId": "participation", "orderId": "service_order"}
 	// corpoValido monta um corpo que passa na validação, com a versão REAL do recurso alvo: assim
 	// uma resposta 400 vira prova (a recusa precisa vir da autorização, não da validação).
@@ -166,6 +172,10 @@ func TestAuthorizationSweepAllRoutes(t *testing.T) {
 			body = map[string]any{"resolution_note": "teste de autorização"}
 		case "signalAvailability":
 			body = map[string]any{"unavailable": true}
+		case "setQueueCapacity":
+			body["capacity"] = nil
+		case "setItemPerformedQuantity":
+			body["performed_quantity"] = 1
 		case "activateDesktopInstallation":
 			body = map[string]any{"code": "ABCD-EFGH-JKMN-PQRS"}
 		case "createDesktopBinding":
