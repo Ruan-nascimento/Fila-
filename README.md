@@ -1,19 +1,43 @@
-# Fila — MVP web para barbearia
+# Fila — fila, atendimento, pagamento e fidelidade para barbearias
 
-Sistema de fila, atendimento, pagamento e fidelidade para barbearia, construído em etapas (veja [REGRAS.md](REGRAS.md)).
-**Situação atual: etapa 13 (revisão final e piloto).** O MVP foi revisado regra por regra ([docs/rastreabilidade.md](docs/rastreabilidade.md)) e testado de ponta a ponta em navegador real contra uma homologação com TLS ([docs/evidencias.md](docs/evidencias.md)). **O piloto em produção depende de dois itens externos:** provedor de e-mail e, para usar Pix, validação na AbacatePay real. O que falta, o plano e a volta atrás estão em [docs/piloto.md](docs/piloto.md); o guia de uso por papel, em [docs/guia-por-papel.md](docs/guia-por-papel.md). Funcionam: contas e equipe, visitante com código de recuperação, loja, serviços, fila com tempo real, comanda, pagamento (Pix em modo de teste, dinheiro e cartão) com conferência, estorno e pendências, pontos e prêmios, histórico e exclusão de conta, implantação, monitoramento, backup e restauração ([docs/operacao/](docs/operacao/README.md)).
+**Versão 1.0.0 — em produção.** O cliente entra na fila pelo link ou QR Code da loja (com conta ou só com um apelido), acompanha a vez em tempo real e paga em dinheiro, cartão ou Pix. A equipe chama, atende, registra o que fez e recebe; o dono cuida das filas, do catálogo, das configurações, das pendências financeiras e vê os indicadores no programa **Fila Gestão**.
+
+## 📘 Guia prático (comece por aqui)
+
+| | |
+|---|---|
+| **[⬇ Baixar o Guia prático em PDF](https://github.com/Ruan-nascimento/Fila-/raw/main/docs/Guia-Pratico-Fila-1.0.0.pdf)** | Todas as funções, passo a passo, para cliente, profissional, dono e operador (15 páginas, para imprimir ou mandar por mensagem) |
+| [Ler o guia no GitHub](docs/guia-pratico.md) | O mesmo conteúdo, navegável |
+| [Guia de uma página por papel](docs/guia-por-papel.md) | Resumo para colar no balcão |
+| [⬇ Baixar o programa Fila Gestão](https://github.com/Ruan-nascimento/Fila-/releases/latest) | Windows (`Fila-Gestao_1.0.0_x64-setup.exe`) e Linux Mint/Ubuntu (`Fila-Gestao_1.0.0_amd64.deb`) |
+
+## O que a versão 1.0.0 faz
+
+| Para quem | Funções |
+|---|---|
+| **Cliente** | Painel com busca de barbearias (mais perto, abertas agora, A–Z) e as filas em que está · entrar **sem conta** (apelido + código de recuperação), com conta ou com Google · escolher serviços com **quantidade**, buscar por nome e categoria, adicionar **produtos** · acompanhar senha, posição e espera em tempo real · alterar o pedido, pedir alteração depois de chamado, **Vou me atrasar**, sair da fila · pagar em dinheiro, cartão ou **Pix** · **pontos e prêmios** · histórico · notificações · Minha conta e exclusão com protocolo |
+| **Profissional** | A própria fila: chamar, iniciar, marcar ausência, **subir/descer** na fila · comanda por unidade (**+1 realizado**, **Todos realizados**, **Entregar** produto) · concluir ou interromper · aceitar/recusar pedidos de mudança · fechar/reabrir a entrada da própria fila · receber (dinheiro com troco, débito/crédito, Pix com conferência) · entregar prêmios · avisar indisponibilidade |
+| **Dono** | Tudo do profissional em todas as filas · abrir, pausar e encerrar a operação · **limite por fila** e entrada aberta/fechada · transferir e cancelar com motivo · **Pendências** · comandas (revisar interrupção, corrigir valor) · **estornos** · **Catálogo** (serviços, produtos, categorias) · profissionais e convites · **Configurações da loja** por seção (identidade, logo, cor, QR Code, visitantes, tolerância, meios de pagamento e **custos de recebimento**, permissões) · prêmios · exclusões · auditoria · sessão única de dono |
+| **Programa Fila Gestão** | A mesma gestão no computador + **Dashboard analítico** (só em computador autorizado): atendimentos, unidades, produtos, espera, recebido e recebido após custos · bandeja do sistema, **segundo plano** e avisos nativos |
+| **Operador** | `fila-admin` (loja, dono, códigos do desktop, verificação, manutenção) · workflows **Publicar**, **Backup** e **Fila Gestão (instaladores)** · monitoramento e restauração ([docs/operacao/](docs/operacao/README.md)) |
+
+Em produção: site e proxy na **Vercel**, API e worker em Go no **Render**, PostgreSQL 18 no **Neon**, fotos e backups no **Cloudflare R2**, e-mails pelo **Resend**, login de cliente pelo **Google**, Pix pela **AbacatePay** (modo teste validado; cobrança real depende do checklist em [docs/pagamentos-abacatepay.md](docs/pagamentos-abacatepay.md)). Detalhes em [docs/operacao/publicacao-v1.md](docs/operacao/publicacao-v1.md).
+
+## Onde está cada coisa
 
 | Pasta | O que tem |
 |---|---|
 | [backend/](backend/) | Servidor em Go: `cmd/api` (HTTP), `cmd/worker` (tarefas em segundo plano), `cmd/migrate` (migrações), módulos de domínio em `internal/` |
 | [frontend/](frontend/) | Aplicação web React + TypeScript + Vite |
 | [desktop-dono/](desktop-dono/README.md) | **Fila Gestão**: programa instalável do dono (Tauri 2, Windows e Linux Mint) que abre a gestão do site em `/dono` e o **Dashboard analítico** exclusivo ([guia](docs/desktop/guia-do-dono.md), [métricas](docs/desktop/metricas.md)) |
-| [docs/](docs/README.md) | Regras, contrato OpenAPI, matrizes, cenários e decisões (ADRs) |
+| [docs/](docs/README.md) | **Guia prático** (e PDF), regras, contrato OpenAPI, matrizes, cenários, decisões (ADRs) e operação |
 | [compose.yaml](compose.yaml) | PostgreSQL local via Docker (desenvolvimento) |
 | [deploy/](deploy/) | Homologação e produção: imagens, compose com Caddy (TLS), papéis do banco, backup/restauração, alertas ([docs/operacao/](docs/operacao/README.md)) |
-| [.github/workflows/ci.yml](.github/workflows/ci.yml) | Integração contínua |
+| [.github/workflows/](.github/workflows/) | CI, Publicar (migrações + deploy), Backup e instaladores do Fila Gestão |
 
 ---
+
+# Para desenvolvedores: rodar o projeto no seu computador
 
 ## 1. Instalar as ferramentas (uma vez)
 
@@ -98,7 +122,7 @@ go -C backend run ./cmd/worker
 
 O worker também **conclui as exclusões de conta** (quando não há pendência) e remove nicks antigos de visitantes, e **publica as atualizações em tempo real**: sem ele rodando, as telas não se atualizam sozinhas (os comandos continuam funcionando e nada se perde — ao ligar o worker, tudo é publicado). Para ver se há atraso: `go -C backend run ./cmd/fila-admin eventos`.
 
-**Pix (opcional, etapa 08).** Sem configurar nada, o Pix fica desligado e a equipe recebe em dinheiro ou cartão. Para testar o Pix da AbacatePay, coloque no `.env` uma chave de **teste** (`abc_dev_...`, criada no painel da AbacatePay), que nunca cobra de verdade:
+**Pix (opcional).** Sem configurar nada, o Pix fica desligado e a equipe recebe em dinheiro ou cartão. Para testar o Pix da AbacatePay, coloque no `.env` uma chave de **teste** (`abc_dev_...`, criada no painel da AbacatePay), que nunca cobra de verdade:
 
 ```
 FILA_PIX_PROVIDER=abacatepay
@@ -111,9 +135,9 @@ A API e o worker leem a mesma configuração: o worker é quem consulta a Abacat
 
 Opcional: para receber os avisos da AbacatePay (webhook), cadastre no painel deles a URL pública **https** da sua API terminando em `/v1/webhooks/abacatepay`, com um secret de 32+ caracteres, e coloque o mesmo valor em `FILA_ABACATEPAY_WEBHOOK_SECRET`. Sem isso o sistema funciona do mesmo jeito, só que confirma os Pix pela consulta do worker (alguns segundos depois). Detalhes, limites e o checklist antes de cobrar de verdade estão em [docs/pagamentos-abacatepay.md](docs/pagamentos-abacatepay.md).
 
-**Pontos e prêmios (etapa 10).** O programa começa desligado. O dono liga em Gestão → Prêmios, define os pontos de cada serviço na aba Serviços e cadastra os prêmios (cortesias). O worker vence as reservas de prêmio depois de 24 h e devolve os pontos.
+**Pontos e prêmios.** O programa começa desligado. O dono liga em Gestão → Prêmios, define os pontos de cada serviço em Gestão → Catálogo e cadastra os prêmios (cortesias). O worker vence as reservas de prêmio depois de 24 h e devolve os pontos.
 
-Ainda não há provedor de e-mail: em desenvolvimento cada e-mail (verificação de conta, redefinição de senha, convite) vira um arquivo `.txt` na pasta `backend\.correio\`. Abra o arquivo e copie o link para o navegador. Essa pasta não vai para o Git.
+**E-mails em desenvolvimento.** Sem `FILA_MAIL_MODE=resend` (usado em produção), cada e-mail (verificação de conta, redefinição de senha, convite) vira um arquivo `.txt` na pasta `backend\.correio\`. Abra o arquivo e copie o link para o navegador. Essa pasta não vai para o Git.
 
 ### 5.2 Criar a loja e o dono inicial (uma vez)
 
@@ -149,7 +173,7 @@ npm run dev
 Abra http://127.0.0.1:5173. Se a API (passo 5) não estiver rodando ou o banco não estiver migrado, a página inicial mostra um aviso; com tudo pronto, ela só explica como entrar pela loja.
 O Vite repassa `/v1` e `/healthz` para a API, então frontend e API ficam na mesma origem, como em produção.
 
-Telas desta etapa:
+Telas (o passo a passo de cada uma está no [guia prático](docs/guia-pratico.md)):
 
 | Endereço | Para quê |
 |---|---|

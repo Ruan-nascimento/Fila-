@@ -26,8 +26,11 @@ Passe o código ao dono por um canal privado, como telefone ou mensagem direta. 
 
 ## 2. Instalar
 
-- **Windows:** dê dois cliques em `Fila Gestão_0.2.0_x64-setup.exe`. Não pede administrador. Se o SmartScreen avisar, escolha *Mais informações → Executar assim mesmo*. O instalador não tem assinatura de código.
-- **Linux Mint:** `sudo apt install ./"Fila Gestao_0.2.0_amd64.deb"`.
+Baixe a versão mais recente em [Releases](https://github.com/Ruan-nascimento/Fila-/releases/latest) (`desktop-v1.0.0`).
+
+- **Windows:** dê dois cliques em `Fila-Gestao_1.0.0_x64-setup.exe`. Não pede administrador. Se o SmartScreen avisar, escolha *Mais informações → Executar assim mesmo*. O instalador não tem assinatura de código.
+- **Linux Mint 22 / Ubuntu 24.04:** `sudo apt install ./Fila-Gestao_1.0.0_amd64.deb`.
+- **Conferir o arquivo:** `sha256sum -c SHA256SUMS.txt --ignore-missing` (no Windows, `Get-FileHash <arquivo>` e compare com `SHA256SUMS.txt`).
 
 ## 3. Entrar como dono e abrir o Dashboard
 
@@ -80,3 +83,15 @@ Para **substituir** por um computador novo, emita um código novo (passo 1) e at
   - a prova de posse da chave de um computador autorizado.
 - O navegador comum continua com a gestão normal, mas nunca com os gráficos.
 - A garantia é sobre a **chave** e a **sessão**, não sobre o programa em si. Quem tiver controle total do computador autorizado, com a sessão do dono aberta, consegue usar a chave. Por isso, revogue computadores perdidos e não deixe o PC da loja destravado sem ninguém por perto.
+
+## 7. Bandeja e segundo plano (1.0.0)
+
+Menu do ícone na bandeja do sistema: **Abrir Fila**, **Som dos avisos**, **Continuar executando em segundo plano ao fechar a janela** e **Sair do Fila**.
+
+- Com o segundo plano ligado, o X só esconde a janela e os avisos continuam chegando. Começa desligado.
+- **Sair do Fila** encerra o programa de verdade.
+- Abrir o programa de novo traz a janela que já está aberta, mesmo escondida.
+- Clicar na notificação não reabre a janela: use o ícone da bandeja.
+- O programa não inicia junto com o sistema e não se atualiza sozinho (as telas da gestão se atualizam pelo site; o Dashboard e a bandeja exigem instalar a versão nova).
+
+Passo a passo de todas as funções: [Guia prático](../guia-pratico.md), seção 6.
