@@ -42,3 +42,4 @@ Para mudar uma decisão, crie um novo ADR que substitua o anterior (não reescre
 | [ADR-0035](0035-entrada-capacidade-e-tolerancia.md) | Entrada na fila separada da operação, capacidade e tolerância configurável | Aceita (substitui R-FILA-09/10/18) |
 | [ADR-0036](0036-pesquisa-e-organizacao-das-listas.md) | Pesquisa e organização das listas | Aceita |
 | [ADR-0037](0037-desktop-em-segundo-plano.md) | Programa desktop em segundo plano (bandeja, instância única) | Aceita |
+| [ADR-0038](0038-agenda-hibrida-e-uma-cadeira.md) | Agenda gratuita, operação híbrida e uma cadeira por profissional (Fila 2.0) | Aceita |

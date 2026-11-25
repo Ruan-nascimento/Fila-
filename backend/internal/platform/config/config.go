@@ -125,6 +125,10 @@ type OpsConfig struct {
 	// DeletionJournalBucket: bucket (mesmas credenciais FILA_S3_*) onde cada pedido de exclusão é
 	// copiado como objeto. Recomendado quando o disco do worker não é acessível para exportação.
 	DeletionJournalBucket string
+	// AgendaEnabled libera a agenda (FILA_AGENDA). Desligada, nenhuma loja sai do modo fila; as
+	// reservas já existentes continuam consultáveis e operáveis. Padrão: só fora de homologação e
+	// produção (lojas reais só veem a agenda quando a operação ligar de propósito).
+	AgendaEnabled bool
 	// HeartbeatURL: monitor externo que recebe o sinal de vida do worker (e /fail com alerta).
 	// Contém identificador secreto do monitor. Vazio = desligado.
 	HeartbeatURL Secret
@@ -307,6 +311,8 @@ const (
 	VarS3AccessKey       = "FILA_S3_ACCESS_KEY_ID"
 	VarS3SecretKey       = "FILA_S3_SECRET_ACCESS_KEY"
 	VarS3Prefix          = "FILA_S3_PREFIX"
+	// VarAgenda libera a agenda (Fila 2.0, ADR-0038). Padrão: ligada só em desenvolvimento.
+	VarAgenda = "FILA_AGENDA"
 	// VarTestDatabaseURL é lida só pelos testes de integração; aceita aqui para não ser "desconhecida".
 	VarTestDatabaseURL = "FILA_TEST_DATABASE_URL"
 	VarRequireDBTests  = "FILA_REQUIRE_DB_TESTS"
@@ -338,6 +344,7 @@ var knownVars = map[string]bool{
 	VarMediaStorage: true, VarMediaDir: true, VarMediaPerMinute: true, VarMediaPerDay: true, VarMediaWorkers: true,
 	VarS3Endpoint: true, VarS3Bucket: true, VarS3Region: true, VarS3AccessKey: true, VarS3SecretKey: true, VarS3Prefix: true,
 	VarTestS3Endpoint: true, VarTestS3AccessKey: true, VarTestS3SecretKey: true, VarTestS3Bucket: true, VarRequireS3Tests: true,
+	VarAgenda: true,
 }
 
 // DeployVars são variáveis da IMPLANTAÇÃO (deploy/compose.yaml, deploy/*.sh), não da aplicação:
@@ -408,6 +415,7 @@ func Load(environ []string) (*Config, error) {
 		SSEMaxConnections:  l.intRange(VarSSEMax, 2000, 10, 100000),
 		SSEPerIP:           l.intRange(VarSSEPerIP, 100, 1, 10000),
 		DeletionJournalDir: l.text(VarDeletionJournal, ""),
+		AgendaEnabled:      l.boolean(VarAgenda, !prod),
 	}
 	if _, ok := l.get(VarMetricsAddr); ok {
 		cfg.Ops.MetricsAddr = l.addr(VarMetricsAddr, "")

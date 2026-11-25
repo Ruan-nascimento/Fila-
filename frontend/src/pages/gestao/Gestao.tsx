@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useParams } from "react-router";
 import {
   ArrowLeftRight,
+  CalendarDays,
   ChevronRight,
+  Clock,
   Ellipsis,
   FileClock,
   Gift,
@@ -23,7 +25,11 @@ import { StreamProvider, StreamStatusNotice } from "../../stream/StreamProvider"
 import { AvisosGerais } from "../../ui/estados";
 import { ConviteNotificacoes, NotificacoesProvider, Sino } from "../../features/notificacoes/Notificacoes";
 import { Brand, SkipLink, type StoreMark } from "../../ui/layout";
-import { EmptyState, Loading, Notice, PageHeader, type IconType } from "../../ui/ui";
+import { Avatar, EmptyState, Loading, Notice, PageHeader, type IconType } from "../../ui/ui";
+import { useMyProfile } from "../../features/account/perfil";
+import type { ServiceMode } from "../../features/agenda/horario";
+import { Agenda } from "./Agenda";
+import { Horarios } from "./Horarios";
 import { cx } from "../../ui/cx";
 import { NaoElegivel } from "../dono/Dono";
 import { lojasDoDono, modoDono } from "../dono/modo";
@@ -63,7 +69,7 @@ export function GestaoInicio() {
   // Com uma loja só, vai direto para ela (link direto e Voltar continuam funcionando).
   if (lojas.size === 1) {
     const [id] = [...lojas.keys()];
-    return <Navigate to={`/gestao/${id}/filas`} replace />;
+    return <Navigate to={`/gestao/${id}`} replace />;
   }
   return (
     <section aria-labelledby="titulo-gestao" className="grid gap-4">
@@ -77,7 +83,7 @@ export function GestaoInicio() {
           {[...lojas].map(([id, l]) => (
             <li key={id}>
               <Link
-                to={`/gestao/${id}/filas`}
+                to={`/gestao/${id}`}
                 className="flex min-h-11 items-center gap-3 px-4 py-3 text-fg no-underline hover:bg-surface-2"
               >
                 <Store aria-hidden="true" className="size-5 text-fg-muted" />
@@ -95,7 +101,7 @@ export function GestaoInicio() {
   );
 }
 
-type Dest = { path: string; label: string; icon: IconType; owner?: boolean };
+type Dest = { path: string; label: string; icon: IconType; owner?: boolean; agenda?: boolean };
 type Group = { title: string; items: Dest[] };
 
 /** Destinos agrupados por atividade. Só escondem o que não se aplica; quem decide é o servidor. */
@@ -103,6 +109,7 @@ const groups: Group[] = [
   {
     title: "Operação",
     items: [
+      { path: "agenda", label: "Agenda", icon: CalendarDays, agenda: true },
       { path: "filas", label: "Filas", icon: UsersRound },
       { path: "comandas", label: "Comandas", icon: ReceiptText },
       { path: "premios", label: "Prêmios", icon: Gift },
@@ -112,6 +119,7 @@ const groups: Group[] = [
     title: "Cadastros",
     items: [
       { path: "servicos", label: "Catálogo", icon: Scissors },
+      { path: "horarios", label: "Horários", icon: Clock, agenda: true },
       { path: "profissionais", label: "Profissionais", icon: UserRound, owner: true },
       { path: "loja", label: "Configurações da loja", icon: Store, owner: true },
     ],
@@ -126,10 +134,22 @@ const groups: Group[] = [
   },
 ];
 
-function visibleGroups(isOwner: boolean): Group[] {
+/** Agenda e Horários aparecem quando a loja usa horário marcado (ou o dono, para preparar). */
+function visibleGroups(isOwner: boolean, mode: ServiceMode | undefined): Group[] {
   return groups
-    .map((g) => ({ ...g, items: g.items.filter((d) => isOwner || !d.owner) }))
+    .map((g) => ({
+      ...g,
+      items: g.items.filter(
+        (d) => (isOwner || !d.owner) && (!d.agenda || (mode !== undefined && mode !== "queue")),
+      ),
+    }))
     .filter((g) => g.items.length > 0);
+}
+
+/** Tela inicial conforme a forma de atendimento: Filas, Agenda ou Hoje (ADR-0038). */
+function Inicio({ base, mode }: { base: string; mode: ServiceMode | undefined }) {
+  if (mode === undefined) return <Loading />;
+  return <Navigate to={mode === "queue" ? `${base}/filas` : `${base}/agenda`} replace />;
 }
 
 /** Área da equipe de uma loja. */
@@ -175,17 +195,53 @@ export function GestaoLoja() {
   const base = `/gestao/${estId}`;
   const owner = (el: ReactNode) => (ctx.isOwner ? el : <Navigate to={`${base}/filas`} replace />);
   return (
+    <GestaoComMarca
+      ctx={ctx}
+      base={base}
+      userName={account?.name ?? ""}
+      accountId={account?.id ?? ""}
+      multipleStores={stores > 1}
+      owner={owner}
+    />
+  );
+}
+
+function GestaoComMarca({
+  ctx,
+  base,
+  userName,
+  accountId,
+  multipleStores,
+  owner,
+}: {
+  ctx: StaffContext;
+  base: string;
+  userName: string;
+  accountId: string;
+  multipleStores: boolean;
+  owner: (el: ReactNode) => ReactNode;
+}) {
+  const marca = useMarcaDaLoja(ctx.estId);
+  const mode = marca?.mode;
+  return (
     // Uma conexão de atualizações para toda a área da equipe desta loja. O layout muda só por CSS
     // (a mesma árvore em qualquer largura): trocar de tamanho não abre outra conexão.
-    <StreamProvider estId={estId} channels={ctx.isOwner ? ["owner"] : ["professional"]}>
+    <StreamProvider estId={ctx.estId} channels={ctx.isOwner ? ["owner"] : ["professional"]}>
       <StaffShell
         ctx={ctx}
         base={base}
-        userName={account?.name ?? ""}
-        accountId={account?.id ?? ""}
-        multipleStores={stores > 1}
+        userName={userName}
+        accountId={accountId}
+        multipleStores={multipleStores}
+        marca={marca}
       >
         <Routes>
+          <Route index element={<Inicio base={base} mode={mode} />} />
+          <Route
+            path="agenda"
+            element={<Agenda key={mode} ctx={ctx} initialTab={mode === "schedule" ? "dia" : "hoje"} />}
+          />
+          <Route path="horarios" element={<Horarios ctx={ctx} mode={mode ?? "queue"} />} />
           <Route path="filas/:queueId?" element={<Filas ctx={ctx} />} />
           <Route path="comandas/:orderId?" element={<Comandas ctx={ctx} />} />
           <Route path="servicos" element={<Servicos ctx={ctx} />} />
@@ -195,7 +251,7 @@ export function GestaoLoja() {
           <Route path="loja" element={owner(<LojaConfig ctx={ctx} />)} />
           <Route path="exclusoes" element={owner(<Exclusoes ctx={ctx} />)} />
           <Route path="auditoria" element={owner(<Auditoria ctx={ctx} />)} />
-          <Route path="*" element={<Navigate to={`${base}/filas`} replace />} />
+          <Route path="*" element={<Inicio base={base} mode={mode} />} />
         </Routes>
       </StaffShell>
     </StreamProvider>
@@ -215,6 +271,7 @@ function StaffShell({
   userName,
   accountId,
   multipleStores,
+  marca,
   children,
 }: {
   ctx: StaffContext;
@@ -222,13 +279,16 @@ function StaffShell({
   userName: string;
   accountId: string;
   multipleStores: boolean;
+  marca: Marca | null;
   children: ReactNode;
 }) {
-  const gs = visibleGroups(ctx.isOwner);
+  const gs = visibleGroups(ctx.isOwner, marca?.mode);
   const role = ctx.isOwner ? "Dono" : "Profissional";
   // Nome e logo ATUAIS da loja (relidos quando o dono salva): o canto superior esquerdo muda na hora.
-  const marca = useMarcaDaLoja(ctx.estId);
   const store = { name: marca?.name ?? ctx.estName, logo: marca?.logo };
+  // Foto pessoal de quem está usando (não a logo da loja): a mesma de "Minha conta".
+  const { profile } = useMyProfile(accountId || undefined);
+  const avatar = profile?.avatar ?? null;
   return (
     // Barbeiro e dono recebem as mesmas notificações (cada um das filas que pode ver).
     <NotificacoesProvider
@@ -283,7 +343,13 @@ function StaffShell({
               to="/conta"
               className="flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm text-fg no-underline hover:bg-surface-2"
             >
-              <UserRound aria-hidden="true" className="size-5" />
+              <Avatar
+                key={avatar?.variants[0]?.url ?? "sem-foto"}
+                name={userName || role}
+                image={avatar}
+                size={32}
+                className="size-8 text-xs"
+              />
               <span className="grid min-w-0 leading-tight">
                 <span className="font-medium">Minha conta</span>
                 <span className="truncate text-xs text-fg-muted">
@@ -303,10 +369,18 @@ function StaffShell({
               {ctx.isOwner && <BotaoDashboard estId={ctx.estId} compact />}
               <Link
                 to="/conta"
-                aria-label={`Minha conta (${role})`}
                 className="inline-flex size-11 items-center justify-center rounded-lg text-fg hover:bg-surface-2"
               >
-                <UserRound aria-hidden="true" className="size-5" />
+                <span className="sr-only">{`Minha conta (${role})`}</span>
+                <span aria-hidden="true">
+                  <Avatar
+                    key={avatar?.variants[0]?.url ?? "sem-foto"}
+                    name={userName || role}
+                    image={avatar}
+                    size={32}
+                    className="size-8 text-xs"
+                  />
+                </span>
               </Link>
             </div>
           </header>
@@ -320,7 +394,12 @@ function StaffShell({
             <ConviteNotificacoes texto="Quer ser avisado quando alguém entrar na fila, sair, avisar que vai atrasar ou pedir mudança na comanda? Ative as notificações neste aparelho." />
             {children}
           </main>
-          <BottomNav base={base} groups={gs} multipleStores={multipleStores} />
+          <BottomNav
+            base={base}
+            groups={gs}
+            multipleStores={multipleStores}
+            agenda={marca?.mode !== undefined && marca.mode !== "queue"}
+          />
         </div>
       </div>
     </NotificacoesProvider>
@@ -332,15 +411,17 @@ function BottomNav({
   base,
   groups: gs,
   multipleStores,
+  agenda,
 }: {
   base: string;
   groups: Group[];
   multipleStores: boolean;
+  agenda: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const location = useLocation();
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const primary = ["filas", "comandas"];
+  const primary = agenda ? ["agenda", "filas", "comandas"] : ["filas", "comandas"];
   const extra = gs
     .map((g) => ({ ...g, items: g.items.filter((d) => !primary.includes(d.path)) }))
     .filter((g) => g.items.length > 0);
@@ -363,6 +444,7 @@ function BottomNav({
       >
         <ul className="m-0 mx-auto flex max-w-xl list-none p-0">
           {[
+            ...(agenda ? [{ path: "agenda", label: "Agenda", icon: CalendarDays }] : []),
             { path: "filas", label: "Filas", icon: UsersRound },
             { path: "comandas", label: "Comandas", icon: ReceiptText },
           ].map((d) => (
@@ -508,7 +590,7 @@ function MaisSheet({
   );
 }
 
-type Marca = { estId: string; palette: string; name: string; logo: StoreMark["logo"] };
+type Marca = { estId: string; palette: string; name: string; logo: StoreMark["logo"]; mode: ServiceMode };
 
 /**
  * Identidade da loja na gestão (paleta, nome e logo); relê depois que o dono salva. Também
@@ -530,7 +612,7 @@ function useMarcaDaLoja(estId: string): Marca | null {
     ).then((out) => {
       if (active && out.ok) {
         const d = out.data.data;
-        setGot({ estId, palette: d.palette, name: d.name, logo: d.logo });
+        setGot({ estId, palette: d.palette, name: d.name, logo: d.logo, mode: d.service_mode ?? "queue" });
       }
     });
     return () => {

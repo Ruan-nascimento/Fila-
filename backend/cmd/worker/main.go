@@ -26,6 +26,7 @@ import (
 	"syscall"
 	"time"
 
+	"fila/internal/agenda"
 	"fila/internal/api"
 	"fila/internal/exclusao"
 	"fila/internal/fidelidade"
@@ -174,6 +175,14 @@ func runJobs(ctx context.Context, rt *app.Runtime, ring *keys.Ring, clk clock.Cl
 	if j := journal(cfg); j != nil {
 		wg.Go(func() { deletion.RunJournal(ctx, j, 5*time.Second) })
 	}
+
+	// Agenda (ADR-0038): falta automática de horário chamado sem chegada e "atraso da loja". O
+	// módulo fila recebe o guarda da agenda para que a reserva acompanhe a visita encerrada.
+	agendaFila := fila.New(fila.Deps{Pool: rt.Pool, Clock: clk, Log: log.With("tarefa", "agenda"), AgendaEnabled: cfg.Ops.AgendaEnabled})
+	agendaSvc := agenda.New(agenda.Deps{Pool: rt.Pool, Clock: clk, Log: log.With("tarefa", "agenda"), Visits: agendaFila,
+		Enabled: cfg.Ops.AgendaEnabled})
+	agendaFila.Agenda = agendaSvc
+	wg.Go(func() { agendaSvc.Run(ctx, 30*time.Second) })
 
 	// Fidelidade: vence reservas de prêmio (24 h) e libera pontos e unidade uma vez (T-RW-03).
 	wg.Go(func() { loyalty.Run(ctx, 30*time.Second) })

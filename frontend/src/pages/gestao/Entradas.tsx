@@ -54,16 +54,26 @@ export function Entradas({
   const waiting = queue.entries.filter((e) => e.status === "waiting");
   const busy = Boolean(current);
 
-  async function chamar() {
+  // Agenda (ADR-0038): se o primeiro não cabe antes do próximo horário marcado, o servidor explica
+  // (chair_reserved). Com o cliente já na cadeira, "Chamar e iniciar agora" conta só duração + limpeza.
+  const [semTolerancia, setSemTolerancia] = useState(false);
+  async function chamar(startNow = false) {
     const out = await cmd.run(
-      `chamar:${queue.queue_id}:${queue.entries.map((e) => e.version).join(".")}`,
+      `chamar:${queue.queue_id}:${startNow ? "iniciar" : "chamar"}:${queue.entries.map((e) => e.version).join(".")}`,
       (key) =>
         api.POST("/v1/establishments/{establishmentId}/queues/{queueId}/call-next", {
           params: {
             path: { establishmentId: ctx.estId, queueId: queue.queue_id },
             header: { "Idempotency-Key": key },
           },
+          ...(startNow ? { body: { start_immediately: true } } : {}),
         }),
+    );
+    setSemTolerancia(
+      !out.ok &&
+        out.problem?.code === "chair_reserved" &&
+        !startNow &&
+        /Chamar e iniciar agora/.test(out.problem.detail ?? ""),
     );
     if (out.ok || out.problem?.status === 409) await onDone();
   }
@@ -167,6 +177,16 @@ export function Entradas({
               >
                 Chamar próximo
               </Button>
+              {semTolerancia && callBlocked === null && (
+                <Button
+                  variant="secondary"
+                  block
+                  disabled={cmd.busy !== null}
+                  onClick={() => void chamar(true)}
+                >
+                  Cliente já está aqui: chamar e iniciar agora
+                </Button>
+              )}
               {callBlocked && <p className="m-0 text-sm text-fg-muted">{callBlocked}</p>}
             </div>
           )}
@@ -272,6 +292,11 @@ function Atual({
           </Badge>
         )}
         {e.late_notice_at && <AvisoAtraso at={e.late_notice_at} />}
+        {e.origin === "appointment" && (
+          <Badge tone="primary" className="mt-1">
+            Horário marcado
+          </Badge>
+        )}
         {called && tolerance && (
           <p className="m-0 mt-1 text-sm">
             Tolerância até <strong className="tabular-nums">{time.format(tolerance)}</strong>

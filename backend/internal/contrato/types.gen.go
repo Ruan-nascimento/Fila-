@@ -218,6 +218,201 @@ func (e Appearance) Valid() bool {
 	}
 }
 
+// Defines values for AppointmentCancelledBy.
+const (
+	AppointmentCancelledByCustomer    AppointmentCancelledBy = "customer"
+	AppointmentCancelledByLessThannil AppointmentCancelledBy = "<nil>"
+	AppointmentCancelledByStore       AppointmentCancelledBy = "store"
+)
+
+// Valid indicates whether the value is a known member of the AppointmentCancelledBy enum.
+func (e AppointmentCancelledBy) Valid() bool {
+	switch e {
+	case AppointmentCancelledByCustomer:
+		return true
+	case AppointmentCancelledByLessThannil:
+		return true
+	case AppointmentCancelledByStore:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AppointmentIdentityKind.
+const (
+	AppointmentIdentityKindAccount AppointmentIdentityKind = "account"
+	AppointmentIdentityKindVisitor AppointmentIdentityKind = "visitor"
+)
+
+// Valid indicates whether the value is a known member of the AppointmentIdentityKind enum.
+func (e AppointmentIdentityKind) Valid() bool {
+	switch e {
+	case AppointmentIdentityKindAccount:
+		return true
+	case AppointmentIdentityKindVisitor:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AppointmentOrigin.
+const (
+	AppointmentOriginCounter AppointmentOrigin = "counter"
+	AppointmentOriginOnline  AppointmentOrigin = "online"
+)
+
+// Valid indicates whether the value is a known member of the AppointmentOrigin enum.
+func (e AppointmentOrigin) Valid() bool {
+	switch e {
+	case AppointmentOriginCounter:
+		return true
+	case AppointmentOriginOnline:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AppointmentPaymentMode.
+const (
+	AppointmentPaymentModeFree AppointmentPaymentMode = "free"
+)
+
+// Valid indicates whether the value is a known member of the AppointmentPaymentMode enum.
+func (e AppointmentPaymentMode) Valid() bool {
+	switch e {
+	case AppointmentPaymentModeFree:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AppointmentCreatedCancelledBy.
+const (
+	AppointmentCreatedCancelledByCustomer    AppointmentCreatedCancelledBy = "customer"
+	AppointmentCreatedCancelledByLessThannil AppointmentCreatedCancelledBy = "<nil>"
+	AppointmentCreatedCancelledByStore       AppointmentCreatedCancelledBy = "store"
+)
+
+// Valid indicates whether the value is a known member of the AppointmentCreatedCancelledBy enum.
+func (e AppointmentCreatedCancelledBy) Valid() bool {
+	switch e {
+	case AppointmentCreatedCancelledByCustomer:
+		return true
+	case AppointmentCreatedCancelledByLessThannil:
+		return true
+	case AppointmentCreatedCancelledByStore:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AppointmentCreatedIdentityKind.
+const (
+	AppointmentCreatedIdentityKindAccount AppointmentCreatedIdentityKind = "account"
+	AppointmentCreatedIdentityKindVisitor AppointmentCreatedIdentityKind = "visitor"
+)
+
+// Valid indicates whether the value is a known member of the AppointmentCreatedIdentityKind enum.
+func (e AppointmentCreatedIdentityKind) Valid() bool {
+	switch e {
+	case AppointmentCreatedIdentityKindAccount:
+		return true
+	case AppointmentCreatedIdentityKindVisitor:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AppointmentCreatedOrigin.
+const (
+	AppointmentCreatedOriginCounter AppointmentCreatedOrigin = "counter"
+	AppointmentCreatedOriginOnline  AppointmentCreatedOrigin = "online"
+)
+
+// Valid indicates whether the value is a known member of the AppointmentCreatedOrigin enum.
+func (e AppointmentCreatedOrigin) Valid() bool {
+	switch e {
+	case AppointmentCreatedOriginCounter:
+		return true
+	case AppointmentCreatedOriginOnline:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AppointmentCreatedPaymentMode.
+const (
+	AppointmentCreatedPaymentModeFree AppointmentCreatedPaymentMode = "free"
+)
+
+// Valid indicates whether the value is a known member of the AppointmentCreatedPaymentMode enum.
+func (e AppointmentCreatedPaymentMode) Valid() bool {
+	switch e {
+	case AppointmentCreatedPaymentModeFree:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AppointmentItemKind.
+const (
+	AppointmentItemKindProduct AppointmentItemKind = "product"
+	AppointmentItemKindService AppointmentItemKind = "service"
+)
+
+// Valid indicates whether the value is a known member of the AppointmentItemKind enum.
+func (e AppointmentItemKind) Valid() bool {
+	switch e {
+	case AppointmentItemKindProduct:
+		return true
+	case AppointmentItemKindService:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AppointmentStatus.
+const (
+	AppointmentStatusCalled      AppointmentStatus = "called"
+	AppointmentStatusCancelled   AppointmentStatus = "cancelled"
+	AppointmentStatusCompleted   AppointmentStatus = "completed"
+	AppointmentStatusConfirmed   AppointmentStatus = "confirmed"
+	AppointmentStatusInService   AppointmentStatus = "in_service"
+	AppointmentStatusInterrupted AppointmentStatus = "interrupted"
+	AppointmentStatusNoShow      AppointmentStatus = "no_show"
+)
+
+// Valid indicates whether the value is a known member of the AppointmentStatus enum.
+func (e AppointmentStatus) Valid() bool {
+	switch e {
+	case AppointmentStatusCalled:
+		return true
+	case AppointmentStatusCancelled:
+		return true
+	case AppointmentStatusCompleted:
+		return true
+	case AppointmentStatusConfirmed:
+		return true
+	case AppointmentStatusInService:
+		return true
+	case AppointmentStatusInterrupted:
+		return true
+	case AppointmentStatusNoShow:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AudienceKind.
 const (
 	AudienceKindAccount      AudienceKind = "account"
@@ -492,9 +687,15 @@ func (e EntryState) Valid() bool {
 const (
 	ErrorCodeAccountRequired                     ErrorCode = "account_required"
 	ErrorCodeActiveParticipationExists           ErrorCode = "active_participation_exists"
+	ErrorCodeAgendaUnavailable                   ErrorCode = "agenda_unavailable"
 	ErrorCodeAnalyticsFilterNotApplicable        ErrorCode = "analytics_filter_not_applicable"
+	ErrorCodeAppointmentLimitReached             ErrorCode = "appointment_limit_reached"
+	ErrorCodeAppointmentOverlapsOwn              ErrorCode = "appointment_overlaps_own"
+	ErrorCodeAppointmentTooEarly                 ErrorCode = "appointment_too_early"
+	ErrorCodeChairReserved                       ErrorCode = "chair_reserved"
 	ErrorCodeChangeRequestPending                ErrorCode = "change_request_pending"
 	ErrorCodeCsrfFailed                          ErrorCode = "csrf_failed"
+	ErrorCodeCustomerHasActiveVisit              ErrorCode = "customer_has_active_visit"
 	ErrorCodeDeletionInProgress                  ErrorCode = "deletion_in_progress"
 	ErrorCodeDesktopAccessInvalid                ErrorCode = "desktop_access_invalid"
 	ErrorCodeDesktopActivationInvalid            ErrorCode = "desktop_activation_invalid"
@@ -503,6 +704,7 @@ const (
 	ErrorCodeDesktopProofInvalid                 ErrorCode = "desktop_proof_invalid"
 	ErrorCodeDuplicateService                    ErrorCode = "duplicate_service"
 	ErrorCodeEmailNotVerified                    ErrorCode = "email_not_verified"
+	ErrorCodeExceptionConflictsAppointments      ErrorCode = "exception_conflicts_appointments"
 	ErrorCodeForbidden                           ErrorCode = "forbidden"
 	ErrorCodeGoogleUnavailable                   ErrorCode = "google_unavailable"
 	ErrorCodeIdempotencyInProgress               ErrorCode = "idempotency_in_progress"
@@ -529,6 +731,7 @@ const (
 	ErrorCodeOrderNotPayable                     ErrorCode = "order_not_payable"
 	ErrorCodeOrderRequiresItem                   ErrorCode = "order_requires_item"
 	ErrorCodeOriginNotAllowed                    ErrorCode = "origin_not_allowed"
+	ErrorCodeOutsideBookingWindow                ErrorCode = "outside_booking_window"
 	ErrorCodeOwnerSessionActive                  ErrorCode = "owner_session_active"
 	ErrorCodeOwnerSessionChallengeInvalid        ErrorCode = "owner_session_challenge_invalid"
 	ErrorCodeOwnerSessionReplaced                ErrorCode = "owner_session_replaced"
@@ -543,10 +746,15 @@ const (
 	ErrorCodePixChargeOutcomeUnknown             ErrorCode = "pix_charge_outcome_unknown"
 	ErrorCodeProfessionalBusy                    ErrorCode = "professional_busy"
 	ErrorCodeProfessionalHasActiveParticipations ErrorCode = "professional_has_active_participations"
+	ErrorCodeProfessionalHasAppointments         ErrorCode = "professional_has_appointments"
 	ErrorCodeProfessionalInactive                ErrorCode = "professional_inactive"
+	ErrorCodeProfessionalUnavailable             ErrorCode = "professional_unavailable"
 	ErrorCodeProviderUnavailable                 ErrorCode = "provider_unavailable"
+	ErrorCodeQueueEntryScheduleOnly              ErrorCode = "queue_entry_schedule_only"
 	ErrorCodeQueueHasPendingParticipants         ErrorCode = "queue_has_pending_participants"
+	ErrorCodeQueueNoCapacityToday                ErrorCode = "queue_no_capacity_today"
 	ErrorCodeQueueNotOpen                        ErrorCode = "queue_not_open"
+	ErrorCodeQueueOverlapsOwnAppointment         ErrorCode = "queue_overlaps_own_appointment"
 	ErrorCodeRateLimited                         ErrorCode = "rate_limited"
 	ErrorCodeReauthCodeInvalid                   ErrorCode = "reauth_code_invalid"
 	ErrorCodeReauthenticationRequired            ErrorCode = "reauthentication_required"
@@ -557,9 +765,12 @@ const (
 	ErrorCodeReservationExpired                  ErrorCode = "reservation_expired"
 	ErrorCodeRewardInactive                      ErrorCode = "reward_inactive"
 	ErrorCodeRewardOutOfStock                    ErrorCode = "reward_out_of_stock"
+	ErrorCodeScheduleConflictsAppointments       ErrorCode = "schedule_conflicts_appointments"
+	ErrorCodeScheduleDisabled                    ErrorCode = "schedule_disabled"
 	ErrorCodeServiceInactive                     ErrorCode = "service_inactive"
 	ErrorCodeServiceNotEligible                  ErrorCode = "service_not_eligible"
 	ErrorCodeServiceUnavailable                  ErrorCode = "service_unavailable"
+	ErrorCodeSlotUnavailable                     ErrorCode = "slot_unavailable"
 	ErrorCodeSlugTaken                           ErrorCode = "slug_taken"
 	ErrorCodeSoleOwner                           ErrorCode = "sole_owner"
 	ErrorCodeTokenInvalid                        ErrorCode = "token_invalid"
@@ -581,11 +792,23 @@ func (e ErrorCode) Valid() bool {
 		return true
 	case ErrorCodeActiveParticipationExists:
 		return true
+	case ErrorCodeAgendaUnavailable:
+		return true
 	case ErrorCodeAnalyticsFilterNotApplicable:
+		return true
+	case ErrorCodeAppointmentLimitReached:
+		return true
+	case ErrorCodeAppointmentOverlapsOwn:
+		return true
+	case ErrorCodeAppointmentTooEarly:
+		return true
+	case ErrorCodeChairReserved:
 		return true
 	case ErrorCodeChangeRequestPending:
 		return true
 	case ErrorCodeCsrfFailed:
+		return true
+	case ErrorCodeCustomerHasActiveVisit:
 		return true
 	case ErrorCodeDeletionInProgress:
 		return true
@@ -602,6 +825,8 @@ func (e ErrorCode) Valid() bool {
 	case ErrorCodeDuplicateService:
 		return true
 	case ErrorCodeEmailNotVerified:
+		return true
+	case ErrorCodeExceptionConflictsAppointments:
 		return true
 	case ErrorCodeForbidden:
 		return true
@@ -655,6 +880,8 @@ func (e ErrorCode) Valid() bool {
 		return true
 	case ErrorCodeOriginNotAllowed:
 		return true
+	case ErrorCodeOutsideBookingWindow:
+		return true
 	case ErrorCodeOwnerSessionActive:
 		return true
 	case ErrorCodeOwnerSessionChallengeInvalid:
@@ -683,13 +910,23 @@ func (e ErrorCode) Valid() bool {
 		return true
 	case ErrorCodeProfessionalHasActiveParticipations:
 		return true
+	case ErrorCodeProfessionalHasAppointments:
+		return true
 	case ErrorCodeProfessionalInactive:
+		return true
+	case ErrorCodeProfessionalUnavailable:
 		return true
 	case ErrorCodeProviderUnavailable:
 		return true
+	case ErrorCodeQueueEntryScheduleOnly:
+		return true
 	case ErrorCodeQueueHasPendingParticipants:
 		return true
+	case ErrorCodeQueueNoCapacityToday:
+		return true
 	case ErrorCodeQueueNotOpen:
+		return true
+	case ErrorCodeQueueOverlapsOwnAppointment:
 		return true
 	case ErrorCodeRateLimited:
 		return true
@@ -711,11 +948,17 @@ func (e ErrorCode) Valid() bool {
 		return true
 	case ErrorCodeRewardOutOfStock:
 		return true
+	case ErrorCodeScheduleConflictsAppointments:
+		return true
+	case ErrorCodeScheduleDisabled:
+		return true
 	case ErrorCodeServiceInactive:
 		return true
 	case ErrorCodeServiceNotEligible:
 		return true
 	case ErrorCodeServiceUnavailable:
+		return true
+	case ErrorCodeSlotUnavailable:
 		return true
 	case ErrorCodeSlugTaken:
 		return true
@@ -820,6 +1063,7 @@ func (e EventEnvelopeSchemaVersion) Valid() bool {
 
 // Defines values for EventType.
 const (
+	EventTypeAppointmentUpdated       EventType = "appointment.updated"
 	EventTypeChangeRequestUpdated     EventType = "change_request.updated"
 	EventTypeDeletionRequestUpdated   EventType = "deletion_request.updated"
 	EventTypeFinancialIssueUpdated    EventType = "financial_issue.updated"
@@ -838,6 +1082,8 @@ const (
 // Valid indicates whether the value is a known member of the EventType enum.
 func (e EventType) Valid() bool {
 	switch e {
+	case EventTypeAppointmentUpdated:
+		return true
 	case EventTypeChangeRequestUpdated:
 		return true
 	case EventTypeDeletionRequestUpdated:
@@ -1847,6 +2093,27 @@ func (e RewardStockInput1Kind) Valid() bool {
 	}
 }
 
+// Defines values for ServiceMode.
+const (
+	ServiceModeHybrid   ServiceMode = "hybrid"
+	ServiceModeQueue    ServiceMode = "queue"
+	ServiceModeSchedule ServiceMode = "schedule"
+)
+
+// Valid indicates whether the value is a known member of the ServiceMode enum.
+func (e ServiceMode) Valid() bool {
+	switch e {
+	case ServiceModeHybrid:
+		return true
+	case ServiceModeQueue:
+		return true
+	case ServiceModeSchedule:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ServiceStatus.
 const (
 	ServiceStatusActive   ServiceStatus = "active"
@@ -1913,6 +2180,27 @@ func (e SessionViewSessionAuthMethod) Valid() bool {
 	case Google:
 		return true
 	case Password:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ShiftModality.
+const (
+	ShiftModalityBoth     ShiftModality = "both"
+	ShiftModalityQueue    ShiftModality = "queue"
+	ShiftModalitySchedule ShiftModality = "schedule"
+)
+
+// Valid indicates whether the value is a known member of the ShiftModality enum.
+func (e ShiftModality) Valid() bool {
+	switch e {
+	case ShiftModalityBoth:
+		return true
+	case ShiftModalityQueue:
+		return true
+	case ShiftModalitySchedule:
 		return true
 	default:
 		return false
@@ -2003,6 +2291,24 @@ const (
 func (e TransferRequestCustomerConsentMethod) Valid() bool {
 	switch e {
 	case InPersonVerbal:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VisitOrigin.
+const (
+	VisitOriginAppointment VisitOrigin = "appointment"
+	VisitOriginQueue       VisitOrigin = "queue"
+)
+
+// Valid indicates whether the value is a known member of the VisitOrigin enum.
+func (e VisitOrigin) Valid() bool {
+	switch e {
+	case VisitOriginAppointment:
+		return true
+	case VisitOriginQueue:
 		return true
 	default:
 		return false
@@ -2462,6 +2768,24 @@ func (e SetPaymentFeeParamsMethod) Valid() bool {
 	}
 }
 
+// Defines values for ListMyAppointmentsParamsScope.
+const (
+	Past     ListMyAppointmentsParamsScope = "past"
+	Upcoming ListMyAppointmentsParamsScope = "upcoming"
+)
+
+// Valid indicates whether the value is a known member of the ListMyAppointmentsParamsScope enum.
+func (e ListMyAppointmentsParamsScope) Valid() bool {
+	switch e {
+	case Past:
+		return true
+	case Upcoming:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ListPublicEstablishmentsParamsSort.
 const (
 	ListPublicEstablishmentsParamsSortDistance ListPublicEstablishmentsParamsSort = "distance"
@@ -2525,6 +2849,113 @@ type AdjustOrderRequest struct {
 		Quantity int `json:"quantity"`
 	} `json:"set_charged_quantities,omitempty"`
 	UnchargeItemIds *[]Id `json:"uncharge_item_ids,omitempty"`
+}
+
+// AgendaDay defines model for AgendaDay.
+type AgendaDay struct {
+	Appointments []Appointment      `json:"appointments"`
+	Blocks       []AgendaException  `json:"blocks"`
+	Date         openapi_types.Date `json:"date"`
+	DisplayName  string             `json:"display_name"`
+
+	// ProfessionalId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	ProfessionalId Id `json:"professional_id"`
+	Shifts         []struct {
+		// EndsAt RFC 3339 em UTC com sufixo Z.
+		EndsAt Timestamp `json:"ends_at"`
+
+		// Modality No modo "os dois": trecho só de fila, só de agenda ou compartilhado.
+		Modality ShiftModality `json:"modality"`
+
+		// StartsAt RFC 3339 em UTC com sufixo Z.
+		StartsAt Timestamp `json:"starts_at"`
+	} `json:"shifts"`
+}
+
+// AgendaException defines model for AgendaException.
+type AgendaException struct {
+	// CreatedAt RFC 3339 em UTC com sufixo Z.
+	CreatedAt Timestamp          `json:"created_at"`
+	Date      openapi_types.Date `json:"date"`
+	EndMinute *int               `json:"end_minute"`
+
+	// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	Id Id `json:"id"`
+
+	// ProfessionalId null = loja inteira.
+	ProfessionalId *Id `json:"professional_id"`
+
+	// Reason Motivo interno (nunca vai ao cliente).
+	Reason string `json:"reason"`
+
+	// StartMinute null = dia inteiro.
+	StartMinute *int `json:"start_minute"`
+}
+
+// AgendaHours defines model for AgendaHours.
+type AgendaHours struct {
+	Professionals []SubjectHours `json:"professionals"`
+	Store         SubjectHours   `json:"store"`
+
+	// Timezone Fuso IANA da loja.
+	Timezone string             `json:"timezone"`
+	Today    openapi_types.Date `json:"today"`
+}
+
+// AgendaImpact defines model for AgendaImpact.
+type AgendaImpact struct {
+	FutureAppointments int `json:"future_appointments"`
+	WaitingInQueues    int `json:"waiting_in_queues"`
+}
+
+// AgendaSettings defines model for AgendaSettings.
+type AgendaSettings struct {
+	// Available Agenda liberada neste servidor (FILA_AGENDA).
+	Available             bool `json:"available"`
+	BufferMinutes         int  `json:"buffer_minutes"`
+	CheckinWindowMinutes  int  `json:"checkin_window_minutes"`
+	HorizonDays           int  `json:"horizon_days"`
+	MaxFutureAppointments int  `json:"max_future_appointments"`
+	MinLeadMinutes        int  `json:"min_lead_minutes"`
+	ProfessionalsCanBlock bool `json:"professionals_can_block"`
+
+	// ScheduleToleranceMinutes null = herda a tolerância de chamada da fila.
+	ScheduleToleranceMinutes *int `json:"schedule_tolerance_minutes"`
+
+	// ServiceMode Forma de atendimento: por ordem de chegada (fila), com horário marcado (agenda) ou os dois.
+	ServiceMode     ServiceMode `json:"service_mode"`
+	SlotStepMinutes int         `json:"slot_step_minutes"`
+
+	// Version Versão do agregado; incrementa a cada mudança.
+	Version Version `json:"version"`
+}
+
+// AgendaSettingsRequest defines model for AgendaSettingsRequest.
+type AgendaSettingsRequest struct {
+	BufferMinutes        *int `json:"buffer_minutes,omitempty"`
+	CheckinWindowMinutes *int `json:"checkin_window_minutes,omitempty"`
+
+	// ExpectedVersion Versão do agregado; incrementa a cada mudança.
+	ExpectedVersion          Version `json:"expected_version"`
+	HorizonDays              *int    `json:"horizon_days,omitempty"`
+	MaxFutureAppointments    *int    `json:"max_future_appointments,omitempty"`
+	MinLeadMinutes           *int    `json:"min_lead_minutes,omitempty"`
+	ProfessionalsCanBlock    *bool   `json:"professionals_can_block,omitempty"`
+	ScheduleToleranceMinutes *int    `json:"schedule_tolerance_minutes,omitempty"`
+
+	// ServiceMode Forma de atendimento: por ordem de chegada (fila), com horário marcado (agenda) ou os dois.
+	ServiceMode     *ServiceMode `json:"service_mode,omitempty"`
+	SlotStepMinutes *int         `json:"slot_step_minutes,omitempty"`
+}
+
+// AgendaView defines model for AgendaView.
+type AgendaView struct {
+	Days []AgendaDay `json:"days"`
+
+	// Mode Forma de atendimento: por ordem de chegada (fila), com horário marcado (agenda) ou os dois.
+	Mode     ServiceMode        `json:"mode"`
+	Timezone string             `json:"timezone"`
+	Today    openapi_types.Date `json:"today"`
 }
 
 // AnalyticsBreakdown defines model for AnalyticsBreakdown.
@@ -2732,6 +3163,197 @@ type AnalyticsValueStatus string
 // Appearance Preferência de aparência da pessoa (a cor principal é da loja).
 type Appearance string
 
+// Appointment defines model for Appointment.
+type Appointment struct {
+	ArrivalSignalAt      *Timestamp              `json:"arrival_signal_at"`
+	ArrivedAt            *Timestamp              `json:"arrived_at"`
+	BufferMinutes        int                     `json:"buffer_minutes"`
+	CalledAt             *Timestamp              `json:"called_at"`
+	CancelledBy          *AppointmentCancelledBy `json:"cancelled_by"`
+	CheckinWindowMinutes int                     `json:"checkin_window_minutes"`
+
+	// CreatedAt RFC 3339 em UTC com sufixo Z.
+	CreatedAt Timestamp `json:"created_at"`
+
+	// DeadlineAt max(horário, chamada) + tolerância.
+	DeadlineAt *Timestamp `json:"deadline_at"`
+
+	// EndReason Só equipe.
+	EndReason *string `json:"end_reason,omitempty"`
+
+	// EndsAt RFC 3339 em UTC com sufixo Z.
+	EndsAt Timestamp `json:"ends_at"`
+
+	// EstablishmentId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	EstablishmentId Id         `json:"establishment_id"`
+	FinishedAt      *Timestamp `json:"finished_at"`
+
+	// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	Id Id `json:"id"`
+
+	// IdentityKind Só equipe.
+	IdentityKind *AppointmentIdentityKind `json:"identity_kind,omitempty"`
+	Items        []AppointmentItem        `json:"items"`
+	LocalDate    openapi_types.Date       `json:"local_date"`
+	LocalTime    string                   `json:"local_time"`
+
+	// Nick Só equipe.
+	Nick            *string           `json:"nick,omitempty"`
+	Origin          AppointmentOrigin `json:"origin"`
+	ParticipationId *Id               `json:"participation_id"`
+
+	// Payment Parte 1 — reserva gratuita (nada agora; tudo na barbearia).
+	Payment struct {
+		DueAtStore     Money                  `json:"due_at_store"`
+		DueNow         Money                  `json:"due_now"`
+		EstimatedTotal Money                  `json:"estimated_total"`
+		Mode           AppointmentPaymentMode `json:"mode"`
+	} `json:"payment"`
+	Price        Money `json:"price"`
+	Professional struct {
+		DisplayName string `json:"display_name"`
+
+		// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+		Id Id `json:"id"`
+	} `json:"professional"`
+	Revision       int `json:"revision"`
+	ServiceMinutes int `json:"service_minutes"`
+
+	// StartsAt RFC 3339 em UTC com sufixo Z.
+	StartsAt Timestamp         `json:"starts_at"`
+	Status   AppointmentStatus `json:"status"`
+
+	// StoreLate A tolerância passou e a loja não chamou (não é falta do cliente).
+	StoreLate bool   `json:"store_late"`
+	Terms     string `json:"terms"`
+	Timezone  string `json:"timezone"`
+
+	// ToleranceMinutes Tolerância de chegada congelada na reserva.
+	ToleranceMinutes int `json:"tolerance_minutes"`
+
+	// Version Versão do agregado; incrementa a cada mudança.
+	Version Version `json:"version"`
+}
+
+// AppointmentCancelledBy defines model for Appointment.CancelledBy.
+type AppointmentCancelledBy string
+
+// AppointmentIdentityKind Só equipe.
+type AppointmentIdentityKind string
+
+// AppointmentOrigin defines model for Appointment.Origin.
+type AppointmentOrigin string
+
+// AppointmentPaymentMode defines model for Appointment.Payment.Mode.
+type AppointmentPaymentMode string
+
+// AppointmentCreated defines model for AppointmentCreated.
+type AppointmentCreated struct {
+	ArrivalSignalAt      *Timestamp                     `json:"arrival_signal_at"`
+	ArrivedAt            *Timestamp                     `json:"arrived_at"`
+	BufferMinutes        int                            `json:"buffer_minutes"`
+	CalledAt             *Timestamp                     `json:"called_at"`
+	CancelledBy          *AppointmentCreatedCancelledBy `json:"cancelled_by"`
+	CheckinWindowMinutes int                            `json:"checkin_window_minutes"`
+
+	// CounterRecoveryCode Só na reserva de balcão, uma única vez.
+	CounterRecoveryCode *string `json:"counter_recovery_code,omitempty"`
+
+	// CounterRecoveryCodeValidUntil RFC 3339 em UTC com sufixo Z.
+	CounterRecoveryCodeValidUntil *Timestamp `json:"counter_recovery_code_valid_until,omitempty"`
+
+	// CreatedAt RFC 3339 em UTC com sufixo Z.
+	CreatedAt Timestamp `json:"created_at"`
+
+	// DeadlineAt max(horário, chamada) + tolerância.
+	DeadlineAt *Timestamp `json:"deadline_at"`
+
+	// EndReason Só equipe.
+	EndReason *string `json:"end_reason,omitempty"`
+
+	// EndsAt RFC 3339 em UTC com sufixo Z.
+	EndsAt Timestamp `json:"ends_at"`
+
+	// EstablishmentId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	EstablishmentId Id         `json:"establishment_id"`
+	FinishedAt      *Timestamp `json:"finished_at"`
+
+	// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	Id Id `json:"id"`
+
+	// IdentityKind Só equipe.
+	IdentityKind *AppointmentCreatedIdentityKind `json:"identity_kind,omitempty"`
+	Items        []AppointmentItem               `json:"items"`
+	LocalDate    openapi_types.Date              `json:"local_date"`
+	LocalTime    string                          `json:"local_time"`
+
+	// Nick Só equipe.
+	Nick            *string                  `json:"nick,omitempty"`
+	Origin          AppointmentCreatedOrigin `json:"origin"`
+	ParticipationId *Id                      `json:"participation_id"`
+
+	// Payment Parte 1 — reserva gratuita (nada agora; tudo na barbearia).
+	Payment struct {
+		DueAtStore     Money                         `json:"due_at_store"`
+		DueNow         Money                         `json:"due_now"`
+		EstimatedTotal Money                         `json:"estimated_total"`
+		Mode           AppointmentCreatedPaymentMode `json:"mode"`
+	} `json:"payment"`
+	Price        Money `json:"price"`
+	Professional struct {
+		DisplayName string `json:"display_name"`
+
+		// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+		Id Id `json:"id"`
+	} `json:"professional"`
+	Revision       int `json:"revision"`
+	ServiceMinutes int `json:"service_minutes"`
+
+	// StartsAt RFC 3339 em UTC com sufixo Z.
+	StartsAt Timestamp         `json:"starts_at"`
+	Status   AppointmentStatus `json:"status"`
+
+	// StoreLate A tolerância passou e a loja não chamou (não é falta do cliente).
+	StoreLate bool   `json:"store_late"`
+	Terms     string `json:"terms"`
+	Timezone  string `json:"timezone"`
+
+	// ToleranceMinutes Tolerância de chegada congelada na reserva.
+	ToleranceMinutes int `json:"tolerance_minutes"`
+
+	// Version Versão do agregado; incrementa a cada mudança.
+	Version Version `json:"version"`
+}
+
+// AppointmentCreatedCancelledBy defines model for AppointmentCreated.CancelledBy.
+type AppointmentCreatedCancelledBy string
+
+// AppointmentCreatedIdentityKind Só equipe.
+type AppointmentCreatedIdentityKind string
+
+// AppointmentCreatedOrigin defines model for AppointmentCreated.Origin.
+type AppointmentCreatedOrigin string
+
+// AppointmentCreatedPaymentMode defines model for AppointmentCreated.Payment.Mode.
+type AppointmentCreatedPaymentMode string
+
+// AppointmentItem defines model for AppointmentItem.
+type AppointmentItem struct {
+	DurationMinutes int                 `json:"duration_minutes"`
+	Kind            AppointmentItemKind `json:"kind"`
+	Name            string              `json:"name"`
+	ProductId       *Id                 `json:"product_id"`
+	Quantity        int                 `json:"quantity"`
+	ServiceId       *Id                 `json:"service_id"`
+	UnitPrice       Money               `json:"unit_price"`
+}
+
+// AppointmentItemKind defines model for AppointmentItem.Kind.
+type AppointmentItemKind string
+
+// AppointmentStatus defines model for AppointmentStatus.
+type AppointmentStatus string
+
 // AudienceKind Canal/audiência de eventos SSE.
 type AudienceKind string
 
@@ -2764,10 +3386,65 @@ type AuditEvent struct {
 // AuditEventActorKind defines model for AuditEvent.Actor.Kind.
 type AuditEventActorKind string
 
+// Availability defines model for Availability.
+type Availability struct {
+	BufferMinutes int                `json:"buffer_minutes"`
+	Date          openapi_types.Date `json:"date"`
+	FirstDate     openapi_types.Date `json:"first_date"`
+	LastDate      openapi_types.Date `json:"last_date"`
+
+	// Mode Forma de atendimento: por ordem de chegada (fila), com horário marcado (agenda) ou os dois.
+	Mode           ServiceMode                `json:"mode"`
+	Price          Money                      `json:"price"`
+	Professionals  []AvailabilityProfessional `json:"professionals"`
+	ServiceMinutes int                        `json:"service_minutes"`
+	StepMinutes    int                        `json:"step_minutes"`
+	Timezone       string                     `json:"timezone"`
+
+	// TotalMinutes Serviços + margem de preparação (uma vez por visita).
+	TotalMinutes int `json:"total_minutes"`
+
+	// VisitorLastDate Último dia que um visitante (sem conta) pode reservar.
+	VisitorLastDate openapi_types.Date `json:"visitor_last_date"`
+}
+
+// AvailabilityProfessional defines model for AvailabilityProfessional.
+type AvailabilityProfessional struct {
+	DisplayName string `json:"display_name"`
+
+	// Eligible false = não faz algum dos serviços escolhidos.
+	Eligible bool `json:"eligible"`
+
+	// ProfessionalId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	ProfessionalId Id `json:"professional_id"`
+
+	// Queue Hoje, no modo "os dois" — início ESTIMADO de quem entrar agora na fila.
+	Queue *struct {
+		HasCapacity bool       `json:"has_capacity"`
+		NextStart   *Timestamp `json:"next_start"`
+	} `json:"queue"`
+	Slots []AvailabilitySlot `json:"slots"`
+}
+
 // AvailabilitySignalRequest defines model for AvailabilitySignalRequest.
 type AvailabilitySignalRequest struct {
 	Note        *string `json:"note,omitempty"`
 	Unavailable bool    `json:"unavailable"`
+}
+
+// AvailabilitySlot defines model for AvailabilitySlot.
+type AvailabilitySlot struct {
+	// LocalTime HH:MM no fuso da loja.
+	LocalTime string `json:"local_time"`
+
+	// StartsAt RFC 3339 em UTC com sufixo Z.
+	StartsAt Timestamp `json:"starts_at"`
+}
+
+// CallNextRequest defines model for CallNextRequest.
+type CallNextRequest struct {
+	// StartImmediately O cliente já está na cadeira; chama e inicia juntos (a agenda reserva só duração + margem, sem a tolerância).
+	StartImmediately *bool `json:"start_immediately,omitempty"`
 }
 
 // CatalogCategory defines model for CatalogCategory.
@@ -2904,6 +3581,34 @@ type ConfirmRefundRequest struct {
 	ExternalReference *string `json:"external_reference,omitempty"`
 }
 
+// CreateAgendaExceptionRequest defines model for CreateAgendaExceptionRequest.
+type CreateAgendaExceptionRequest struct {
+	Date      openapi_types.Date `json:"date"`
+	EndMinute *int               `json:"end_minute,omitempty"`
+
+	// ProfessionalId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	ProfessionalId *Id    `json:"professional_id,omitempty"`
+	Reason         string `json:"reason"`
+	StartMinute    *int   `json:"start_minute,omitempty"`
+}
+
+// CreateAppointmentRequest Sem preço, duração ou identidade — tudo vem do servidor.
+type CreateAppointmentRequest struct {
+	// CounterCustomer Só o dono (balcão). Cria a identidade recuperável do cliente.
+	CounterCustomer *struct {
+		Nick string `json:"nick"`
+	} `json:"counter_customer,omitempty"`
+
+	// Items Até 10 serviços e 10 produtos diferentes; cada item aparece uma vez (a quantidade fica na mesma linha).
+	Items OrderLines `json:"items"`
+
+	// ProfessionalId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	ProfessionalId Id `json:"professional_id"`
+
+	// StartsAt RFC 3339 em UTC com sufixo Z.
+	StartsAt Timestamp `json:"starts_at"`
+}
+
 // CreateChangeRequestRequest defines model for CreateChangeRequestRequest.
 type CreateChangeRequestRequest struct {
 	// AddItems Até 10 serviços e 10 produtos diferentes; cada item aparece uma vez (a quantidade fica na mesma linha).
@@ -2925,6 +3630,9 @@ type CreateInviteRequest struct {
 
 // CreateParticipationRequest Sem preço, total, papel ou identidade — tudo é derivado no servidor. Envie `items` (com quantidade, serviços e produtos) OU `service_ids` (formato anterior, quantidade 1). Pelo menos um serviço; nunca só produtos. Um pedido ocupa UMA posição na fila, mesmo com várias unidades.
 type CreateParticipationRequest struct {
+	// AcknowledgeOwnAppointment Modo "os dois": a pessoa viu que a espera prevista passa de um horário marcado dela nesta loja (409 `queue_overlaps_own_appointment`) e quer entrar mesmo assim; a reserva continua.
+	AcknowledgeOwnAppointment *bool `json:"acknowledge_own_appointment,omitempty"`
+
 	// Items Até 10 serviços e 10 produtos diferentes; cada item aparece uma vez (a quantidade fica na mesma linha).
 	Items *OrderLines `json:"items,omitempty"`
 
@@ -3114,8 +3822,11 @@ type Establishment struct {
 
 	// PublicUrl Link canônico da loja (origem pública configurada + slug). Base do QR Code.
 	PublicUrl string `json:"public_url"`
-	Slug      string `json:"slug"`
-	Timezone  string `json:"timezone"`
+
+	// ServiceMode Forma de atendimento: por ordem de chegada (fila), com horário marcado (agenda) ou os dois.
+	ServiceMode *ServiceMode `json:"service_mode,omitempty"`
+	Slug        string       `json:"slug"`
+	Timezone    string       `json:"timezone"`
 
 	// Version Versão do agregado; incrementa a cada mudança.
 	Version Version `json:"version"`
@@ -3123,6 +3834,7 @@ type Establishment struct {
 
 // EstablishmentSettings Configurações da loja (privadas do dono). docs/configuracoes-da-loja.md descreve tipo, padrão, intervalo e efeito de cada uma.
 type EstablishmentSettings struct {
+	Agenda  AgendaSettings `json:"agenda"`
 	Catalog struct {
 		MaxServiceQuantity int  `json:"max_service_quantity"`
 		ProductsEnabled    bool `json:"products_enabled"`
@@ -3451,6 +4163,17 @@ type MoveParticipationRequest struct {
 // MoveParticipationRequestDirection `up` = uma posição para frente; `down` = uma posição para trás.
 type MoveParticipationRequestDirection string
 
+// MyAppointment defines model for MyAppointment.
+type MyAppointment struct {
+	Appointment   Appointment `json:"appointment"`
+	Establishment struct {
+		// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+		Id   Id     `json:"id"`
+		Name string `json:"name"`
+		Slug string `json:"slug"`
+	} `json:"establishment"`
+}
+
 // MyProfessionalProfile defines model for MyProfessionalProfile.
 type MyProfessionalProfile struct {
 	DisplayName string `json:"display_name"`
@@ -3742,6 +4465,9 @@ type Participation struct {
 	// OrderId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
 	OrderId Id `json:"order_id"`
 
+	// Origin Entrada pela fila (FIFO) ou horário marcado chamado (não conta como entrada FIFO).
+	Origin *VisitOrigin `json:"origin,omitempty"`
+
 	// Position Só enquanto aguardando.
 	Position *int `json:"position,omitempty"`
 
@@ -4000,7 +4726,10 @@ type PublicOrdering struct {
 	// PaymentMethods Meios aceitos agora (Pix só com a integração operacional).
 	PaymentMethods  []PaymentMethod `json:"payment_methods"`
 	ProductsEnabled bool            `json:"products_enabled"`
-	VisitorsEnabled bool            `json:"visitors_enabled"`
+
+	// ServiceMode Forma de atendimento: por ordem de chegada (fila), com horário marcado (agenda) ou os dois.
+	ServiceMode     ServiceMode `json:"service_mode"`
+	VisitorsEnabled bool        `json:"visitors_enabled"`
 }
 
 // PublicProduct Sem estoque (não existe estoque nesta versão) — disponível = ativo.
@@ -4246,6 +4975,19 @@ type RequestDeletionRequest struct {
 // RequestDeletionRequestConfirmEffects Cliente viu os efeitos (cancelamentos, perda do saldo).
 type RequestDeletionRequestConfirmEffects bool
 
+// RescheduleAppointmentRequest defines model for RescheduleAppointmentRequest.
+type RescheduleAppointmentRequest struct {
+	// ExpectedVersion Versão do agregado; incrementa a cada mudança.
+	ExpectedVersion Version `json:"expected_version"`
+
+	// ProfessionalId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	ProfessionalId *Id     `json:"professional_id,omitempty"`
+	Reason         *Reason `json:"reason,omitempty"`
+
+	// StartsAt RFC 3339 em UTC com sufixo Z.
+	StartsAt Timestamp `json:"starts_at"`
+}
+
 // ReservationStatus defines model for ReservationStatus.
 type ReservationStatus string
 
@@ -4350,6 +5092,9 @@ type Service struct {
 	Version Version `json:"version"`
 }
 
+// ServiceMode Forma de atendimento: por ordem de chegada (fila), com horário marcado (agenda) ou os dois.
+type ServiceMode string
+
 // ServiceStatus defines model for ServiceStatus.
 type ServiceStatus string
 
@@ -4388,6 +5133,19 @@ type SessionViewEndedReason string
 
 // SessionViewSessionAuthMethod Como a sessão foi aberta. Google só abre sessão de cliente (nunca de equipe).
 type SessionViewSessionAuthMethod string
+
+// SetAgendaHoursRequest defines model for SetAgendaHoursRequest.
+type SetAgendaHoursRequest struct {
+	// EffectiveFrom Data local; hoje ou depois.
+	EffectiveFrom openapi_types.Date `json:"effective_from"`
+
+	// InheritsStore Só profissional; volta a seguir a jornada da loja.
+	InheritsStore *bool `json:"inherits_store,omitempty"`
+
+	// ProfessionalId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	ProfessionalId *Id            `json:"professional_id,omitempty"`
+	Shifts         *[]WeeklyShift `json:"shifts,omitempty"`
+}
 
 // SetAssetRequest defines model for SetAssetRequest.
 type SetAssetRequest struct {
@@ -4441,6 +5199,9 @@ type SetServiceProfessionalsRequest struct {
 	ProfessionalIds []Id    `json:"professional_ids"`
 }
 
+// ShiftModality No modo "os dois": trecho só de fila, só de agenda ou compartilhado.
+type ShiftModality string
+
 // SnapshotCursor Cursor do fluxo de eventos para continuar a partir desta leitura (ver eventos-sse.md §6).
 // Lido no mesmo instante dos dados (transação REPEATABLE READ): abrir o SSE com este cursor
 // entrega só o que mudou depois desta leitura. Desde a etapa 06 vem sempre preenchido; `null`
@@ -4484,6 +5245,9 @@ type StaffQueue struct {
 
 		// OrderId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
 		OrderId Id `json:"order_id"`
+
+		// Origin Entrada pela fila (FIFO) ou horário marcado chamado (não conta como entrada FIFO).
+		Origin *VisitOrigin `json:"origin,omitempty"`
 
 		// ParticipationId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
 		ParticipationId Id                  `json:"participation_id"`
@@ -4546,6 +5310,17 @@ type StreamSnapshot struct {
 
 // StreamSnapshotReason defines model for StreamSnapshot.Reason.
 type StreamSnapshotReason string
+
+// SubjectHours defines model for SubjectHours.
+type SubjectHours struct {
+	// Current null = sem versão própria (profissional herda a da loja).
+	Current     *WeeklySchedule `json:"current"`
+	DisplayName string          `json:"display_name"`
+
+	// ProfessionalId null = a loja.
+	ProfessionalId *Id              `json:"professional_id"`
+	Upcoming       []WeeklySchedule `json:"upcoming"`
+}
 
 // Timestamp RFC 3339 em UTC com sufixo Z.
 type Timestamp = time.Time
@@ -4684,6 +5459,9 @@ type Visit struct {
 	Participation Participation `json:"participation"`
 }
 
+// VisitOrigin Entrada pela fila (FIFO) ou horário marcado chamado (não conta como entrada FIFO).
+type VisitOrigin string
+
 // VisitorSessionCreated defines model for VisitorSessionCreated.
 type VisitorSessionCreated struct {
 	// RecoveryCode Exibido uma única vez; não é armazenado em claro.
@@ -4709,6 +5487,26 @@ type VisitorView struct {
 	Nick Nick `json:"nick"`
 }
 
+// WeeklySchedule defines model for WeeklySchedule.
+type WeeklySchedule struct {
+	EffectiveFrom openapi_types.Date `json:"effective_from"`
+
+	// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	Id            Id            `json:"id"`
+	InheritsStore bool          `json:"inherits_store"`
+	Shifts        []WeeklyShift `json:"shifts"`
+}
+
+// WeeklyShift Turno semanal em minutos locais [início, fim) do mesmo dia; 0 = domingo. Turno que passa da meia-noite vira dois trechos.
+type WeeklyShift struct {
+	EndMinute int `json:"end_minute"`
+
+	// Modality No modo "os dois": trecho só de fila, só de agenda ou compartilhado.
+	Modality    ShiftModality `json:"modality"`
+	StartMinute int           `json:"start_minute"`
+	Weekday     int           `json:"weekday"`
+}
+
 // AnalyticsCompare defines model for AnalyticsCompare.
 type AnalyticsCompare string
 
@@ -4726,6 +5524,9 @@ type AnalyticsService = Id
 
 // AnalyticsTo defines model for AnalyticsTo.
 type AnalyticsTo = openapi_types.Date
+
+// AppointmentId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+type AppointmentId = Id
 
 // AssetId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
 type AssetId = Id
@@ -4748,8 +5549,14 @@ type DPoPProof = string
 // EstablishmentId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
 type EstablishmentId = Id
 
+// ExceptionId Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+type ExceptionId = Id
+
 // FeeMethod defines model for FeeMethod.
 type FeeMethod string
+
+// FromDate defines model for FromDate.
+type FromDate = openapi_types.Date
 
 // IdempotencyKey defines model for IdempotencyKey.
 type IdempotencyKey = string
@@ -4802,11 +5609,24 @@ type ServiceId = Id
 // Slug defines model for Slug.
 type Slug = string
 
+// ToDate defines model for ToDate.
+type ToDate = openapi_types.Date
+
 // AcceptedGeneric defines model for AcceptedGeneric.
 type AcceptedGeneric struct {
 	Data struct {
 		Message string `json:"message"`
 	} `json:"data"`
+}
+
+// AgendaHoursOk defines model for AgendaHoursOk.
+type AgendaHoursOk struct {
+	Data AgendaHours `json:"data"`
+}
+
+// AppointmentOk defines model for AppointmentOk.
+type AppointmentOk struct {
+	Data Appointment `json:"data"`
 }
 
 // BadRequest RFC 9457 (application/problem+json) com extensões.
@@ -5099,6 +5919,79 @@ type ActivateDesktopInstallationParams struct {
 
 // UpdateEstablishmentParams defines parameters for UpdateEstablishment.
 type UpdateEstablishmentParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// ListAgendaParams defines parameters for ListAgenda.
+type ListAgendaParams struct {
+	// From Data local da loja (AAAA-MM-DD). Padrão hoje.
+	From *FromDate `form:"from,omitempty" json:"from,omitempty"`
+
+	// To Data local final, inclusive (AAAA-MM-DD).
+	To             *ToDate `form:"to,omitempty" json:"to,omitempty"`
+	ProfessionalId *Id     `form:"professional_id,omitempty" json:"professional_id,omitempty"`
+}
+
+// ListAgendaExceptionsParams defines parameters for ListAgendaExceptions.
+type ListAgendaExceptionsParams struct {
+	// From Data local da loja (AAAA-MM-DD). Padrão hoje.
+	From *FromDate `form:"from,omitempty" json:"from,omitempty"`
+
+	// To Data local final, inclusive (AAAA-MM-DD).
+	To *ToDate `form:"to,omitempty" json:"to,omitempty"`
+}
+
+// CreateAgendaExceptionParams defines parameters for CreateAgendaException.
+type CreateAgendaExceptionParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// RemoveAgendaExceptionParams defines parameters for RemoveAgendaException.
+type RemoveAgendaExceptionParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// SetAgendaHoursParams defines parameters for SetAgendaHours.
+type SetAgendaHoursParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// CreateAppointmentParams defines parameters for CreateAppointment.
+type CreateAppointmentParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// ConfirmAppointmentArrivalParams defines parameters for ConfirmAppointmentArrival.
+type ConfirmAppointmentArrivalParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// SignalAppointmentArrivalParams defines parameters for SignalAppointmentArrival.
+type SignalAppointmentArrivalParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// CallAppointmentParams defines parameters for CallAppointment.
+type CallAppointmentParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// CancelAppointmentParams defines parameters for CancelAppointment.
+type CancelAppointmentParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// RescheduleAppointmentParams defines parameters for RescheduleAppointment.
+type RescheduleAppointmentParams struct {
 	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
@@ -5560,6 +6453,12 @@ type ReactivateServiceParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// UpdateAgendaSettingsParams defines parameters for UpdateAgendaSettings.
+type UpdateAgendaSettingsParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // UpdateCatalogSettingsParams defines parameters for UpdateCatalogSettings.
 type UpdateCatalogSettingsParams struct {
 	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
@@ -5635,6 +6534,17 @@ type UploadMediaParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// ListMyAppointmentsParams defines parameters for ListMyAppointments.
+type ListMyAppointmentsParams struct {
+	Scope *ListMyAppointmentsParamsScope `form:"scope,omitempty" json:"scope,omitempty"`
+
+	// Cursor Cursor opaco de paginação devolvido em page.next_cursor.
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// ListMyAppointmentsParamsScope defines parameters for ListMyAppointments.
+type ListMyAppointmentsParamsScope string
+
 // ListPublicEstablishmentsParams defines parameters for ListPublicEstablishments.
 type ListPublicEstablishmentsParams struct {
 	// Q Nome ou endereço.
@@ -5650,6 +6560,16 @@ type ListPublicEstablishmentsParams struct {
 
 // ListPublicEstablishmentsParamsSort defines parameters for ListPublicEstablishments.
 type ListPublicEstablishmentsParamsSort string
+
+// GetAvailabilityParams defines parameters for GetAvailability.
+type GetAvailabilityParams struct {
+	// Date Data local da loja (AAAA-MM-DD).
+	Date openapi_types.Date `form:"date" json:"date"`
+
+	// Items Serviço ou produto, com quantidade opcional — `<id>` ou `<id>:<quantidade>` (repetido).
+	Items          []string `form:"items" json:"items"`
+	ProfessionalId *[]Id    `form:"professional_id,omitempty" json:"professional_id,omitempty"`
+}
 
 // OpenEventStreamParams defines parameters for OpenEventStream.
 type OpenEventStreamParams struct {
@@ -5711,6 +6631,33 @@ type ActivateDesktopInstallationJSONRequestBody ActivateDesktopInstallationJSONB
 
 // UpdateEstablishmentJSONRequestBody defines body for UpdateEstablishment for application/json ContentType.
 type UpdateEstablishmentJSONRequestBody = UpdateEstablishmentRequest
+
+// CreateAgendaExceptionJSONRequestBody defines body for CreateAgendaException for application/json ContentType.
+type CreateAgendaExceptionJSONRequestBody = CreateAgendaExceptionRequest
+
+// RemoveAgendaExceptionJSONRequestBody defines body for RemoveAgendaException for application/json ContentType.
+type RemoveAgendaExceptionJSONRequestBody = EmptyRequest
+
+// SetAgendaHoursJSONRequestBody defines body for SetAgendaHours for application/json ContentType.
+type SetAgendaHoursJSONRequestBody = SetAgendaHoursRequest
+
+// CreateAppointmentJSONRequestBody defines body for CreateAppointment for application/json ContentType.
+type CreateAppointmentJSONRequestBody = CreateAppointmentRequest
+
+// ConfirmAppointmentArrivalJSONRequestBody defines body for ConfirmAppointmentArrival for application/json ContentType.
+type ConfirmAppointmentArrivalJSONRequestBody = VersionedRequest
+
+// SignalAppointmentArrivalJSONRequestBody defines body for SignalAppointmentArrival for application/json ContentType.
+type SignalAppointmentArrivalJSONRequestBody = VersionedRequest
+
+// CallAppointmentJSONRequestBody defines body for CallAppointment for application/json ContentType.
+type CallAppointmentJSONRequestBody = VersionedRequest
+
+// CancelAppointmentJSONRequestBody defines body for CancelAppointment for application/json ContentType.
+type CancelAppointmentJSONRequestBody = VersionedReasonRequest
+
+// RescheduleAppointmentJSONRequestBody defines body for RescheduleAppointment for application/json ContentType.
+type RescheduleAppointmentJSONRequestBody = RescheduleAppointmentRequest
 
 // CreateCategoryJSONRequestBody defines body for CreateCategory for application/json ContentType.
 type CreateCategoryJSONRequestBody = CategoryRequest
@@ -5857,7 +6804,7 @@ type ReactivateProfessionalJSONRequestBody = VersionedRequest
 type SignalAvailabilityJSONRequestBody = AvailabilitySignalRequest
 
 // CallNextJSONRequestBody defines body for CallNext for application/json ContentType.
-type CallNextJSONRequestBody = EmptyRequest
+type CallNextJSONRequestBody = CallNextRequest
 
 // SetQueueCapacityJSONRequestBody defines body for SetQueueCapacity for application/json ContentType.
 type SetQueueCapacityJSONRequestBody = SetQueueCapacityRequest
@@ -5912,6 +6859,9 @@ type SetServiceProfessionalsJSONRequestBody = SetServiceProfessionalsRequest
 
 // ReactivateServiceJSONRequestBody defines body for ReactivateService for application/json ContentType.
 type ReactivateServiceJSONRequestBody = VersionedRequest
+
+// UpdateAgendaSettingsJSONRequestBody defines body for UpdateAgendaSettings for application/json ContentType.
+type UpdateAgendaSettingsJSONRequestBody = AgendaSettingsRequest
 
 // UpdateCatalogSettingsJSONRequestBody defines body for UpdateCatalogSettings for application/json ContentType.
 type UpdateCatalogSettingsJSONRequestBody = CatalogSettingsRequest

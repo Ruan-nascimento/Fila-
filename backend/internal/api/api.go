@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"fila/internal/agenda"
 	"fila/internal/analitico"
 	"fila/internal/atendimento"
 	"fila/internal/auditoria"
@@ -98,6 +99,7 @@ type API struct {
 	Payments *pagamento.Service
 	Loyalty  *fidelidade.Service
 	Media    *midia.Service
+	Agenda   *agenda.Service
 	routes   []hs.Route
 	mux      *http.ServeMux
 	handler  http.Handler
@@ -132,9 +134,17 @@ func New(d Deps, register func(mux *http.ServeMux)) (*API, error) {
 		PerMinute: d.Config.Media.UploadsPerMin, PerDay: d.Config.Media.UploadsPerDay})
 	ident.SetMedia(media)
 
+	agendaOn := d.Config.Ops.AgendaEnabled
 	fl := fila.New(fila.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Auth: ident, Customers: ident,
 		Limiter: ratelimit.New(d.Pool, d.Clock, ring), TrustForwardedFor: d.Config.Security.TrustForwardedFor,
-		VisitStarted: ident.VisitStarted, VisitClosed: ident.VisitClosed, Media: media})
+		VisitStarted: ident.VisitStarted, VisitClosed: ident.VisitClosed, Media: media, AgendaEnabled: agendaOn})
+	// Agenda (ADR-0038): regras de cadeira para a fila e reservas. Sempre ligada às visitas (protege
+	// reservas já existentes); FILA_AGENDA só decide se lojas podem ADERIR e receber reservas novas.
+	ag := agenda.New(agenda.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Auth: ident, Customers: ident,
+		Limiter: ratelimit.New(d.Pool, d.Clock, ring), Visits: fl, Enabled: agendaOn, CounterVisitor: ident.CounterVisitor,
+		TrustForwardedFor: d.Config.Security.TrustForwardedFor})
+	fl.Agenda = ag
+	ident.SetAgendaEnabled(agendaOn)
 	ident.SetActiveVisit(fl.VisitorBusy)
 	var occ estabelecimento.Occupancy = fl
 	if d.Occupancy != nil {
@@ -142,7 +152,8 @@ func New(d Deps, register func(mux *http.ServeMux)) (*API, error) {
 	}
 	est := estabelecimento.New(estabelecimento.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Auth: ident,
 		Occupancy: occ, Activity: fl, PendingInvites: ident.PendingInvites, AccessRevoked: ident.AccessRevoked,
-		PublicBaseURL: d.Config.Security.PublicBaseURL, Media: media, AvatarOf: identidade.AvatarAssetOf})
+		PublicBaseURL: d.Config.Security.PublicBaseURL, Media: media, AvatarOf: identidade.AvatarAssetOf,
+		AgendaEnabled: agendaOn, AgendaImpact: agenda.FutureAppointments, FutureAppointmentsOf: agenda.FutureAppointmentsOf})
 	cat := catalogo.New(catalogo.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Auth: ident})
 	atd := atendimento.New(atendimento.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Auth: ident, Customers: ident,
 		Visits: fl, Charges: d.Charges, VisitClosed: ident.VisitClosed})
@@ -179,11 +190,13 @@ func New(d Deps, register func(mux *http.ServeMux)) (*API, error) {
 		Limiter: ratelimit.New(d.Pool, d.Clock, ring), TrustForwardedFor: d.Config.Security.TrustForwardedFor,
 		Identity: ident, Queue: fl, Benefits: benefits, Fault: d.DeletionFault})
 
-	a := &API{Identity: ident, Hub: hub, Stream: stream, Deletion: deletion, Payments: pay, Loyalty: loyalty, Media: media, mux: http.NewServeMux()}
+	a := &API{Identity: ident, Hub: hub, Stream: stream, Deletion: deletion, Payments: pay, Loyalty: loyalty, Media: media, Agenda: ag,
+		mux: http.NewServeMux()}
 	a.routes = append(a.routes, ident.Routes()...)
 	a.routes = append(a.routes, est.Routes()...)
 	a.routes = append(a.routes, cat.Routes()...)
 	a.routes = append(a.routes, fl.Routes()...)
+	a.routes = append(a.routes, ag.Routes()...)
 	a.routes = append(a.routes, atd.Routes()...)
 	a.routes = append(a.routes, pay.Routes()...)
 	a.routes = append(a.routes, panel.Routes()...)

@@ -159,8 +159,17 @@ motivo. Teste citado aqui não quer dizer aprovado: o resultado de cada execuç�
 | R-LOJA-01 | C-LOJA-01 | automatizado |
 | R-BUSCA-01 | C-BUSCA-01 | automatizado |
 | R-DESK-01 | C-DESK-01 (sem teste) | sem teste |
+| R-AG-01 | C-AG-01, C-AG-02 | automatizado |
+| R-AG-02 | C-AG-10, C-AG-12 | automatizado |
+| R-AG-03 | C-AG-02, C-AG-12 | automatizado |
+| R-AG-04 | C-AG-03, C-AG-05, C-AG-06, C-AG-11 | automatizado |
+| R-AG-05 | C-AG-10, C-AG-12 | automatizado |
+| R-AG-06 | C-AG-02, C-AG-03, C-AG-04, C-AG-14 | automatizado |
+| R-AG-07 | C-AG-02, C-AG-07, C-AG-08 | automatizado |
+| R-AG-08 | C-AG-09 | automatizado |
+| R-AG-09 | C-AG-13 | automatizado |
 
-Resumo: automatizado: 144 · parcial: 0 · sem teste: 2 · sem cenário: 0 · automatizado (estrutural): 4
+Resumo: automatizado: 153 · parcial: 0 · sem teste: 2 · sem cenário: 0 · automatizado (estrutural): 4
 
 ## 2. Cenários e testes
 
@@ -302,6 +311,20 @@ Resumo: automatizado: 144 · parcial: 0 · sem teste: 2 · sem cenário: 0 · au
 | C-IND-01 — Indicadores com quantidade, produtos e custos | `backend/internal/api/melhorias_test.go: TestAnalyticsWithQuantitiesProductsAndFees` |
 | C-BUSCA-01 — Busca de comandas no servidor | `backend/internal/api/melhorias_test.go: TestOrderSearchOnServer` |
 | C-DESK-01 — Segundo plano no programa do dono | **nenhum** |
+| C-AG-01 — Loja que não aderiu continua só com fila | `backend/internal/api/agenda_test.go: TestAgendaLojaSemAdesaoContinuaFila`<br>`frontend/e2e/agenda.spec.ts: três modos: fila (padrão), os dois e só horário marcado, com reserva pela interface` |
+| C-AG-02 — Modo "com horário marcado" de ponta a ponta | `backend/internal/api/agenda_test.go: TestAgendaModoHorarioMarcadoDePontaAPonta`<br>`frontend/e2e/agenda.spec.ts: três modos: fila (padrão), os dois e só horário marcado, com reserva pela interface` |
+| C-AG-03 — Disputa do último horário | `backend/internal/api/agenda_test.go: TestAgendaDisputaDoUltimoHorario` |
+| C-AG-04 — Limites do cliente, repetição e privacidade | `backend/internal/api/agenda_test.go: TestAgendaLimitesDoCliente` |
+| C-AG-05 — Encaixe antes do horário marcado (14h20) | `backend/internal/api/agenda_test.go: TestAgendaEncaixeAntesDoHorarioMarcado` |
+| C-AG-06 — Mesma regra em chamar e em "descer e chamar o próximo" (14h40) | `backend/internal/api/agenda_test.go: TestAgendaMesmaRegraEmChamarEDescer` |
+| C-AG-07 — Falta automática e atraso da loja | `backend/internal/api/agenda_test.go: TestAgendaFaltaAutomaticaEAtrasoDaLoja` |
+| C-AG-08 — Presença confirmada impede a falta | `backend/internal/api/agenda_test.go: TestAgendaPresencaImpedeFalta` |
+| C-AG-09 — Remarcar e cancelar | `backend/internal/api/agenda_test.go: TestAgendaRemarcarECancelar` |
+| C-AG-10 — Mudanças em produção | `backend/internal/api/agenda_test.go: TestAgendaMudancasEmProducao` |
+| C-AG-11 — Exclusão no banco com duas conexões | `backend/internal/api/agenda_test.go: TestAgendaExclusaoNoBancoComDuasConexoes` |
+| C-AG-12 — Motor de disponibilidade e fuso | `backend/internal/agenda/motor_test.go: TestDiaDaLojaEmOutroFuso`<br>`backend/internal/agenda/motor_test.go: TestIntersectLojaProfissional`<br>`backend/internal/agenda/motor_test.go: TestMeiaNoiteEViradaDeMes`<br>`backend/internal/agenda/motor_test.go: TestProjecaoFIFOAntesDaAgenda`<br>`backend/internal/agenda/motor_test.go: TestProjecaoSemCapacidade`<br>`backend/internal/agenda/motor_test.go: TestSlotsAntecedenciaENuncaNoPassado`<br>`backend/internal/agenda/motor_test.go: TestSlotsDuracaoMultiplicadaPausaEFechamento`<br>`backend/internal/agenda/motor_test.go: TestSlotsModalidades`<br>`backend/internal/agenda/motor_test.go: TestSlotsSemiaberto`<br>`backend/internal/agenda/motor_test.go: TestTransicaoDeFuso`<br>`frontend/src/features/agenda/horario.test.ts: converte minutos e horas, inclusive o fim do dia (24:00)` |
+| C-AG-13 — Foto do dono na gestão | `frontend/e2e/agenda.spec.ts: foto do dono aparece nos dois links Minha conta e some ao remover` |
+| C-AG-14 — Reserva de balcão com identidade recuperável | `backend/internal/api/agenda_test.go: TestAgendaReservaDeBalcao` |
 
 ## 3. Cenários sem teste automatizado
 

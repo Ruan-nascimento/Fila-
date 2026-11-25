@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import {
   BadgeCheck,
@@ -15,6 +15,7 @@ import {
 import { api } from "../api/client";
 import { call, fieldErrors, problemMessage, type Problem } from "../api/problem";
 import type { components } from "../api/schema.gen";
+import { forgetProfile, useMyProfile } from "../features/account/perfil";
 import { PerfilProfissional } from "../features/account/PerfilProfissional";
 import { Reautenticar } from "../features/account/Reautenticar";
 import { GoogleButton } from "../features/auth/GoogleButton";
@@ -65,29 +66,6 @@ function NaoConectado() {
   );
 }
 
-/** Perfil da própria conta (GET /v1/me), relido depois de cada alteração confirmada. */
-function useMyProfile(accountId: string | undefined) {
-  const [profile, setProfile] = useState<MyProfile | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [attempt, setAttempt] = useState(0);
-  useEffect(() => {
-    if (!accountId) return;
-    let active = true;
-    void call(() => api.GET("/v1/me")).then((out) => {
-      if (!active) return;
-      if (out.ok) {
-        setProfile(out.data.data);
-        setError(null);
-      } else setError(problemMessage(out.problem, out.offline));
-    });
-    return () => {
-      active = false;
-    };
-  }, [accountId, attempt]);
-  const reload = useCallback(() => setAttempt((n) => n + 1), []);
-  return { profile, setProfile, error, reload };
-}
-
 const googleStatus: Record<string, { kind: "ok" | "erro" | "info"; text: string }> = {
   conectado: { kind: "ok", text: "Google conectado. Você pode entrar com ele nesta conta de cliente." },
   ja_vinculado: { kind: "erro", text: "Esta conta Google já está ligada a outra conta. Nada foi alterado." },
@@ -122,6 +100,7 @@ export function Conta() {
     setLogoutError(null);
     setLeaving(true);
     const out = await call(() => api.POST("/v1/auth/logout"));
+    if (out.ok) forgetProfile();
     setLeaving(false);
     if (!out.ok && out.problem?.status !== 401) {
       setLogoutError(problemMessage(out.problem, out.offline));

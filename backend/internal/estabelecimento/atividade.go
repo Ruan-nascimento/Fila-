@@ -116,6 +116,8 @@ type StaffEntry struct {
 	CustomerAvatar *midia.ImageRef `json:"customer_avatar"`
 	// LateNoticeAt: o cliente avisou pelo app que vai se atrasar (só a equipe vê).
 	LateNoticeAt *time.Time `json:"late_notice_at"`
+	// Origin: fila ou horário marcado chamado (ADR-0038).
+	Origin string `json:"origin"`
 }
 
 // PublicSnapshot é o que o público vê de uma fila: só senhas, situação, quantidade e estimativa.
@@ -157,4 +159,31 @@ func UnavailableSignals(ctx context.Context, q database.Querier, estID uuid.UUID
 	var n int
 	err := q.QueryRow(ctx, `SELECT count(*) FROM queue WHERE establishment_id = $1 AND unavailable`, estID).Scan(&n)
 	return n, err
+}
+
+// ProfessionalRef é um profissional ativo com a fila dele (cadeira), para a agenda (ADR-0038).
+type ProfessionalRef struct {
+	ID      uuid.UUID
+	Name    string
+	QueueID uuid.UUID
+}
+
+// ActiveProfessionals devolve os profissionais ativos da loja, na ordem das filas.
+func ActiveProfessionals(ctx context.Context, q database.Querier, estID uuid.UUID) ([]ProfessionalRef, error) {
+	rows, err := q.Query(ctx, `
+		SELECT p.id, p.display_name, q.id FROM professional p JOIN queue q ON q.professional_id = p.id
+		WHERE p.establishment_id = $1 AND p.status = 'active' ORDER BY p.queue_letter`, estID)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (ProfessionalRef, error) {
+		var p ProfessionalRef
+		err := r.Scan(&p.ID, &p.Name, &p.QueueID)
+		return p, err
+	})
+}
+
+// StoreQueueIDs devolve todas as filas da loja (para travar todas, em ordem, numa mudança da loja inteira).
+func StoreQueueIDs(ctx context.Context, q database.Querier, estID uuid.UUID) ([]uuid.UUID, error) {
+	return queueIDs(ctx, q, estID)
 }

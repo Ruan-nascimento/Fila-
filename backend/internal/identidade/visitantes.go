@@ -407,3 +407,23 @@ func (s *Service) endVisitorSession(w http.ResponseWriter, r *http.Request) erro
 	w.WriteHeader(http.StatusNoContent)
 	return nil
 }
+
+// CounterVisitor cria, na transação da reserva de balcão (ADR-0038), a identidade recuperável do
+// cliente: um visitante desta loja com código de recuperação próprio, mostrado UMA vez ao dono para
+// entregar ao cliente. Nenhum navegador recebe credencial agora; o cliente entra com o código.
+// Nunca é uma identidade compartilhada entre clientes.
+func (s *Service) CounterVisitor(ctx context.Context, tx pgx.Tx, estID uuid.UUID, nick string, now time.Time) (uuid.UUID, string, time.Time, error) {
+	code := newRecoveryCode()
+	norm, _ := normalizeRecoveryCode(code)
+	absolute := now.Add(VisitorAbsolute)
+	var id uuid.UUID
+	if err := tx.QueryRow(ctx, `
+		INSERT INTO visitor (establishment_id, nick, created_at, absolute_expires_at, recovery_code_hmac, recovery_code_issued_at)
+		VALUES ($1, $2, $3, $4, $5, $3) RETURNING id`, estID, nick, now, absolute, s.recoveryMAC(norm)).Scan(&id); err != nil {
+		return uuid.Nil, "", time.Time{}, fmt.Errorf("criar visitante de balcão: %w", err)
+	}
+	err := auditoria.Record(ctx, tx, auditoria.Event{EstablishmentID: &estID, OccurredAt: now, ActorKind: auditoria.ActorSystem,
+		Action: "T-VS-01", TargetType: "visitor", TargetID: id, ToState: "active", Reason: "reserva de balcão",
+		RequestID: httpserver.RequestIDFrom(ctx)})
+	return id, code, absolute, err
+}

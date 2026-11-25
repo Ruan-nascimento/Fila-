@@ -162,6 +162,7 @@ describe("Minha visita", () => {
       <StoreDataProvider
         shopId={EST}
         ordering={{
+          service_mode: "queue",
           max_service_quantity: 2,
           products_enabled: true,
           visitors_enabled: true,

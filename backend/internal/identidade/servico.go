@@ -73,7 +73,9 @@ type Service struct {
 	media *midia.Service
 	// pixOperational: integração Pix ligada (para os meios públicos de pagamento).
 	pixOperational func() bool
-	google         googleClient
+	// agendaEnabled: agenda liberada neste servidor (FILA_AGENDA); sem ela a página pública é só fila.
+	agendaEnabled bool
+	google        googleClient
 }
 
 // Deps são as dependências do serviço.
@@ -93,6 +95,9 @@ func (s *Service) SetMedia(m *midia.Service) { s.media = m }
 
 // SetPixOperational informa se a integração Pix está ligada (módulo pagamento, montado depois).
 func (s *Service) SetPixOperational(f func() bool) { s.pixOperational = f }
+
+// SetAgendaEnabled informa se a agenda está liberada neste servidor (ADR-0038).
+func (s *Service) SetAgendaEnabled(on bool) { s.agendaEnabled = on }
 
 // New cria o serviço.
 func New(d Deps) *Service {

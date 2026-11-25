@@ -438,6 +438,11 @@ func (s *Service) approveChangeRequest(w http.ResponseWriter, r *http.Request) e
 			if err := recordQuantities(ctx, tx, cur.EstablishmentID, cur.ID, evs, "change_request", a, version, now); err != nil {
 				return idempotency.Result{}, err
 			}
+			if visit.Status == visitCalled || visit.Status == visitInService {
+				if err := s.Visits.DurationChanged(ctx, tx, cur.EstablishmentID, visit.ParticipationID); err != nil {
+					return idempotency.Result{}, s.withOrder(ctx, tx, cur, withRejectHint(err))
+				}
+			}
 			if err := s.decide(r, tx, cur, by, cr.ID, CRApproved, "", now); err != nil {
 				return idempotency.Result{}, err
 			}

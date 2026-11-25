@@ -86,6 +86,9 @@ func (s *Service) completeService(w http.ResponseWriter, r *http.Request) error 
 				p.ID, now); err != nil {
 				return idempotency.Result{}, err
 			}
+			if err := s.visitChanged(ctx, tx, p, Completed, ""); err != nil {
+				return idempotency.Result{}, err
+			}
 			return s.finish(ctx, tx, p.EstablishmentID, p.ID, who, "T-P-08", InService, Completed, "", http.StatusOK, p.QueueID)
 		}, func() int64 { return deref(body.ExpectedVersion) }, nil)
 }
@@ -108,6 +111,9 @@ func (s *Service) interruptService(w http.ResponseWriter, r *http.Request) error
 			}
 			if _, err := tx.Exec(ctx, `UPDATE participation SET status = 'interrupted', finished_at = $2, end_reason = $3, version = version + 1, updated_at = $2 WHERE id = $1`,
 				p.ID, now, reason); err != nil {
+				return idempotency.Result{}, err
+			}
+			if err := s.visitChanged(ctx, tx, p, Interrupted, reason); err != nil {
 				return idempotency.Result{}, err
 			}
 			return s.finish(ctx, tx, p.EstablishmentID, p.ID, who, "T-P-09", InService, Interrupted, reason, http.StatusOK, p.QueueID)

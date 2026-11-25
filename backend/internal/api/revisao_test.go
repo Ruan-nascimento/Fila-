@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -58,6 +59,17 @@ func TestAuthorizationSweepAllRoutes(t *testing.T) {
 	inv := b.owner.mustStatus(b.owner.cmd("POST", estPath(b.id, "/professionals/"+duda.String()+"/invites"),
 		map[string]any{"email": "outro-beto@exemplo.com"}), 201).data()
 	items := order["items"].([]any)
+	// Agenda (ADR-0038): jornada, modo "os dois", uma reserva de Maria e um bloqueio de Beto.
+	shifts := []map[string]any{}
+	for d := range 7 {
+		shifts = append(shifts, map[string]any{"weekday": d, "start_minute": 9 * 60, "end_minute": 18 * 60, "modality": "both"})
+	}
+	b.owner.mustStatus(b.owner.cmd("PUT", estPath(b.id, "/agenda/hours"), map[string]any{
+		"effective_from": e.clock.Now().In(spLoc).Format("2006-01-02"), "shifts": shifts}), 200)
+	b.owner.mustStatus(b.owner.cmd("PATCH", estPath(b.id, "/settings/agenda"), map[string]any{"expected_version": 1, "service_mode": "hybrid"}), 200)
+	appt := maria.mustStatus(maria.book(b.id, b.beto, e.at("16:00"), b.corte), 201).data()
+	excecao := b.owner.mustStatus(b.owner.cmd("POST", estPath(b.id, "/agenda/exceptions"), map[string]any{"professional_id": b.beto.String(),
+		"date": e.clock.Now().In(spLoc).Format("2006-01-02"), "start_minute": 17 * 60, "end_minute": 18 * 60, "reason": "curso"}), 201).data()
 	// Catálogo novo (ADR-0032): categoria e produto reais da loja A.
 	categoria := b.owner.mustStatus(b.owner.cmd("POST", estPath(b.id, "/catalog-categories"),
 		map[string]any{"kind": "product", "name": "Finalizadores"}), 201).data()
@@ -72,6 +84,7 @@ func TestAuthorizationSweepAllRoutes(t *testing.T) {
 		"inviteId": inv["id"].(string), "itemId": items[0].(map[string]any)["id"].(string), "slug": "barbearia-teste",
 		// Sem recurso real deste tipo no cenário: id aleatório (a recusa ainda é exigida).
 		"issueId": uuid.NewString(), "refundId": uuid.NewString(), "changeRequestId": uuid.NewString(),
+		"appointmentId": appt["id"].(string), "exceptionId": excecao["id"].(string),
 	}
 
 	outra := e.shop("outra-loja", "olga@exemplo.com")
@@ -143,9 +156,10 @@ func TestAuthorizationSweepAllRoutes(t *testing.T) {
 		return "negado"
 	}
 	alheios := []string{pm["id"].(string), om["id"].(string), res["id"].(string), rec["id"].(string), ch["id"].(string),
-		b.filaBeto.String(), "maria@exemplo.com"}
+		b.filaBeto.String(), "maria@exemplo.com", appt["id"].(string)}
 	versao := map[string]string{"categoryId": "catalog_category", "productId": "product", "queueId": "queue", "professionalId": "professional", "serviceId": "service",
-		"rewardId": "reward", "reservationId": "reward_reservation", "participationId": "participation", "orderId": "service_order"}
+		"rewardId": "reward", "reservationId": "reward_reservation", "participationId": "participation", "orderId": "service_order",
+		"appointmentId": "appointment"}
 	// corpoValido monta um corpo que passa na validação, com a versão REAL do recurso alvo: assim
 	// uma resposta 400 vira prova (a recusa precisa vir da autorização, não da validação).
 	corpoValido := func(rt hs.Route) map[string]any {
@@ -176,6 +190,15 @@ func TestAuthorizationSweepAllRoutes(t *testing.T) {
 			body["capacity"] = nil
 		case "setItemPerformedQuantity":
 			body["performed_quantity"] = 1
+		case "rescheduleAppointment":
+			body["starts_at"] = e.at("17:00").UTC().Format(time.RFC3339)
+		case "createAppointment":
+			body = map[string]any{"professional_id": b.beto.String(), "starts_at": e.at("17:00").UTC().Format(time.RFC3339),
+				"items": []map[string]any{{"service_id": b.corte}}, "counter_customer": map[string]any{"nick": "Invasor"}}
+		case "createAgendaException":
+			body = map[string]any{"professional_id": b.beto.String(), "date": e.clock.Now().In(spLoc).Format("2006-01-02"), "reason": "invasão"}
+		case "setAgendaHours":
+			body = map[string]any{"effective_from": e.clock.Now().In(spLoc).Format("2006-01-02"), "shifts": []any{}}
 		case "activateDesktopInstallation":
 			body = map[string]any{"code": "ABCD-EFGH-JKMN-PQRS"}
 		case "createDesktopBinding":
@@ -275,6 +298,10 @@ func TestAuthorizationSweepAllRoutes(t *testing.T) {
 	}
 	for _, x := range inconclusive {
 		t.Errorf("inconclusiva (400 mesmo com corpo válido): %s", x)
+	}
+	var apptVersion int64
+	if err := e.pool.QueryRow(t.Context(), `SELECT version FROM appointment WHERE id = $1`, appt["id"]).Scan(&apptVersion); err != nil || apptVersion != num(appt["version"]) {
+		t.Fatalf("a varredura mudou a reserva da loja A: v%d (era v%d) %v", apptVersion, num(appt["version"]), err)
 	}
 	if after := snapshotA(t, e, om["id"].(string), pm["id"].(string), res["id"].(string)); after != before {
 		t.Fatalf("a varredura mudou recursos da loja A:\nantes  %s\ndepois %s", before, after)

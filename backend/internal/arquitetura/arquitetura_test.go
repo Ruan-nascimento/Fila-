@@ -16,7 +16,7 @@ import (
 
 const module = "fila"
 
-var dominio = []string{"identidade", "estabelecimento", "catalogo", "fila", "atendimento", "pagamento", "fidelidade", "auditoria"}
+var dominio = []string{"identidade", "estabelecimento", "catalogo", "fila", "atendimento", "pagamento", "fidelidade", "auditoria", "agenda"}
 
 // imports devolve, para cada arquivo .go sob dir, os caminhos importados.
 func imports(t *testing.T, dir string) map[string][]string {
@@ -94,6 +94,8 @@ var tableOwners = map[string][]string{
 	"platform/mail":        {"mail_outbox"},
 	"platform/outbox":      {"outbox", "event_log", "event_stream_state"},
 	"operacao":             {"operation_state"},
+	"agenda": {"agenda_schedule", "agenda_shift", "agenda_exception", "appointment", "appointment_item", "agenda_occupancy",
+		"appointment_event"},
 }
 
 // Leitura analítica do dono (ADR-0027): o módulo analitico agrega, no banco, dados de vários

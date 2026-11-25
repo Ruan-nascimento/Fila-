@@ -259,6 +259,22 @@ A coluna **Referências** cita operações do OpenAPI (`operationId`), eventos, 
 
 ---
 
+## 15. Agenda e operação híbrida (Fila 2.0, parte 1, ADR-0038)
+
+| ID | Regra | Referências |
+|---|---|---|
+| R-AG-01 | Forma de atendimento por loja: por ordem de chegada (padrão), com horário marcado ou os dois. Só muda por adesão explícita do dono e com a agenda liberada no servidor; mudar fecha só a admissão correspondente e nada aceito é apagado; o dono vê antes quantas reservas e pessoas na fila existem. | `updateAgendaSettings`, `getAgendaImpact`, T-ST-04 |
+| R-AG-02 | Jornada semanal da loja e de cada profissional, com vigência, vários turnos por dia (pausa = intervalo), folga, feriado e bloqueio com data e motivo interno; turnos do profissional dentro da abertura da loja; turno que passa da meia-noite em dois trechos; datas no fuso da loja. Mudança que deixe reserva ativa de fora é recusada com a lista. | `setAgendaHours`, `createAgendaException`, T-AG-01…03 |
+| R-AG-03 | Horários oferecidos: grade da loja ancorada no início do trecho; duração = Σ serviço × quantidade + preparação uma vez por visita (produto soma zero); o intervalo inteiro cabe num trecho livre; nada antes de agora + antecedência mínima nem depois do horizonte; intervalo semiaberto; hora inexistente não é oferecida e ambígua vale a primeira ocorrência. | `getAvailability` |
+| R-AG-04 | Uma cadeira por profissional: chamar, trocar de lugar com chamada, iniciar e aumentar o serviço de quem está na cadeira só passam se tolerância + duração + preparação couberem antes do próximo horário protegido (com o cliente presente e início imediato, sem a tolerância); quem não cabe fica no lugar e o motivo é explicado; o banco impede duas ocupações sobrepostas. | `callNext`, `moveParticipation`, `startService`, `replaceOrderItems` |
+| R-AG-05 | No modo "os dois", a fila é projetada em ordem nos trechos de fila: entrada nova recusada se não cabe até o fim do expediente; reserva de hoje não ocupa o que a fila já ocupa; a pessoa é avisada se a espera passa do horário marcado dela. | `createParticipation`, `getAvailability` |
+| R-AG-06 | Reserva gratuita confirmada na hora com itens, preço, duração, preparação, tolerância e janela congelados; limite de reservas futuras por cliente (padrão 3); o mesmo cliente não sobrepõe reservas na loja; visitante até 7 dias; balcão com identidade recuperável própria do cliente; horário disputado devolve os horários atuais sem perder os itens. | `createAppointment`, T-AP-01 |
+| R-AG-07 | A reserva vira visita só ao ser chamada (origem agendamento, comanda com os itens congelados); prazo de chegada = max(horário, chamada) + tolerância; presença confirmada pela equipe impede a falta; falta só com chamada válida; reserva que a loja não chamou não é falta do cliente. | `callAppointment`, T-AP-06…08 |
+| R-AG-08 | Remarcar valida o destino antes de soltar a origem (falha = nada muda); cancelar libera o horário; equipe sempre com motivo; histórico imutável de transições. | `rescheduleAppointment`, `cancelAppointment`, T-AP-02/03 |
+| R-AG-09 | A moldura da gestão mostra a foto pessoal de quem está usando nos dois links "Minha conta" (lateral e compacto), com iniciais se faltar ou falhar; atualiza ao salvar/remover e nunca mostra a foto de outra pessoa depois de trocar de conta. | `getMyProfile` |
+
+---
+
 ## Decisões já tomadas (não são dúvidas)
 
 As decisões abaixo vêm do anexo e **não devem ser reabertas** nas próximas etapas, salvo nova versão do documento de regras:

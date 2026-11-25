@@ -124,6 +124,7 @@ func buildEnv(t *testing.T, pool *pgxpool.Pool, master []byte, clk *clock.Fake, 
 	log := logging.New(logs, slog.LevelDebug, "json")
 	cfg.Payments = config.PaymentsConfig{Pix: config.PixAbacatePay, APIKey: config.Secret(pixKey), BaseURL: pixURL + "/v2",
 		ExpiresIn: 15 * time.Minute, Timeout: time.Second, WebhookSecret: config.Secret(webhookSecret)}
+	cfg.Ops.AgendaEnabled = true // como em desenvolvimento (FILA_AGENDA ligada fora de produção)
 	deps := api.Deps{Config: cfg, Pool: pool, Log: log, Clock: clk, PasswordParams: lightParams}
 	if change != nil {
 		change(&deps)

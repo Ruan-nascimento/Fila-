@@ -54,6 +54,8 @@ tags:
     description: Instalações do programa do dono (ativação, vínculo à sessão de dono, prova DPoP).
   - name: analitico
     description: Dashboard analítico exclusivo do programa desktop do dono.
+  - name: agenda
+    description: Agenda (Fila 2.0) — jornadas, exceções, reservas e operação híbrida com a fila (ADR-0038).
   - name: midia
     description: Fotos de perfil, foto pública do profissional e logo da loja (ADR-0028).
 
@@ -1286,9 +1288,13 @@ paths:
       operationId: callNext
       tags: [fila]
       summary: Chama o próximo aguardando (FIFO do servidor). Exige fila aberta e cadeira livre.
+      description: |
+        Com agenda (ADR-0038), o primeiro da fila só é chamado se tolerância + duração + margem couberem antes do
+        próximo horário protegido; senão 409 `chair_reserved` com o motivo, e ele continua no mesmo lugar (nunca
+        se pula para um serviço mais curto). Com `start_immediately` (cliente presente), conta só duração + margem.
       security: [{ accountSession: [], csrfToken: [] }]
       x-authz: [{ actor: professional, scope: own_queue }, { actor: owner, scope: establishment }]
-      x-transitions: [T-P-02]
+      x-transitions: [T-P-02, T-P-03]
       x-events: [participation.updated, queue.public.updated, queue.updated]
       parameters:
         - $ref: '#/components/parameters/EstablishmentId'
@@ -1298,7 +1304,7 @@ paths:
         required: false
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/EmptyRequest' }
+            schema: { $ref: '#/components/schemas/CallNextRequest' }
       responses:
         '200': { $ref: '#/components/responses/VisitOk' }
         '400': { $ref: '#/components/responses/BadRequest' }
@@ -4222,6 +4228,534 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/settings/agenda:
+    patch:
+      operationId: updateAgendaSettings
+      tags: [administracao, agenda]
+      summary: Seção Agenda (forma de atendimento, grade, margem, janela, tolerância, chegada, limites).
+      description: |
+        Só os campos enviados mudam; `expected_version` é a versão da SEÇÃO. Mudar `service_mode` fecha só a
+        admissão correspondente (entrada na fila ou novas reservas); o que já foi aceito continua. Sair de
+        "fila" exige a agenda liberada no servidor (`agenda.available`), senão 409 `agenda_unavailable`.
+        Regras novas valem para reservas FUTURAS (cada reserva congela tolerância, margem e janela).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-ST-04]
+      x-events: [queue.public.updated, queue.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AgendaSettingsRequest' }
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/EstablishmentSettings' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/settings/agenda/impact:
+    get:
+      operationId: getAgendaImpact
+      tags: [administracao, agenda]
+      summary: Quantas reservas futuras e quantas pessoas na fila existem agora (mostrado antes de mudar a forma de atendimento).
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/AgendaImpact' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/agenda/hours:
+    get:
+      operationId: getAgendaHours
+      tags: [agenda]
+      summary: Jornada vigente e versões futuras da loja e de cada profissional (profissional vê só a própria).
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: professional, scope: own_queue }, { actor: owner, scope: establishment }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      responses:
+        '200': { $ref: '#/components/responses/AgendaHoursOk' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+    put:
+      operationId: setAgendaHours
+      tags: [agenda]
+      summary: Grava uma nova versão da jornada (loja ou profissional) com data de vigência.
+      description: |
+        Versões são imutáveis; na mesma data vale a gravada por último. Turnos do profissional ficam dentro da
+        abertura da loja (`outside_store_hours`). Turno que passa da meia-noite é enviado em dois trechos.
+        Se alguma reserva confirmada ficar fora do novo horário, nada é gravado: 409
+        `schedule_conflicts_appointments` com a lista em `current.appointments` (remaneje ou cancele antes).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-AG-01]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetAgendaHoursRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/AgendaHoursOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/agenda/exceptions:
+    get:
+      operationId: listAgendaExceptions
+      tags: [agenda]
+      summary: Folgas, feriados e bloqueios ativos num intervalo de datas locais (até 62 dias; padrão 30 a partir de hoje).
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: professional, scope: own_queue }, { actor: owner, scope: establishment }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/AgendaException' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+    post:
+      operationId: createAgendaException
+      tags: [agenda]
+      summary: Folga/feriado (dia inteiro) ou bloqueio de um trecho, da loja inteira ou de um profissional.
+      description: |
+        Dono sempre. Profissional só na própria agenda e só com `professionals_can_block` ligado. Se o período
+        tiver reserva ativa, nada é gravado: 409 `exception_conflicts_appointments` com a lista.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: professional, scope: own_queue }, { actor: owner, scope: establishment }]
+      x-transitions: [T-AG-02]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateAgendaExceptionRequest' }
+      responses:
+        '201':
+          description: Criada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/AgendaException' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/agenda/exceptions/{exceptionId}/remove:
+    post:
+      operationId: removeAgendaException
+      tags: [agenda]
+      summary: Desfaz uma folga/bloqueio (o histórico fica; a ocupação é liberada).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: professional, scope: own_queue }, { actor: owner, scope: establishment }]
+      x-transitions: [T-AG-03]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/ExceptionId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmptyRequest' }
+      responses:
+        '200':
+          description: Removida.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [id, removed_at]
+                    properties:
+                      id: { $ref: '#/components/schemas/Id' }
+                      removed_at: { $ref: '#/components/schemas/Timestamp' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/agenda:
+    get:
+      operationId: listAgenda
+      tags: [agenda]
+      summary: Agenda da equipe por profissional e dia (1 a 7 dias), com turnos, bloqueios e reservas de todos os estados.
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: professional, scope: own_queue }, { actor: owner, scope: establishment }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+        - name: professional_id
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/Id' }
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/AgendaView' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/public/establishments/{establishmentId}/availability:
+    get:
+      operationId: getAvailability
+      tags: [publico, agenda]
+      summary: Horários livres de um dia para os itens escolhidos, por profissional (uma consulta para o dia inteiro).
+      description: |
+        Mesma conta feita ao confirmar (sob trava). Duração = Σ serviço × quantidade + margem (produto soma zero).
+        Inícios na grade da loja ancorada no início de cada trecho; o intervalo inteiro cabe num trecho livre de
+        agenda; nada antes de agora + antecedência mínima. Hoje, no modo "os dois", desconta a cadeira em uso e a
+        fila projetada (FIFO) e informa a estimativa da fila. Nunca traz quem ocupa a cadeira.
+        Limites: até 20 itens e 10 profissionais por consulta.
+      security: []
+      x-authz: [{ actor: public, scope: none }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - name: date
+          in: query
+          required: true
+          description: Data local da loja (AAAA-MM-DD).
+          schema: { type: string, format: date }
+        - name: items
+          in: query
+          required: true
+          description: Serviço ou produto, com quantidade opcional — `<id>` ou `<id>:<quantidade>` (repetido).
+          style: form
+          explode: true
+          schema:
+            type: array
+            minItems: 1
+            maxItems: 20
+            items: { type: string, pattern: '^[0-9a-fA-F-]{36}(:[0-9]{1,2})?$' }
+        - name: professional_id
+          in: query
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 10
+            items: { $ref: '#/components/schemas/Id' }
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Availability' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/appointments:
+    post:
+      operationId: createAppointment
+      tags: [agenda]
+      summary: Reserva gratuita confirmada na hora (cliente para si ou dono no balcão).
+      description: |
+        Cliente: conta verificada ou visitante (se a loja aceita; até 7 dias à frente). Dono no balcão: envie
+        `counter_customer` — o cliente ganha a própria identidade recuperável (visitante + código mostrado UMA vez
+        em `counter_recovery_code`), nunca uma identidade compartilhada. Preço, duração, margem, tolerância e janela
+        são do servidor e ficam congelados. Horário disputado → 409 `slot_unavailable` com os horários atuais em
+        `current.slots` (escolha outro sem perder os itens).
+      security: [{ visitorSession: [], csrfToken: [] }, { accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: visitor, scope: self }, { actor: customer, scope: self }, { actor: owner, scope: establishment }]
+      x-transitions: [T-AP-01]
+      x-events: [appointment.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateAppointmentRequest' }
+      responses:
+        '201':
+          description: Reserva confirmada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/AppointmentCreated' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/my-appointments:
+    get:
+      operationId: listMyAppointments
+      tags: [cliente, agenda]
+      summary: Minhas reservas (conta e visitantes deste navegador), paginadas por cursor.
+      description: "`scope=upcoming`: ativas, a mais próxima primeiro. `scope=past`: encerradas, a mais recente primeiro."
+      security: [{ visitorSession: [] }, { accountSession: [] }]
+      x-authz: [{ actor: visitor, scope: self }, { actor: customer, scope: self }]
+      parameters:
+        - name: scope
+          in: query
+          required: false
+          schema: { type: string, enum: [upcoming, past], default: upcoming }
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, page]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/MyAppointment' }
+                  page: { $ref: '#/components/schemas/PageInfo' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/appointments/{appointmentId}:
+    get:
+      operationId: getAppointment
+      tags: [agenda]
+      summary: Detalhe da reserva (titular ou equipe autorizada; outro cliente → 404).
+      security: [{ visitorSession: [] }, { accountSession: [] }]
+      x-authz:
+        - { actor: visitor, scope: visit_owner }
+        - { actor: customer, scope: visit_owner }
+        - { actor: professional, scope: own_queue }
+        - { actor: owner, scope: establishment }
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/AppointmentId'
+      responses:
+        '200': { $ref: '#/components/responses/AppointmentOk' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/appointments/{appointmentId}/cancel:
+    post:
+      operationId: cancelAppointment
+      tags: [agenda]
+      summary: Cancela a reserva confirmada (titular até o horário; equipe com motivo). Libera o horário na hora.
+      security: [{ visitorSession: [], csrfToken: [] }, { accountSession: [], csrfToken: [] }]
+      x-authz:
+        - { actor: visitor, scope: visit_owner }
+        - { actor: customer, scope: visit_owner }
+        - { actor: professional, scope: own_queue }
+        - { actor: owner, scope: establishment }
+      x-transitions: [T-AP-03]
+      x-events: [appointment.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/AppointmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedReasonRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/AppointmentOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/appointments/{appointmentId}/reschedule:
+    post:
+      operationId: rescheduleAppointment
+      tags: [agenda]
+      summary: Remarca para outro horário (e, opcionalmente, outro profissional), mantendo itens e valores aceitos.
+      description: O destino é validado antes de soltar a origem, na mesma transação; se falhar, a reserva atual continua como estava.
+      security: [{ visitorSession: [], csrfToken: [] }, { accountSession: [], csrfToken: [] }]
+      x-authz:
+        - { actor: visitor, scope: visit_owner }
+        - { actor: customer, scope: visit_owner }
+        - { actor: professional, scope: own_queue }
+        - { actor: owner, scope: establishment }
+      x-transitions: [T-AP-02]
+      x-events: [appointment.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/AppointmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RescheduleAppointmentRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/AppointmentOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/appointments/{appointmentId}/arrival:
+    post:
+      operationId: confirmAppointmentArrival
+      tags: [agenda]
+      summary: A equipe confirma a presença física (a partir da janela de chegada). Impede a falta automática.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: professional, scope: own_queue }, { actor: owner, scope: establishment }]
+      x-transitions: [T-AP-04]
+      x-events: [appointment.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/AppointmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/AppointmentOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/appointments/{appointmentId}/arrival-signal:
+    post:
+      operationId: signalAppointmentArrival
+      tags: [agenda]
+      summary: "\"Cheguei\" pelo celular: só um aviso à equipe (não confirma presença)."
+      security: [{ visitorSession: [], csrfToken: [] }, { accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: visitor, scope: visit_owner }, { actor: customer, scope: visit_owner }]
+      x-transitions: [T-AP-05]
+      x-events: [appointment.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/AppointmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/AppointmentOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/appointments/{appointmentId}/call:
+    post:
+      operationId: callAppointment
+      tags: [agenda, fila]
+      summary: Chama o horário marcado — abre a visita (participação chamada + comanda com itens congelados) na mesma transação.
+      description: |
+        Prazo de chegada = max(horário marcado, chamada) + tolerância congelada. Cadeira ocupada
+        (`professional_busy`), cliente com outra visita ativa (`customer_has_active_visit`) ou cedo demais
+        (`appointment_too_early`) → 409 e a reserva continua valendo. Fila pausada ou fechada à entrada não impede.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: professional, scope: own_queue }, { actor: owner, scope: establishment }]
+      x-transitions: [T-AP-06, T-P-02, T-O-01]
+      x-events: [appointment.updated, participation.updated, order.updated, queue.public.updated, queue.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/AppointmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/AppointmentOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
 components:
   securitySchemes:
     accountSession:
@@ -4321,6 +4855,28 @@ components:
       in: path
       required: true
       schema: { $ref: '#/components/schemas/Id' }
+    AppointmentId:
+      name: appointmentId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    ExceptionId:
+      name: exceptionId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    FromDate:
+      name: from
+      in: query
+      required: false
+      description: Data local da loja (AAAA-MM-DD). Padrão hoje.
+      schema: { type: string, format: date }
+    ToDate:
+      name: to
+      in: query
+      required: false
+      description: Data local final, inclusive (AAAA-MM-DD).
+      schema: { type: string, format: date }
     OrderId:
       name: orderId
       in: path
@@ -4453,6 +5009,26 @@ components:
                 required: [message]
                 properties:
                   message: { type: string }
+    AppointmentOk:
+      description: Reserva (visão do ator).
+      headers:
+        Idempotent-Replayed: { $ref: '#/components/headers/IdempotentReplayed' }
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: { $ref: '#/components/schemas/Appointment' }
+    AgendaHoursOk:
+      description: Jornadas.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: { $ref: '#/components/schemas/AgendaHours' }
     VisitOk:
       description: Visita (participação + comanda) após o comando.
       headers:
@@ -4820,6 +5396,23 @@ components:
         - no_password
         - password_available
         - reauth_code_invalid
+        # agenda e operação híbrida (ADR-0038)
+        - agenda_unavailable
+        - schedule_disabled
+        - queue_entry_schedule_only
+        - queue_no_capacity_today
+        - queue_overlaps_own_appointment
+        - chair_reserved
+        - slot_unavailable
+        - appointment_overlaps_own
+        - appointment_limit_reached
+        - outside_booking_window
+        - professional_unavailable
+        - appointment_too_early
+        - customer_has_active_visit
+        - schedule_conflicts_appointments
+        - exception_conflicts_appointments
+        - professional_has_appointments
 
     # ------------------------------------------------------------ enums de estado
     QueueStatus:
@@ -4915,6 +5508,7 @@ components:
         - loyalty.updated
         - reward_reservation.updated
         - deletion_request.updated
+        - appointment.updated
 
     # ------------------------------------------------------------ requisições
     EmptyRequest:
@@ -5042,6 +5636,17 @@ components:
           uniqueItems: true
           items: { $ref: '#/components/schemas/Id' }
         items: { $ref: '#/components/schemas/OrderLines' }
+        acknowledge_own_appointment:
+          type: boolean
+          description: 'Modo "os dois": a pessoa viu que a espera prevista passa de um horário marcado dela nesta loja (409 `queue_overlaps_own_appointment`) e quer entrar mesmo assim; a reserva continua.'
+
+    CallNextRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        start_immediately:
+          type: boolean
+          description: O cliente já está na cadeira; chama e inicia juntos (a agenda reserva só duração + margem, sem a tolerância).
 
     OrderLineRequest:
       type: object
@@ -5080,8 +5685,9 @@ components:
     EstablishmentSettings:
       type: object
       description: Configurações da loja (privadas do dono). docs/configuracoes-da-loja.md descreve tipo, padrão, intervalo e efeito de cada uma.
-      required: [catalog, queue, payments]
+      required: [catalog, queue, payments, agenda]
       properties:
+        agenda: { $ref: '#/components/schemas/AgendaSettings' }
         catalog:
           type: object
           required: [max_service_quantity, products_enabled, version]
@@ -5784,8 +6390,9 @@ components:
     PublicOrdering:
       type: object
       description: Opções públicas do pedido. Nada financeiro interno (custos, chaves) aparece aqui.
-      required: [max_service_quantity, products_enabled, visitors_enabled, payment_methods]
+      required: [max_service_quantity, products_enabled, visitors_enabled, payment_methods, service_mode]
       properties:
+        service_mode: { $ref: '#/components/schemas/ServiceMode' }
         max_service_quantity: { type: integer, minimum: 1, maximum: 50 }
         products_enabled: { type: boolean }
         visitors_enabled: { type: boolean }
@@ -5922,6 +6529,7 @@ components:
       type: object
       required: [id, establishment_id, queue_id, professional_id, ticket_code, status, nick, version, order_id, created_at]
       properties:
+        origin: { $ref: '#/components/schemas/VisitOrigin' }
         id: { $ref: '#/components/schemas/Id' }
         establishment_id: { $ref: '#/components/schemas/Id' }
         queue_id: { $ref: '#/components/schemas/Id' }
@@ -6241,6 +6849,7 @@ components:
               late_notice_at:
                 description: O cliente avisou pelo app que vai se atrasar (T-P-12).
                 oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }]
+              origin: { $ref: '#/components/schemas/VisitOrigin' }
               version: { $ref: '#/components/schemas/Version' }
               customer_avatar:
                 description: Foto pessoal do cliente com conta, só para a equipe e só com a participação ativa (URL reautorizada a cada pedido).
@@ -6251,6 +6860,7 @@ components:
       type: object
       required: [id, name, slug, timezone, version, palette, public_description, public_address, public_phone, logo, public_url]
       properties:
+        service_mode: { $ref: '#/components/schemas/ServiceMode' }
         id: { $ref: '#/components/schemas/Id' }
         name: { type: string }
         slug: { type: string }
@@ -6748,3 +7358,315 @@ components:
           properties:
             start: { $ref: '#/components/schemas/Timestamp' }
             end: { $ref: '#/components/schemas/Timestamp' }
+
+    # ------------------------------------------------------------ agenda (ADR-0038)
+    VisitOrigin:
+      type: string
+      enum: [queue, appointment]
+      description: Entrada pela fila (FIFO) ou horário marcado chamado (não conta como entrada FIFO).
+    ServiceMode:
+      type: string
+      enum: [queue, schedule, hybrid]
+      description: 'Forma de atendimento: por ordem de chegada (fila), com horário marcado (agenda) ou os dois.'
+    ShiftModality:
+      type: string
+      enum: [queue, schedule, both]
+      description: 'No modo "os dois": trecho só de fila, só de agenda ou compartilhado.'
+    AppointmentStatus:
+      type: string
+      enum: [confirmed, called, in_service, completed, interrupted, no_show, cancelled]
+    AgendaSettings:
+      type: object
+      required: [service_mode, slot_step_minutes, buffer_minutes, min_lead_minutes, horizon_days, schedule_tolerance_minutes,
+                 checkin_window_minutes, max_future_appointments, professionals_can_block, available, version]
+      properties:
+        service_mode: { $ref: '#/components/schemas/ServiceMode' }
+        slot_step_minutes: { type: integer, minimum: 5, maximum: 120, default: 15 }
+        buffer_minutes: { type: integer, minimum: 0, maximum: 60, default: 0 }
+        min_lead_minutes: { type: integer, minimum: 0, maximum: 1440, default: 30 }
+        horizon_days: { type: integer, minimum: 1, maximum: 180, default: 30 }
+        schedule_tolerance_minutes: { type: [integer, 'null'], minimum: 1, maximum: 60, description: null = herda a tolerância de chamada da fila. }
+        checkin_window_minutes: { type: integer, minimum: 0, maximum: 60, default: 15 }
+        max_future_appointments: { type: integer, minimum: 1, maximum: 20, default: 3 }
+        professionals_can_block: { type: boolean, default: false }
+        available: { type: boolean, description: Agenda liberada neste servidor (FILA_AGENDA). }
+        version: { $ref: '#/components/schemas/Version' }
+    AgendaSettingsRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      properties:
+        expected_version: { $ref: '#/components/schemas/Version' }
+        service_mode: { $ref: '#/components/schemas/ServiceMode' }
+        slot_step_minutes: { type: integer, minimum: 5, maximum: 120 }
+        buffer_minutes: { type: integer, minimum: 0, maximum: 60 }
+        min_lead_minutes: { type: integer, minimum: 0, maximum: 1440 }
+        horizon_days: { type: integer, minimum: 1, maximum: 180 }
+        schedule_tolerance_minutes: { type: [integer, 'null'], minimum: 1, maximum: 60 }
+        checkin_window_minutes: { type: integer, minimum: 0, maximum: 60 }
+        max_future_appointments: { type: integer, minimum: 1, maximum: 20 }
+        professionals_can_block: { type: boolean }
+    AgendaImpact:
+      type: object
+      required: [future_appointments, waiting_in_queues]
+      properties:
+        future_appointments: { type: integer, minimum: 0 }
+        waiting_in_queues: { type: integer, minimum: 0 }
+    WeeklyShift:
+      type: object
+      additionalProperties: false
+      required: [weekday, start_minute, end_minute, modality]
+      description: Turno semanal em minutos locais [início, fim) do mesmo dia; 0 = domingo. Turno que passa da meia-noite vira dois trechos.
+      properties:
+        weekday: { type: integer, minimum: 0, maximum: 6 }
+        start_minute: { type: integer, minimum: 0, maximum: 1439 }
+        end_minute: { type: integer, minimum: 1, maximum: 1440 }
+        modality: { $ref: '#/components/schemas/ShiftModality' }
+    WeeklySchedule:
+      type: object
+      required: [id, effective_from, inherits_store, shifts]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        effective_from: { type: string, format: date }
+        inherits_store: { type: boolean }
+        shifts:
+          type: array
+          items: { $ref: '#/components/schemas/WeeklyShift' }
+    SubjectHours:
+      type: object
+      required: [professional_id, display_name, current, upcoming]
+      properties:
+        professional_id: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }], description: null = a loja. }
+        display_name: { type: string }
+        current: { oneOf: [{ $ref: '#/components/schemas/WeeklySchedule' }, { type: 'null' }], description: null = sem versão própria (profissional herda a da loja). }
+        upcoming:
+          type: array
+          items: { $ref: '#/components/schemas/WeeklySchedule' }
+    AgendaHours:
+      type: object
+      required: [timezone, today, store, professionals]
+      properties:
+        timezone: { type: string, description: Fuso IANA da loja. }
+        today: { type: string, format: date }
+        store: { $ref: '#/components/schemas/SubjectHours' }
+        professionals:
+          type: array
+          items: { $ref: '#/components/schemas/SubjectHours' }
+    SetAgendaHoursRequest:
+      type: object
+      additionalProperties: false
+      required: [effective_from]
+      properties:
+        professional_id: { $ref: '#/components/schemas/Id' }
+        effective_from: { type: string, format: date, description: Data local; hoje ou depois. }
+        inherits_store: { type: boolean, description: Só profissional; volta a seguir a jornada da loja. }
+        shifts:
+          type: array
+          maxItems: 28
+          items: { $ref: '#/components/schemas/WeeklyShift' }
+    AgendaException:
+      type: object
+      required: [id, professional_id, date, start_minute, end_minute, reason, created_at]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        professional_id: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }], description: null = loja inteira. }
+        date: { type: string, format: date }
+        start_minute: { type: [integer, 'null'], description: null = dia inteiro. }
+        end_minute: { type: [integer, 'null'] }
+        reason: { type: string, description: Motivo interno (nunca vai ao cliente). }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+    CreateAgendaExceptionRequest:
+      type: object
+      additionalProperties: false
+      required: [date, reason]
+      properties:
+        professional_id: { $ref: '#/components/schemas/Id' }
+        date: { type: string, format: date }
+        start_minute: { type: integer, minimum: 0, maximum: 1439 }
+        end_minute: { type: integer, minimum: 1, maximum: 1440 }
+        reason: { type: string, minLength: 3, maxLength: 200 }
+    AvailabilitySlot:
+      type: object
+      required: [starts_at, local_time]
+      properties:
+        starts_at: { $ref: '#/components/schemas/Timestamp' }
+        local_time: { type: string, description: HH:MM no fuso da loja. }
+    AvailabilityProfessional:
+      type: object
+      required: [professional_id, display_name, eligible, slots, queue]
+      properties:
+        professional_id: { $ref: '#/components/schemas/Id' }
+        display_name: { type: string }
+        eligible: { type: boolean, description: false = não faz algum dos serviços escolhidos. }
+        slots:
+          type: array
+          items: { $ref: '#/components/schemas/AvailabilitySlot' }
+        queue:
+          description: Hoje, no modo "os dois" — início ESTIMADO de quem entrar agora na fila.
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [next_start, has_capacity]
+              properties:
+                next_start: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+                has_capacity: { type: boolean }
+    Availability:
+      type: object
+      required: [date, timezone, mode, first_date, last_date, visitor_last_date, step_minutes, service_minutes, buffer_minutes,
+                 total_minutes, price, professionals]
+      properties:
+        date: { type: string, format: date }
+        timezone: { type: string }
+        mode: { $ref: '#/components/schemas/ServiceMode' }
+        first_date: { type: string, format: date }
+        last_date: { type: string, format: date }
+        visitor_last_date: { type: string, format: date, description: Último dia que um visitante (sem conta) pode reservar. }
+        step_minutes: { type: integer }
+        service_minutes: { type: integer }
+        buffer_minutes: { type: integer }
+        total_minutes: { type: integer, description: Serviços + margem de preparação (uma vez por visita). }
+        price: { $ref: '#/components/schemas/Money' }
+        professionals:
+          type: array
+          items: { $ref: '#/components/schemas/AvailabilityProfessional' }
+    CreateAppointmentRequest:
+      type: object
+      additionalProperties: false
+      required: [professional_id, starts_at, items]
+      description: Sem preço, duração ou identidade — tudo vem do servidor.
+      properties:
+        professional_id: { $ref: '#/components/schemas/Id' }
+        starts_at: { $ref: '#/components/schemas/Timestamp' }
+        items: { $ref: '#/components/schemas/OrderLines' }
+        counter_customer:
+          type: object
+          additionalProperties: false
+          required: [nick]
+          description: Só o dono (balcão). Cria a identidade recuperável do cliente.
+          properties:
+            nick: { type: string, minLength: 1, maxLength: 30 }
+    RescheduleAppointmentRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version, starts_at]
+      properties:
+        expected_version: { $ref: '#/components/schemas/Version' }
+        starts_at: { $ref: '#/components/schemas/Timestamp' }
+        professional_id: { $ref: '#/components/schemas/Id' }
+        reason: { $ref: '#/components/schemas/Reason' }
+    AppointmentItem:
+      type: object
+      required: [kind, service_id, product_id, name, unit_price, quantity, duration_minutes]
+      properties:
+        kind: { type: string, enum: [service, product] }
+        service_id: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        product_id: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        name: { type: string }
+        unit_price: { $ref: '#/components/schemas/Money' }
+        quantity: { type: integer, minimum: 1 }
+        duration_minutes: { type: integer, minimum: 0 }
+    Appointment:
+      type: object
+      required: [id, establishment_id, professional, status, cancelled_by, origin, starts_at, ends_at, local_date, local_time,
+                 timezone, service_minutes, buffer_minutes, tolerance_minutes, checkin_window_minutes, items, price, payment,
+                 terms, called_at, deadline_at, arrived_at, arrival_signal_at, store_late, participation_id, revision, version,
+                 created_at, finished_at]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        establishment_id: { $ref: '#/components/schemas/Id' }
+        professional:
+          type: object
+          required: [id, display_name]
+          properties:
+            id: { $ref: '#/components/schemas/Id' }
+            display_name: { type: string }
+        status: { $ref: '#/components/schemas/AppointmentStatus' }
+        cancelled_by: { type: [string, 'null'], enum: [customer, store, null] }
+        origin: { type: string, enum: [online, counter] }
+        starts_at: { $ref: '#/components/schemas/Timestamp' }
+        ends_at: { $ref: '#/components/schemas/Timestamp' }
+        local_date: { type: string, format: date }
+        local_time: { type: string }
+        timezone: { type: string }
+        service_minutes: { type: integer }
+        buffer_minutes: { type: integer }
+        tolerance_minutes: { type: integer, description: Tolerância de chegada congelada na reserva. }
+        checkin_window_minutes: { type: integer }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AppointmentItem' }
+        price: { $ref: '#/components/schemas/Money' }
+        payment:
+          type: object
+          required: [mode, due_now, due_at_store, estimated_total]
+          description: Parte 1 — reserva gratuita (nada agora; tudo na barbearia).
+          properties:
+            mode: { type: string, enum: [free] }
+            due_now: { $ref: '#/components/schemas/Money' }
+            due_at_store: { $ref: '#/components/schemas/Money' }
+            estimated_total: { $ref: '#/components/schemas/Money' }
+        terms: { type: string }
+        called_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+        deadline_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }], description: 'max(horário, chamada) + tolerância.' }
+        arrived_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+        arrival_signal_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+        store_late: { type: boolean, description: A tolerância passou e a loja não chamou (não é falta do cliente). }
+        participation_id: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        revision: { type: integer, minimum: 1 }
+        version: { $ref: '#/components/schemas/Version' }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+        finished_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+        nick: { type: string, description: Só equipe. }
+        identity_kind: { type: string, enum: [account, visitor], description: Só equipe. }
+        end_reason: { type: [string, 'null'], description: Só equipe. }
+    AppointmentCreated:
+      allOf:
+        - $ref: '#/components/schemas/Appointment'
+        - type: object
+          properties:
+            counter_recovery_code: { type: string, description: 'Só na reserva de balcão, uma única vez.' }
+            counter_recovery_code_valid_until: { $ref: '#/components/schemas/Timestamp' }
+    MyAppointment:
+      type: object
+      required: [establishment, appointment]
+      properties:
+        establishment:
+          type: object
+          required: [id, slug, name]
+          properties:
+            id: { $ref: '#/components/schemas/Id' }
+            slug: { type: string }
+            name: { type: string }
+        appointment: { $ref: '#/components/schemas/Appointment' }
+    AgendaDay:
+      type: object
+      required: [date, professional_id, display_name, shifts, blocks, appointments]
+      properties:
+        date: { type: string, format: date }
+        professional_id: { $ref: '#/components/schemas/Id' }
+        display_name: { type: string }
+        shifts:
+          type: array
+          items:
+            type: object
+            required: [starts_at, ends_at, modality]
+            properties:
+              starts_at: { $ref: '#/components/schemas/Timestamp' }
+              ends_at: { $ref: '#/components/schemas/Timestamp' }
+              modality: { $ref: '#/components/schemas/ShiftModality' }
+        blocks:
+          type: array
+          items: { $ref: '#/components/schemas/AgendaException' }
+        appointments:
+          type: array
+          items: { $ref: '#/components/schemas/Appointment' }
+    AgendaView:
+      type: object
+      required: [timezone, mode, today, days]
+      properties:
+        timezone: { type: string }
+        mode: { $ref: '#/components/schemas/ServiceMode' }
+        today: { type: string, format: date }
+        days:
+          type: array
+          items: { $ref: '#/components/schemas/AgendaDay' }

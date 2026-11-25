@@ -48,11 +48,12 @@ func (s *Service) callNext(w http.ResponseWriter, r *http.Request) error {
 	if !actor.IsOwner() && (actor.ProfessionalID == nil || *actor.ProfessionalID != qi.ProfessionalID) {
 		return hs.ErrForbidden("Você só pode chamar clientes da sua própria fila.")
 	}
-	var empty struct{}
-	body, err := hs.DecodeJSON(r, &empty)
+	var req callNextRequest
+	body, err := hs.DecodeJSON(r, &req)
 	if err != nil {
 		return err
 	}
+	startNow := req.StartImmediately != nil && *req.StartImmediately
 	cmd := idempotency.Command{ActorKey: actorKey(actor), Operation: "callNext", Body: body}
 	return s.idem.Run(w, r, cmd, func(tx pgx.Tx) (idempotency.Result, error) {
 		queues, err := estabelecimento.LockQueues(ctx, tx, estID, queueID)
@@ -88,6 +89,21 @@ func (s *Service) callNext(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return idempotency.Result{}, err
 		}
+		// Agenda (ADR-0038): chamar reserva a cadeira pela tolerância + duração + margem. Se o
+		// cliente já está na cadeira e o atendimento começa agora, só duração + margem. Quem não
+		// cabe antes do próximo horário protegido continua no lugar (nunca se pula para alguém
+		// com serviço mais curto automaticamente).
+		mins, err := serviceMinutes(ctx, tx, next.OrderID)
+		if err != nil {
+			return idempotency.Result{}, err
+		}
+		use := ChairUse{ProfessionalID: queues[queueID].ProfessionalID, From: now, ToleranceMinutes: tol, ServiceMinutes: mins, ParticipationID: &next.ID}
+		if startNow {
+			use.ToleranceMinutes = 0
+		}
+		if err := s.guardUse(ctx, tx, estID, use); err != nil {
+			return idempotency.Result{}, err
+		}
 		if _, err := tx.Exec(ctx, `
 			UPDATE participation SET status = 'called', called_at = $2, tolerance_minutes = $3, tolerance_ends_at = $4,
 			       late_notice_at = NULL, version = version + 1, updated_at = $2
@@ -97,8 +113,28 @@ func (s *Service) callNext(w http.ResponseWriter, r *http.Request) error {
 			}
 			return idempotency.Result{}, err
 		}
-		return s.finish(ctx, tx, next.EstablishmentID, next.ID, role{staff: actor, isStaff: true}, "T-P-02", Waiting, Called, "", http.StatusOK, queueID)
+		who := role{staff: actor, isStaff: true}
+		if !startNow {
+			return s.finish(ctx, tx, next.EstablishmentID, next.ID, who, "T-P-02", Waiting, Called, "", http.StatusOK, queueID)
+		}
+		// Chamar e iniciar num só comando: a equipe confirma que o cliente está presente.
+		e := s.auditBase(ctx, next, who)
+		e.EstablishmentID, e.OccurredAt, e.Action = &estID, now, "T-P-02"
+		e.TargetType, e.TargetID, e.FromState, e.ToState, e.Reason = "participation", next.ID, Waiting, Called, "presente: chamado e iniciado"
+		if err := auditoria.Record(ctx, tx, e); err != nil {
+			return idempotency.Result{}, err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE participation SET status = 'in_service', started_at = $2, version = version + 1, updated_at = $2 WHERE id = $1`,
+			next.ID, now); err != nil {
+			return idempotency.Result{}, err
+		}
+		return s.finish(ctx, tx, next.EstablishmentID, next.ID, who, "T-P-03", Called, InService, "", http.StatusOK, queueID)
 	})
+}
+
+type callNextRequest struct {
+	// StartImmediately: o cliente está presente na cadeira; chama e inicia o atendimento juntos.
+	StartImmediately *bool `json:"start_immediately"`
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -261,14 +297,27 @@ func toleranceFor(ctx context.Context, q database.Querier, estID uuid.UUID) (int
 func (s *Service) startService(w http.ResponseWriter, r *http.Request) error {
 	var body versionOnly
 	return s.participationCommand(w, r, "startService", allow{professional: true, owner: true}, &body,
-		func(tx pgx.Tx, p row, who role, _ map[uuid.UUID]estabelecimento.QueueInfo) (idempotency.Result, error) {
+		func(tx pgx.Tx, p row, who role, queues map[uuid.UUID]estabelecimento.QueueInfo) (idempotency.Result, error) {
 			ctx := r.Context()
 			if p.Status != Called {
 				return s.invalid(ctx, tx, p, who, "Só é possível iniciar o atendimento de quem foi chamado.")
 			}
 			now := s.Clock.Now()
+			// Começar agora não pode invadir um horário protegido (ex.: começar muito depois da
+			// tolerância, já colado na próxima reserva).
+			mins, err := serviceMinutes(ctx, tx, p.OrderID)
+			if err != nil {
+				return idempotency.Result{}, err
+			}
+			if err := s.guardUse(ctx, tx, p.EstablishmentID, ChairUse{ProfessionalID: queues[p.QueueID].ProfessionalID, From: now,
+				ServiceMinutes: mins, ParticipationID: &p.ID}); err != nil {
+				return s.withVisit(ctx, tx, p, who, err)
+			}
 			if _, err := tx.Exec(ctx, `UPDATE participation SET status = 'in_service', started_at = $2, version = version + 1, updated_at = $2 WHERE id = $1`,
 				p.ID, now); err != nil {
+				return idempotency.Result{}, err
+			}
+			if err := s.visitChanged(ctx, tx, p, InService, ""); err != nil {
 				return idempotency.Result{}, err
 			}
 			return s.finish(ctx, tx, p.EstablishmentID, p.ID, who, "T-P-03", Called, InService, "", http.StatusOK, p.QueueID)
@@ -349,6 +398,17 @@ func (s *Service) end(ctx context.Context, tx pgx.Tx, p row, who role, to, closu
 			return idempotency.Result{}, err
 		}
 	}
+	// Visita que veio de reserva: o resultado acompanha a reserva na mesma transação.
+	mirror := reason
+	switch {
+	case to == Cancelled && who.customer:
+		mirror = MirrorCancelledByCustomer
+	case to == Cancelled:
+		mirror = MirrorCancelledByStore + reason
+	}
+	if err := s.visitChanged(ctx, tx, p, to, mirror); err != nil {
+		return idempotency.Result{}, err
+	}
 	return s.finish(ctx, tx, p.EstablishmentID, p.ID, who, action, p.Status, to, reason, http.StatusOK, p.QueueID)
 }
 
@@ -403,6 +463,16 @@ func (s *Service) transferParticipation(w http.ResponseWriter, r *http.Request) 
 			case state == estabelecimento.EntryClosedManual:
 				return idempotency.Result{}, conflict("queue_entry_closed", "Entrada da fila de destino fechada",
 					"A entrada da fila de "+tq.ProfessionalName+" está fechada. O cliente continua na fila atual, no mesmo lugar.", nil)
+			}
+			// Modo "os dois": o destino precisa conseguir atender a pessoa no expediente de hoje.
+			if s.Agenda != nil && s.mode(st) == estabelecimento.ModeHybrid {
+				mins, err := serviceMinutes(ctx, tx, p.OrderID)
+				if err != nil {
+					return idempotency.Result{}, err
+				}
+				if err := s.Agenda.CheckQueueEntry(ctx, tx, p.EstablishmentID, tq, st, mins, nil, true); err != nil {
+					return idempotency.Result{}, err
+				}
 			}
 			ids, err := atendimento.ServiceIDs(ctx, tx, p.OrderID)
 			if err != nil {
@@ -463,6 +533,8 @@ func (s *Service) invalid(ctx context.Context, tx pgx.Tx, p row, who role, detai
 func (s *Service) auditBase(ctx context.Context, p row, who role) auditoria.Event {
 	e := auditoria.Event{RequestID: hs.RequestIDFrom(ctx)}
 	switch {
+	case who.system:
+		e.ActorKind = auditoria.ActorSystem
 	case who.isStaff:
 		e.ActorKind, e.ActorID = who.auditKind(), auditoria.Ptr(who.staff.AccountID)
 	case p.AccountID != nil:
@@ -575,6 +647,15 @@ func (s *Service) moveParticipation(w http.ResponseWriter, r *http.Request) erro
 				}
 				if _, err := tx.Exec(ctx, `UPDATE participation SET status = 'waiting', called_at = NULL, tolerance_minutes = NULL,
 					tolerance_ends_at = NULL WHERE id = $1`, first.ID); err != nil {
+					return idempotency.Result{}, err
+				}
+				// A chamada implícita passa pelo mesmo teste de encaixe de "Chamar próximo".
+				mins, err := serviceMinutes(ctx, tx, second.OrderID)
+				if err != nil {
+					return idempotency.Result{}, err
+				}
+				if err := s.guardUse(ctx, tx, p.EstablishmentID, ChairUse{ProfessionalID: queues[p.QueueID].ProfessionalID, From: now,
+					ToleranceMinutes: tol, ServiceMinutes: mins, ParticipationID: &second.ID}); err != nil {
 					return idempotency.Result{}, err
 				}
 				if _, err := tx.Exec(ctx, `UPDATE participation SET status = 'called', called_at = $2, tolerance_minutes = $3,

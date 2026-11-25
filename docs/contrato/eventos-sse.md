@@ -67,6 +67,7 @@ Cada mudança grava **um registro de evento por audiência afetada**, já com o 
 | `loyalty.updated` | account | loyalty_account | Crédito, reversão, reserva, liberação, consumo |
 | `reward_reservation.updated` | account, professional, owner | reward_reservation | T-RW-* |
 | `deletion_request.updated` | owner | deletion_request | Exclusão com bloqueio na loja |
+| `appointment.updated` | visit, professional, owner | appointment | T-AP-* (reserva, remarcação, cancelamento, chegada, chamada, visita que acompanha, falta e atraso da loja). A visão do titular não traz o apelido; a da equipe traz. As telas releem só o dia visível (ADR-0038) |
 
 O catálogo de prêmios e o catálogo de serviços **não** são enviados por SSE: são lidos ao abrir a tela. Disputa de estoque é resolvida no comando (`409 reward_out_of_stock`).
 

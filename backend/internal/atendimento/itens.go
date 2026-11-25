@@ -172,6 +172,11 @@ func (s *Service) replaceOrderItems(w http.ResponseWriter, r *http.Request) erro
 			if err := recordOrder(ctx, tx, cur.EstablishmentID, cur.ID, now, evOrder); err != nil {
 				return idempotency.Result{}, err
 			}
+			if visit.Status == visitCalled || visit.Status == visitInService {
+				if err := s.Visits.DurationChanged(ctx, tx, cur.EstablishmentID, visit.ParticipationID); err != nil {
+					return idempotency.Result{}, s.withOrder(ctx, tx, cur, err)
+				}
+			}
 			if err := s.Visits.QueueChanged(ctx, tx, cur.EstablishmentID, visit.QueueID); err != nil {
 				return idempotency.Result{}, err
 			}

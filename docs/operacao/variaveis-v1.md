@@ -19,6 +19,7 @@ Em toda variável que é segredo do backend, a forma `NOME_FILE=/caminho` també
 | `FILA_LOG_FORMAT` / `FILA_LOG_LEVEL` | `json` / `info` | não |
 | `FILA_DB_MAX_CONNS` | `8` (por processo; somar API, worker, listeners e migrador frente ao limite do Neon) | não |
 | `FILA_DB_CONNECT_TIMEOUT` | `10s` | não |
+| `FILA_AGENDA` | Omitida (= `false` em homologação e produção): a agenda da 2.0 fica desligada e nenhuma loja sai do modo fila. `true` só quando a operação liberar o piloto (ADR-0038). Na API **e** no worker | não |
 | `GOTOOLCHAIN` | `auto` (variável do Go, não do Fila: baixa a toolchain do `go.mod`) | não |
 | `FILA_MEDIA_STORAGE` | `s3` | não |
 | `FILA_S3_ENDPOINT` | `https://<id-da-conta>.r2.cloudflarestorage.com`, sem o bucket no caminho | não |
