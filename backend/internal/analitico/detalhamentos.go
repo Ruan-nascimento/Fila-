@@ -319,7 +319,7 @@ func bdPeakHours(ctx context.Context, q database.Querier, sc *scope) (any, error
 	rows, err := q.Query(ctx, `
 		SELECT extract(isodow FROM p.created_at AT TIME ZONE $4)::int, extract(hour FROM p.created_at AT TIME ZONE $4)::int, count(*)
 		FROM participation p JOIN queue q ON q.id = p.queue_id
-		WHERE p.establishment_id = $1 AND p.created_at >= $2 AND p.created_at < $3
+		WHERE p.establishment_id = $1 AND p.origin = 'queue' AND p.created_at >= $2 AND p.created_at < $3
 		  AND ($5::uuid IS NULL OR q.professional_id = $5)
 		  AND ($6::uuid IS NULL OR EXISTS (SELECT 1 FROM order_item i WHERE i.order_id = p.order_id AND i.service_id = $6 AND i.status <> 'removed'))
 		GROUP BY 1, 2 ORDER BY 1, 2`,
@@ -352,7 +352,7 @@ func bdWaitBands(ctx context.Context, q database.Querier, sc *scope) (any, error
 	rows, err := q.Query(ctx, `
 		SELECT floor(extract(epoch FROM p.called_at - p.created_at) / 60)::int AS m, count(*)
 		FROM participation p JOIN queue q ON q.id = p.queue_id
-		WHERE p.establishment_id = $1 AND p.called_at IS NOT NULL AND p.called_at >= p.created_at
+		WHERE p.establishment_id = $1 AND p.origin = 'queue' AND p.called_at IS NOT NULL AND p.called_at >= p.created_at
 		  AND p.called_at >= $2 AND p.called_at < $3
 		  AND ($4::uuid IS NULL OR q.professional_id = $4)
 		  AND ($5::uuid IS NULL OR EXISTS (SELECT 1 FROM order_item i WHERE i.order_id = p.order_id AND i.service_id = $5 AND i.status <> 'removed'))

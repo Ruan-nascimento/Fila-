@@ -101,6 +101,42 @@ func parseItemsQuery(v *validate.Collector, raw []string) *[]atendimento.LineReq
 	return &out
 }
 
+// resolveEach resolve os itens UMA vez, sem trava (leitura pública), e confere cada profissional em
+// memória: o número de consultas não cresce com o número de profissionais. A confirmação refaz a
+// conta com trava (resolveForProfessional).
+func resolveEach(ctx context.Context, q database.Querier, estID uuid.UUID, profs []estabelecimento.ProfessionalRef,
+	lines []atendimento.LineRequest, st estabelecimento.Settings) (map[uuid.UUID][]atendimento.Line, error) {
+	ids := make([]uuid.UUID, 0, len(lines))
+	for _, l := range lines {
+		if l.ServiceID != nil {
+			ids = append(ids, *l.ServiceID)
+		}
+	}
+	svc, err := catalogo.ServicesForRead(ctx, q, estID, ids)
+	if err != nil {
+		return nil, err
+	}
+	fixed := make([]atendimento.LineRequest, len(lines))
+	for i, l := range lines {
+		fixed[i] = l
+		if l.ServiceID != nil {
+			if _, ok := svc[*l.ServiceID]; !ok {
+				fixed[i] = atendimento.LineRequest{ProductID: l.ServiceID, Quantity: l.Quantity}
+			}
+		}
+	}
+	var v validate.Collector
+	wants := atendimento.ParseLines(&v, "/items", &fixed, 1)
+	if err := v.Err(); err != nil {
+		return nil, err
+	}
+	who := make([]atendimento.Pro, len(profs))
+	for i, p := range profs {
+		who[i] = atendimento.Pro{ID: p.ID, Name: p.Name}
+	}
+	return atendimento.ResolveEach(ctx, q, estID, who, wants, st)
+}
+
 // resolveForProfessional resolve os itens (serviço OU produto) no catálogo, com preço e duração
 // do servidor, para o profissional. Ids que não são serviço são tentados como produto.
 func resolveForProfessional(ctx context.Context, q database.Querier, estID uuid.UUID, prof estabelecimento.ProfessionalRef,
@@ -174,7 +210,8 @@ func (s *Service) getAvailability(w http.ResponseWriter, r *http.Request) error 
 	}
 	ctx := r.Context()
 	var out availabilityView
-	// Transação comum (não somente leitura): o catálogo é lido com FOR SHARE, como na confirmação.
+	// Leitura sem trava de catálogo (muitos leitores no mesmo dia não disputam linhas); a confirmação
+	// refaz a mesma conta sob trava.
 	err = database.InTx(ctx, s.Pool, func(tx pgx.Tx) error {
 		out, err = s.availability(ctx, tx, estID, day, *lines, only, nil)
 		return err
@@ -232,16 +269,16 @@ func (s *Service) availability(ctx context.Context, q database.Querier, estID uu
 	if err != nil {
 		return out, err
 	}
+	byProf, err := resolveEach(ctx, q, estID, profs, lines, st)
+	if err != nil {
+		return out, err
+	}
 	for _, p := range profs {
 		ps := professionalSlots{ProfessionalID: p.ID, DisplayName: p.Name, Slots: []slotView{}}
-		resolved, err := resolveForProfessional(ctx, q, estID, p, lines, st)
-		var he *hs.Error
-		switch {
-		case errors.As(err, &he) && (he.Code == "service_not_eligible"):
+		resolved, eligible := byProf[p.ID]
+		if !eligible {
 			out.Professionals = append(out.Professionals, ps) // não faz algum dos serviços
 			continue
-		case err != nil:
-			return out, err
 		}
 		ps.Eligible = true
 		mins, cents := totals(resolved)
@@ -1080,6 +1117,10 @@ func (s *Service) rescheduleAppointment(w http.ResponseWriter, r *http.Request) 
 					return idempotency.Result{}, conflict("slot_unavailable", "Horário indisponível",
 						"O novo horário acabou de ser ocupado. A reserva atual continua como estava.", nil)
 				}
+				return idempotency.Result{}, err
+			}
+			oldDay := a.LocalDate.Format(time.DateOnly)
+			if err := availabilityChanged(ctx, tx, a.EstablishmentID, &a.ProfessionalID, &oldDay, now); err != nil {
 				return idempotency.Result{}, err
 			}
 			if err := s.afterChange(ctx, tx, a.EstablishmentID, a.ID, "T-AP-02", a.Status, by.actor(), reason, now); err != nil {

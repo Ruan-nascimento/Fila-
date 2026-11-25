@@ -234,6 +234,8 @@ enum Destino {
     Filas,
     Pendencias,
     Comanda { id: uuid::Uuid },
+    /// Agenda da gestão; com data (AAAA-MM-DD), abre o dia.
+    Agenda { data: Option<String> },
 }
 
 #[tauri::command]
@@ -244,6 +246,8 @@ async fn abrir_gestao(app: AppHandle, estado: State<'_, Arc<Estado>>, loja: uuid
         Destino::Filas => format!("/gestao/{loja}/filas"),
         Destino::Pendencias => format!("/gestao/{loja}/pendencias"),
         Destino::Comanda { id } => format!("/gestao/{loja}/comandas/{id}"),
+        Destino::Agenda { data: Some(d) } if data_local(&d) => format!("/gestao/{loja}/agenda?data={d}"),
+        Destino::Agenda { .. } => format!("/gestao/{loja}/agenda"),
     };
     let url = origem().join(&caminho).map_err(|e| ErroApi::from(e.to_string()))?;
     if let Some(w) = app.get_webview_window("principal") {
@@ -455,5 +459,24 @@ mod testes {
         // loja inválida é ignorada (o Dashboard escolhe pela lista do servidor)
         let sem_loja = o.join(&format!("/dono/painel-analitico#t={t}&est=../x")).unwrap();
         assert_eq!(ticket_do_atalho(&sem_loja), Some((t, String::new())));
+    }
+}
+
+/// Data local AAAA-MM-DD (nada além de dígitos e hífens entra na URL da gestão).
+fn data_local(s: &str) -> bool {
+    let b = s.as_bytes();
+    b.len() == 10 && b[4] == b'-' && b[7] == b'-' && s.chars().enumerate().all(|(i, c)| i == 4 || i == 7 || c.is_ascii_digit())
+}
+
+#[cfg(test)]
+mod testes_destino {
+    use super::data_local;
+
+    #[test]
+    fn data_da_agenda_so_com_digitos() {
+        assert!(data_local("2026-11-25"));
+        assert!(!data_local("2026-11-25&x=1"));
+        assert!(!data_local("../../x"));
+        assert!(!data_local("2026/11/25"));
     }
 }

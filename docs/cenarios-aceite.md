@@ -1410,6 +1410,40 @@ Dado um visitante que confirma o e-mail pelo código (o errado é recusado)
 Quando reserva, remarca, e em outro aparelho pede o link e o usa
 Então sai o aviso de remarcação (não o da revisão anterior), o e-mail desconhecido não recebe nada (mesma resposta), o link abre a reserva uma única vez, o cancelamento de uma conta gera aviso, e o visitante sem e-mail tem o aviso pulado.
 
+## Escala e recuperação da agenda (Fila 2.0, parte 3, ADR-0040)
+
+### C-AG-15 — Worker parado não gera falta em massa
+- Regras: R-AG-10 · Transições: T-AP-07 · Contrato: worker da agenda · Tipo: integração
+
+Dado um horário chamado às 09:55 (prazo 10:10) e outro às 11:55 (prazo 12:10), com o worker parado até 12:15
+Quando o worker volta
+Então o de 12:10 vira falta, o de 10:10 continua chamado para a equipe decidir e o aviso de chamada de 2 h atrás é pulado como vencido (nada sai por e-mail).
+
+### C-AG-16 — Calendário mensal agregado
+- Regras: R-AG-11 · Contrato: `getAvailabilityDays`, `getAvailability` · Tipo: integração
+
+Dado folga de Beto amanhã
+Quando o cliente consulta 14 dias de uma vez
+Então cada dia diz se tem vaga igual à consulta detalhada daquele dia, a folga aparece sem vaga e um intervalo maior que 62 dias é recusado.
+
+### C-AG-17 — Invalidação pública sem dado pessoal
+- Regras: R-AG-11 · Contrato: `createAppointment`, `rescheduleAppointment` · Evento: `availability.updated` · Tipo: integração
+
+Quando alguém reserva e depois remarca para amanhã
+Então saem eventos públicos com só profissional e data (o dia antigo e o novo) e nenhum traz o nome de quem reservou.
+
+### C-BK-09 — Agendamentos no Dashboard
+- Regras: R-AG-12 · Contrato: `getAnalyticsAppointments`, `listAnalyticsRecords` · Tipo: integração + componente
+
+Dado um dia com um atendimento concluído com sinal, uma falta, um cancelamento do cliente, uma reserva não paga e uma remarcação no balcão
+Então o Dashboard mostra 3 previstos, 1 concluído, 1 falta, taxa de falta 50% (1 ÷ 2), sinais de R$ 45, R$ 15 descontados, R$ 30 devolvidos, ocupação de 1,5 h em 18 h de jornada, a comparação por origem, o detalhamento das faltas com 1 registro e "não coletado" para períodos anteriores à loja.
+
+### C-AG-18 — Ensaio de carga (não é SLA)
+- Regras: R-AG-10, R-AG-11 · Tipo: carga (`FILA_PERF=1`)
+
+Dado 20 lojas × 5 profissionais e ~39 mil reservas
+Então a leitura do dia faz 11 consultas com qualquer grade, 30 tentativas pelo último horário dão 1 vencedor e 0 sobreposições, a rodada ociosa do worker faz 4 consultas e nenhuma conexão fica retida (resultados em docs/operacao/agenda-2.0.md).
+
 ---
 
 ## Critérios de pronto do anexo (§15) → cenários

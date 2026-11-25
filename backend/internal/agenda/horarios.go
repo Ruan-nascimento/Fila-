@@ -380,7 +380,11 @@ func (s *Service) outsideHours(ctx context.Context, tx pgx.Tx, estID uuid.UUID, 
 
 func (s *Service) recordAudit(ctx context.Context, q database.Querier, estID uuid.UUID, actor acesso.Actor, action, target string,
 	id uuid.UUID, to, reason string, now time.Time) error {
-	return recordAudit(ctx, q, estID, staffActorInfo(actor), action, target, id, to, reason, now)
+	if err := recordAudit(ctx, q, estID, staffActorInfo(actor), action, target, id, to, reason, now); err != nil {
+		return err
+	}
+	// Jornada e exceções mudam a disponibilidade: invalidação da loja inteira (rara).
+	return availabilityChanged(ctx, q, estID, nil, nil, now)
 }
 
 // ---------------------------------------------------------------------------------------------

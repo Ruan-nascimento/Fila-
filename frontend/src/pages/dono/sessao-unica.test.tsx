@@ -124,7 +124,7 @@ describe("sessão única do dono", () => {
     );
     expect(await screen.findByText("Não sabemos se a troca foi concluída.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Verificar de novo" }));
-    await waitFor(() => expect(screen.getByTestId("endereco")).toHaveTextContent(`/gestao/${LOJA}/filas`));
+    await waitFor(() => expect(screen.getByTestId("endereco")).toHaveTextContent(`/gestao/${LOJA}`));
     const enviados = requests.filter((r) => r.path === "/v1/auth/owner-session/takeover").map((r) => r.body);
     expect(enviados).toEqual([
       { challenge: conflito.current.challenge },

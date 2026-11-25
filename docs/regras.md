@@ -272,6 +272,9 @@ A coluna **Referências** cita operações do OpenAPI (`operationId`), eventos, 
 | R-AG-07 | A reserva vira visita só ao ser chamada (origem agendamento, comanda com os itens congelados); prazo de chegada = max(horário, chamada) + tolerância; presença confirmada pela equipe impede a falta; falta só com chamada válida; reserva que a loja não chamou não é falta do cliente. | `callAppointment`, T-AP-06…08 |
 | R-AG-08 | Remarcar valida o destino antes de soltar a origem (falha = nada muda); cancelar libera o horário; equipe sempre com motivo; histórico imutável de transições. | `rescheduleAppointment`, `cancelAppointment`, T-AP-02/03 |
 | R-AG-09 | A moldura da gestão mostra a foto pessoal de quem está usando nos dois links "Minha conta" (lateral e compacto), com iniciais se faltar ou falhar; atualiza ao salvar/remover e nunca mostra a foto de outra pessoa depois de trocar de conta. | `getMyProfile` |
+| R-AG-10 | Depois de uma parada do worker, nada é aplicado em massa: falta automática só até 30 min após o prazo (depois, a equipe decide), avisos vencidos não são enviados, retenções vencidas são soltas. | worker da agenda, alerta FilaChamadaDeReservaSemDesfecho |
+| R-AG-11 | Leituras de disponibilidade sem trava e com número constante de consultas (não cresce com horários nem profissionais); calendário mensal por consulta agregada limitada; invalidação pública só com profissional e data; nenhuma consulta periódica no navegador. | `getAvailability`, `getAvailabilityDays`, `availability.updated` |
+| R-AG-12 | Indicadores de agendamento no Dashboard com data de referência explícita por indicador, taxa de falta só entre reservas com desfecho, ocupação pela jornada vigente em cada data (com cobertura), visitas de reserva fora das entradas da fila e detalhamento que reconcilia com o número. | `getAnalyticsAppointments`, `listAnalyticsRecords` |
 
 ---
 

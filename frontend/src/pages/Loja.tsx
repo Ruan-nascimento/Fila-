@@ -118,7 +118,13 @@ export function Loja() {
             : null) ??
           "anonimo"
         }`}
-        destino={(n) => (n.aba === "pontos" ? `/loja/${shop.slug}/pontos` : `/loja/${shop.slug}`)}
+        destino={(n) =>
+          n.aba === "pontos"
+            ? `/loja/${shop.slug}/pontos`
+            : n.aba === "reservas"
+              ? `/loja/${shop.slug}/reservas`
+              : `/loja/${shop.slug}`
+        }
         icon={shop.logo?.variants[0]?.url}
       >
         <PublicShell width="wide" store={shop} actions={identified ? <Sino /> : undefined}>

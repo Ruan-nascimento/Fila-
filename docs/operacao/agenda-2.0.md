@@ -6,8 +6,8 @@ Documento de retomada do trabalho descrito em `Fila-2.0-Prompt-de-implementacao.
 |---|---|
 | Worktree | `../Fila-2.0` (branch `agenda-2.0`) |
 | Base usada | `36e2d08` (origin/main, "Merge pull request #27 … docs-1.0.0") — a mesma citada no documento; nenhuma divergência entre HEAD e a base |
-| Situação | Parte 1 concluída, publicada na homologação (`cd3a110`, `d4da562`). **Parte 2 concluída e testada localmente** (base da parte 2: `d4da562`; origin/main ainda em `36e2d08`) |
-| Decisões | [ADR-0038](../adr/0038-agenda-hibrida-e-uma-cadeira.md) (parte 1), [ADR-0039](../adr/0039-reserva-com-pix-avisos-e-recuperacao.md) (parte 2) |
+| Situação | Partes 1 e 2 na homologação (`cd3a110`, `d4da562`, `8152a89`). **Parte 3 concluída e testada localmente** (base da parte 3: `8152a89`; origin/main ainda em `36e2d08`) |
+| Decisões | [ADR-0038](../adr/0038-agenda-hibrida-e-uma-cadeira.md) (parte 1), [ADR-0039](../adr/0039-reserva-com-pix-avisos-e-recuperacao.md) (parte 2), [ADR-0040](../adr/0040-agenda-em-escala-indicadores-e-recuperacao.md) (parte 3) |
 
 Atenção ao juntar: a worktree principal (`indicadores-e-carregamento`) tem alterações de interface não commitadas em `Gestao.tsx`, `ui.tsx`, `styles.css` e várias páginas. A parte 1 também mexe em `Gestao.tsx`, `Loja.tsx`, `Painel.tsx` e `Conta.tsx`: espere conflitos de texto nesses arquivos.
 
@@ -106,3 +106,65 @@ Não executados: AbacatePay sandbox real (homologação), Edge, celular físico.
 - O filtro por profissional do painel analítico não atribui o Pix da reserva antes da chamada (ainda não há comanda).
 - Retenção do valor só depois da política comercial aprovada (`FILA_AGENDA_RETENCAO`).
 - Parte 3 continua como listado na seção 5.
+
+---
+
+# Parte 3 — escala, programa do dono e liberação (ADR-0040)
+
+## 11. O que a parte 3 entrega
+
+- **Leituras sem N+1 e sem trava**: a disponibilidade resolve os itens uma vez por requisição (antes, uma vez por profissional) e lê o catálogo sem `FOR SHARE`; 11 consultas por leitura do dia, constantes ao dobrar os horários.
+- **Calendário mensal agregado** (`GET …/availability/days`, até 62 dias): os dias sem vaga aparecem riscados; o pedido anterior é cancelado ao trocar de dia; voltar à aba revalida o dia visível; nenhuma consulta periódica.
+- **Invalidação pública** `availability.updated` (só profissional e data): quem está olhando o mesmo dia vê o horário sumir ou voltar sem recarregar.
+- **Recuperação após parada do worker**: falta automática só até 30 min depois do prazo (depois, a equipe decide); avisos com validade (chamada velha não sai); retenções vencidas soltas normalmente.
+- **Dashboard do computador → aba Agendamentos**: previstos, concluídos, faltas e taxa (com denominador), cancelados pelo cliente e pela loja, não pagos no prazo, remarcações, atraso de início, sinais, créditos, taxas, devoluções, pendências de agora, ocupação planejada e utilização real (jornada vigente em cada data, cobertura de dias), comparação fila × horário marcado, gráfico diário e detalhamento clicável que abre a Agenda no dia. Corrigido: a visita de uma reserva não conta mais como entrada da fila nem puxa a espera para baixo.
+- **Navegação**: o dono e a logo da gestão entram pela forma de atendimento (Agenda ou Filas); o sino da equipe avisa nova reserva, reserva paga, cancelamento do cliente e "Cheguei" (abre a Agenda no dia); o do cliente avisa a chamada do horário.
+- **Operação**: métricas `fila_agenda_*` e alertas `FilaRetencaoDeHorarioPresa`, `FilaAvisoDeReservaParado`, `FilaChamadaDeReservaSemDesfecho` (rotina nova em rotinas.md).
+- Guia prático e PDF atualizados (horário marcado, Pix da reserva, recuperação por e-mail, agenda da equipe, aba Agendamentos).
+
+## 12. Migração
+
+`backend/migrations/00031_agenda_indices.sql`: só `CREATE INDEX` (índice parcial da tarefa "a loja não chamou"); compatível com a API e o worker anteriores durante o deploy.
+
+## 13. Ensaio de carga (medido, não é SLA)
+
+`FILA_PERF=1 go -C backend test -run TestEnsaioCargaAgenda -v -timeout 30m ./internal/api/` — API inteira em processo, PostgreSQL 18.6 em contêiner local, Intel Core i3-N305 (8 núcleos), 7 GB de RAM, pool da API de 5 conexões. Dados: 20 lojas × 5 profissionais, jornada 09–18, 30 dias de histórico e 30 dias à frente com metade dos horários reservada (38.600 reservas e ocupações).
+
+| Medição | Resultado |
+|---|---|
+| Consultas SQL por leitura do dia (5 profissionais) | 11 com grade de 30 min e 11 com grade de 15 min (antes da correção: 19) |
+| Consultas SQL por leitura do mês (30 dias, 1 profissional) | 12 e 12 |
+| Leitura do dia, 1 / 10 / 100 leitores | p95 7 ms / 48 ms / 293–335 ms (duas rodadas; antes da correção, 371 ms) |
+| Leitura do mês, 1 / 10 leitores | p95 11 ms / 56 ms |
+| Criação gratuita sem disputa | p95 52 ms |
+| 30 tentativas simultâneas pelo último horário | 1 vencedor, 29 `slot_unavailable`, p95 286 ms; 0 ocupações sobrepostas |
+| Rodada do worker com trabalho (21 avisos) | 214 consultas, 99 ms |
+| Rodada do worker em repouso | 4 consultas, 2 ms (antes do índice: 15 ms e 11,6 mil blocos lidos) |
+| Conexões depois da carga | 0 em uso, 5 ociosas |
+
+Leitura: com 100 leitores simultâneos o p95 fica no limite do alvo de 300 ms porque as requisições esperam vaga no pool de 5 conexões (cada leitura sozinha leva ~6 ms). Não se aumentou o pool para esconder consulta: antes, eliminou-se o N+1 e a trava. Redis não foi introduzido (ADR-0040). A medição em homologação aquecida (Render + Neon) ainda precisa ser feita antes de qualquer SLA.
+
+## 14. Testes executados (25/11/2026)
+
+| O quê | Resultado |
+|---|---|
+| `go test ./...` (backend inteiro, integração com PostgreSQL real) | 27 pacotes ok. Uma falha intermitente antiga corrigida: `TestReceiptFees` procurava "fee" no JSON inteiro e um UUID aleatório continha "fee" (agora procura só chaves) |
+| E2E Chrome real contra o código da parte 3 (`agenda.spec.ts`, `reserva-paga.spec.ts`, `telas.spec.ts`), com mídia em disco | 7 de 8 ok, incluindo a foto do dono; `telas do cliente` falha como antes (procura "Seus pontos nesta loja" na página inicial, ausente desde a base `36e2d08`) |
+| Parte 3 (`agenda_parte3_test.go`: C-AG-15, 16, 17; `reserva_paga_test.go`: C-BK-09) | ok |
+| Ensaio de carga (C-AG-18) | ok (tabela acima) |
+| `go vet`, `go tool staticcheck`, `verificar_contrato.py`, `rastrear_evidencias.py` | sem erro |
+| Frontend: `tsc -b`, `eslint`, `prettier`, `vitest` (21 arquivos, 158 testes, incluindo notificações de reserva) | ok |
+| Dashboard desktop: `tsc`, `vitest` (5 testes, incluindo a aba Agendamentos) e `cargo test` (8 testes, incluindo o caminho `/appointments` e a data do destino Agenda) | ok |
+
+Não executados: build dos instaladores Windows/Linux do programa (a CI os gera), Edge, celular físico, medição de carga em homologação.
+
+## 15. Roteiro de demonstração (5 minutos)
+
+1. **Configurar loja híbrida (1 min)** — Gestão → Configurações da loja → Agenda → "Os dois" → confirmar o impacto. Cobrança da reserva → Sinal pelo Pix → R$ 15 → Salvar. Horários → Segunda 09–18 → Copiar para a semana → Salvar jornada.
+2. **Reservar horário (1 min)** — Celular, página da loja → Agendar horário → Beto → Corte → dias sem vaga riscados → horário → a revisão mostra "Agora, pelo Pix: R$ 15 · Na barbearia: R$ 30" e a regra de cancelamento → Reservar e pagar → Gerar Pix → pagar (sandbox). A tela vira "Horário confirmado" sozinha; noutra aba o mesmo horário some da lista.
+3. **Encaixe incompatível (30 s)** — Ponha alguém na fila com um serviço longo minutos antes da reserva e tente "Chamar próximo": a tela explica "Próximo horário marcado às … Este serviço precisa de …" e a pessoa continua no lugar.
+4. **Chamar o agendado (30 s)** — Agenda → Hoje → Registrar chegada → Chamar: a visita aparece em Filas com "Horário marcado".
+5. **Conferir o e-mail (30 s)** — Caixa do cliente: "Reserva confirmada" (com o pagamento) e "Chegou a sua vez".
+6. **Descontar o sinal (30 s)** — Iniciar → Concluir: a comanda mostra "Sinal pago na reserva (descontado) −R$ 15" e deve R$ 30; receber em dinheiro.
+7. **Gráfico no computador (45 s)** — Programa Fila Gestão → Dashboard → aba Agendamentos: previstos, concluídos, taxa de falta, sinais recebidos e descontados; clicar em "Concluídos" lista a reserva e "abrir" leva à Agenda no dia.
+8. **Foto do dono (15 s)** — Minha conta → foto → voltar à gestão: a foto aparece na lateral e no ícone do celular (e no programa).

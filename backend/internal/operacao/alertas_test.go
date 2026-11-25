@@ -22,7 +22,7 @@ func TestPrometheusRulesMatchEvaluate(t *testing.T) {
 	for _, name := range []string{"FilaWorkerTravadoRestauracao", "FilaWorkerEmManutencaoLonga", "FilaWorkerSemSinal",
 		"FilaOutboxAtrasada", "FilaPixDesconhecido", "FilaDivergenciaFinanceiraAntiga", "FilaDivergenciaPosRestauracao",
 		"FilaEstornoParado", "FilaExclusaoSemProcessamento", "FilaExclusaoPertoDaMeta", "FilaReservaVencidaPresa",
-		"FilaEmailParado", "FilaEmailFalhou"} {
+		"FilaEmailParado", "FilaEmailFalhou", "FilaRetencaoDeHorarioPresa", "FilaAvisoDeReservaParado", "FilaChamadaDeReservaSemDesfecho"} {
 		if !strings.Contains(yml, "alert: "+name+"\n") {
 			t.Errorf("alerta %s não está no Prometheus", name)
 		}

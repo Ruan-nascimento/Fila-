@@ -44,3 +44,4 @@ Para mudar uma decisão, crie um novo ADR que substitua o anterior (não reescre
 | [ADR-0037](0037-desktop-em-segundo-plano.md) | Programa desktop em segundo plano (bandeja, instância única) | Aceita |
 | [ADR-0038](0038-agenda-hibrida-e-uma-cadeira.md) | Agenda gratuita, operação híbrida e uma cadeira por profissional (Fila 2.0) | Aceita |
 | [ADR-0039](0039-reserva-com-pix-avisos-e-recuperacao.md) | Reserva com Pix (sinal ou taxa), avisos por e-mail e recuperação da reserva (Fila 2.0, parte 2) | Aceita |
+| [ADR-0040](0040-agenda-em-escala-indicadores-e-recuperacao.md) | Agenda em escala: leituras sem N+1, invalidação pública, indicadores do dono e recuperação após parada do worker (Fila 2.0, parte 3) | Aceita |

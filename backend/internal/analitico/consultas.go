@@ -95,7 +95,7 @@ const partFilter = `
 const sqlEntries = `
 SELECT date_trunc($2, p.created_at AT TIME ZONE $3) AS b, 0::bigint, count(*)
 FROM participation p JOIN queue q ON q.id = p.queue_id
-WHERE p.establishment_id = $1 AND p.created_at >= $4 AND p.created_at < $5` + partFilter + `
+WHERE p.establishment_id = $1 AND p.origin = 'queue' AND p.created_at >= $4 AND p.created_at < $5` + partFilter + `
 GROUP BY 1`
 
 // Atendimentos concluídos pelo horário de conclusão.
@@ -113,7 +113,7 @@ SELECT date_trunc($2, p.called_at AT TIME ZONE $3) AS b,
        percentile_cont(0.9) WITHIN GROUP (ORDER BY extract(epoch FROM p.called_at - p.created_at)),
        count(*)
 FROM participation p JOIN queue q ON q.id = p.queue_id
-WHERE p.establishment_id = $1 AND p.called_at IS NOT NULL AND p.called_at >= p.created_at
+WHERE p.establishment_id = $1 AND p.origin = 'queue' AND p.called_at IS NOT NULL AND p.called_at >= p.created_at
   AND p.called_at >= $4 AND p.called_at < $5` + partFilter + `
 GROUP BY ROLLUP (1)`
 

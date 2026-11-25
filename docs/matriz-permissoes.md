@@ -63,6 +63,7 @@ Não edite à mão: rode `python docs/tools/verificar_contrato.py --write`. Cél
 | `requestReauthCode` | `POST /v1/auth/reauthenticate/email-code` | — | — | self | self | self | — | — | T-SS-06 |
 | `registerAccount` | `POST /v1/auth/register` | sim | — | — | — | — | — | — | T-AC-01 |
 | `getDeletionRequestStatus` | `POST /v1/deletion-requests/status` | protocol_holder | — | — | — | — | — | — | — |
+| `getAnalyticsAppointments` | `GET /v1/desktop/analytics/establishments/{establishmentId}/appointments` | — | — | — | — | — | — | — | — |
 | `getAnalyticsBreakdown` | `GET /v1/desktop/analytics/establishments/{establishmentId}/breakdowns/{dimension}` | — | — | — | — | — | — | — | — |
 | `listAnalyticsRecords` | `GET /v1/desktop/analytics/establishments/{establishmentId}/records/{kind}` | — | — | — | — | — | — | — | — |
 | `getAnalyticsSeries` | `GET /v1/desktop/analytics/establishments/{establishmentId}/series/{metric}` | — | — | — | — | — | — | — | — |
@@ -209,6 +210,7 @@ Não edite à mão: rode `python docs/tools/verificar_contrato.py --write`. Cél
 | `requestAppointmentAccess` | `POST /v1/public/establishments/{establishmentId}/appointment-access` | sim | — | — | — | — | — | — | T-VC-03 |
 | `exchangeAppointmentAccess` | `POST /v1/public/establishments/{establishmentId}/appointment-access/exchange` | sim | — | — | — | — | — | — | T-VC-04 |
 | `getAvailability` | `GET /v1/public/establishments/{establishmentId}/availability` | sim | — | — | — | — | — | — | — |
+| `getAvailabilityDays` | `GET /v1/public/establishments/{establishmentId}/availability/days` | sim | — | — | — | — | — | — | — |
 | `listPublicCategories` | `GET /v1/public/establishments/{establishmentId}/catalog-categories` | sim | — | — | — | — | — | — | — |
 | `listPublicProducts` | `GET /v1/public/establishments/{establishmentId}/products` | sim | — | — | — | — | — | — | — |
 | `listPublicQueues` | `GET /v1/public/establishments/{establishmentId}/queues` | sim | — | — | — | — | — | — | — |

@@ -168,6 +168,9 @@ motivo. Teste citado aqui não quer dizer aprovado: o resultado de cada execuç�
 | R-AG-07 | C-AG-02, C-AG-07, C-AG-08 | automatizado |
 | R-AG-08 | C-AG-09 | automatizado |
 | R-AG-09 | C-AG-13 | automatizado |
+| R-AG-10 | C-AG-15, C-AG-18 | automatizado |
+| R-AG-11 | C-AG-16, C-AG-17, C-AG-18 | automatizado |
+| R-AG-12 | C-BK-09 | automatizado |
 | R-BK-01 | C-BK-01, C-BK-07 | automatizado |
 | R-BK-02 | C-BK-01, C-BK-04 | automatizado |
 | R-BK-03 | C-BK-01, C-BK-02, C-BK-06, C-BK-07 | automatizado |
@@ -177,7 +180,7 @@ motivo. Teste citado aqui não quer dizer aprovado: o resultado de cada execuç�
 | R-BK-07 | C-BK-08 | automatizado |
 | R-BK-08 | C-BK-08 | automatizado |
 
-Resumo: automatizado: 161 · parcial: 0 · sem teste: 2 · sem cenário: 0 · automatizado (estrutural): 4
+Resumo: automatizado: 164 · parcial: 0 · sem teste: 2 · sem cenário: 0 · automatizado (estrutural): 4
 
 ## 2. Cenários e testes
 
@@ -341,6 +344,11 @@ Resumo: automatizado: 161 · parcial: 0 · sem teste: 2 · sem cenário: 0 · au
 | C-BK-06 — Concorrência no horário pago e no pagamento | `backend/internal/api/reserva_paga_test.go: TestReservaPagaConcorrencia` |
 | C-BK-07 — Cobrança só com liberação; balcão gratuito | `backend/internal/api/reserva_paga_test.go: TestReservaCobrancaSoComLiberacao` |
 | C-BK-08 — Avisos e recuperação pelo e-mail | `backend/internal/api/reserva_paga_test.go: TestReservaAvisosERecuperacaoPorEmail`<br>`frontend/e2e/reserva-paga.spec.ts: sinal pelo Pix: dona liga, cliente reserva, paga e a equipe vê o sinal` |
+| C-AG-15 — Worker parado não gera falta em massa | `backend/internal/api/agenda_parte3_test.go: TestAgendaWorkerParadoNaoGeraFaltaEmMassa` |
+| C-AG-16 — Calendário mensal agregado | `backend/internal/api/agenda_parte3_test.go: TestAgendaDiasComVaga` |
+| C-AG-17 — Invalidação pública sem dado pessoal | `backend/internal/api/agenda_parte3_test.go: TestAgendaInvalidacaoPublica` |
+| C-BK-09 — Agendamentos no Dashboard | `backend/internal/api/reserva_paga_test.go: TestPainelAgendamentos` |
+| C-AG-18 — Ensaio de carga (não é SLA) | `backend/internal/api/ensaio_agenda_test.go: TestEnsaioCargaAgenda` |
 
 ## 3. Cenários sem teste automatizado
 

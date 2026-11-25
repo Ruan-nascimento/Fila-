@@ -120,11 +120,27 @@ Se a internet cair, a tela avisa ("Sem internet…"). Repetir um pagamento nunca
 - Os pontos entram depois do pagamento **pago e conferido**. Você recebe o aviso "Você ganhou N pontos".
 - Na aba **Pontos** da loja, toque em **Reservar** num prêmio. A reserva vale **24 horas**; retire no balcão e a equipe confirma a entrega. Reserva não retirada vence e os pontos voltam.
 
-### 3.8 Histórico
+### 3.8 Horário marcado (lojas com agenda)
+
+Quando a barbearia atende com horário marcado (ou "os dois"), a página da loja mostra **Agendar horário**:
+
+1. **Com quem?** escolha o profissional.
+2. Escolha os serviços e as quantidades (3 cortes para a família = 3 × a duração).
+3. Escolha o dia (dias **sem vaga** aparecem riscados) e o horário. Os horários estão no fuso da loja.
+4. **Revise**: quando, com quem, duração e quanto custa. Se a loja cobra a reserva, a tela mostra **quanto se paga agora pelo Pix** e **quanto fica para a barbearia**, com a regra de cancelamento, antes de pagar.
+5. Sem conta: informe um apelido (e guarde o código de recuperação). **Confirmar**.
+
+**Reserva com Pix (sinal ou taxa):** depois de confirmar, toque em **Gerar Pix**. O horário fica guardado por cerca de 18 minutos; a tela confirma sozinha quando o banco avisa (comprovante ou print não confirmam). Sem pagamento no prazo, o horário volta a ficar livre e, se o Pix for pago depois, o valor é devolvido. O **sinal** é descontado do atendimento ("Pague R$ 15 agora; na barbearia ficam R$ 45"); a **taxa de reserva** é cobrada além do atendimento.
+
+Em **Minhas reservas**: **Cheguei** (avisa a equipe a partir da janela de chegada), **Remarcar** e **Cancelar**. Ao cancelar, a tela diz antes o que acontece com o valor pago: dentro do prazo da loja, ele é devolvido; depois, segue a regra que você aceitou ao reservar. "Devolução solicitada" ainda não é "devolvida": o Pix pode levar alguns dias.
+
+**E-mail e outro aparelho (sem conta):** em Minhas reservas, informe um e-mail e digite o código de 6 dígitos que chegar. Você passa a receber confirmação, lembrete e chamada por e-mail e, em outro aparelho, pode abrir **Recuperar pelo e-mail** (na tela de agendar) para receber um link de acesso (vale 30 minutos, uma vez).
+
+### 3.9 Histórico
 
 Na aba **Histórico** da loja (com conta): visitas anteriores, itens com quantidade, valor pago e pontos.
 
-### 3.9 Minha conta
+### 3.10 Minha conta
 
 Em **Minha conta** (menu do topo):
 
@@ -257,6 +273,16 @@ Cada seção salva separadamente. Se outra aba ou aparelho alterou a mesma seç�
 
 **QR Code** (em Acesso e divulgação), três versões: abrir a loja, entrar sem conta e entrar com conta. Cada uma pode ser copiada, baixada em PNG ou SVG, ou impressa. O QR usa o endereço atual da loja.
 
+### 5.7.1 Agenda, horários e cobrança da reserva
+
+- **Configurações da loja → Agenda:** forma de atendimento (por ordem de chegada, com horário marcado ou os dois — a tela mostra antes quantas reservas e pessoas na fila existem), grade de horários, preparação entre clientes, antecedência, até quantos dias à frente, tolerância e janela de chegada.
+- **Cobrança da reserva** (só quando a instalação libera e o Pix está ligado): gratuita, **sinal** ou **taxa**; valor; até quantas horas antes o cancelamento devolve o valor; o que fazer na falta ou cancelamento tardio (devolver é o padrão; reter depende de liberação); lembrete por e-mail. Mudanças valem para reservas novas.
+- **Horários:** jornada da loja e de cada profissional, com pausas, folgas, feriados e bloqueios. Mudança que deixaria reserva de fora é recusada com a lista.
+- **Agenda → Hoje / Por dia:** cada reserva mostra a situação e o pagamento ("Aguardando Pix de R$ 15", "Sinal de R$ 15 pago · na barbearia R$ 30"). **Registrar chegada**, **Chamar**, **Remarcar**, **Cancelar** (com motivo; com valor pago, a devolução é pedida) e **Reserva de balcão** (gratuita; o cliente recebe um código).
+- Chamado o horário, a visita aparece em **Filas** com o selo "Horário marcado" e segue o fluxo de sempre; a comanda mostra **"Sinal pago na reserva (descontado)"**.
+- **Pendências** de reserva: Pix pago depois do prazo (a devolução é automática) e **sobra do sinal** (o atendimento custou menos que o sinal): devolva pelo app do banco e clique em **Confirmar devolução** com a descrição (pede a senha de novo).
+- Uma chamada que venceu enquanto o sistema estava fora do ar não vira falta sozinha: decida em Filas (iniciar, ausência ou cancelar).
+
 ### 5.8 Prêmios (fidelidade)
 
 Ligue ou desligue o programa e cadastre os prêmios (cortesias). Os pontos de cada serviço ficam no **Catálogo**. Reservas não retiradas vencem em 24 horas e devolvem os pontos.
@@ -308,6 +334,7 @@ Baixe na página de [Releases do GitHub](https://github.com/Ruan-nascimento/Fila
 - Clique numa barra, ponto ou célula para ver os registros que formaram o número. **Ver tabela** mostra os mesmos dados em tabela.
 - Indicadores: atendimentos, unidades de serviço, produtos, espera, recebido e **recebido após custos** (com a cobertura dos dados; não é lucro).
 - **Filas** (no topo) volta ao balcão; **Dashboard** (na gestão) volta aos gráficos. Alternar não pede senha.
+- **Agendamentos:** previstos, concluídos, faltas (com a taxa e o que entra na conta), cancelados pelo cliente e pela loja, não pagos no prazo, remarcações, atraso de início, sinais recebidos e descontados, taxas, devoluções, ocupação planejada e utilização real (só nos dias com jornada) e a comparação fila × horário marcado. Clique num número ou num dia para ver as reservas; cada uma abre a Agenda no dia.
 
 ### 6.4 Segundo plano e bandeja
 

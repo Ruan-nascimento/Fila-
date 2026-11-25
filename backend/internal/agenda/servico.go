@@ -102,6 +102,8 @@ func (s *Service) Routes() []hs.Route {
 		{Operation: "listAgenda", Method: http.MethodGet, Path: est + "/agenda", Grants: staff, Handler: s.listAgenda},
 		{Operation: "getAvailability", Method: http.MethodGet, Path: "/v1/public/establishments/{establishmentId}/availability",
 			Grants: []hs.Grant{hs.GrantPublic}, Handler: s.getAvailability},
+		{Operation: "getAvailabilityDays", Method: http.MethodGet, Path: "/v1/public/establishments/{establishmentId}/availability/days",
+			Grants: []hs.Grant{hs.GrantPublic}, Handler: s.getAvailabilityDays},
 		{Operation: "createAppointment", Method: http.MethodPost, Path: est + "/appointments", Grants: with(self, owner), Handler: s.createAppointment},
 		{Operation: "listMyAppointments", Method: http.MethodGet, Path: "/v1/my-appointments", Grants: self, Handler: s.listMyAppointments},
 		{Operation: "getAppointment", Method: http.MethodGet, Path: appt, Grants: with(bookingOwner, staff), Handler: s.getAppointment},

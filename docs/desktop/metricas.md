@@ -64,15 +64,41 @@ Paginação no servidor, 50 por página, cursor `(instante, id)` decrescente. O 
 | `service_items` | `ref=performed/added` | serviço, situação, preço, cobrado | comanda |
 | `financial_issues` | `state=open` (agora) / `opened` / `resolved` | tipo, situação, valor, comanda | pendências |
 | `loyalty_entries` | `occurred_at` | tipo, Δ pontos, origem | — |
+| `appointments` | `starts_at` (horário marcado; inclui o resto do período) com `state=scheduled/completed/interrupted/no_show/cancelled/cancelled_by_customer/cancelled_by_store/expired_unpaid/store_late` | situação, quem cancelou, origem, valor, profissional, sinal/taxa e desfecho | Agenda no dia |
 
 Filtro sem atribuição num tipo de registro → `422 analytics_filter_not_applicable` (ex.: recebimentos filtrados por serviço).
+
+## Agendamentos (`/appointments`, Fila 2.0)
+
+Uma consulta para a aba inteira (contagens, dinheiro, comparação por modalidade, ocupação, série diária e pendências de agora).
+
+| Indicador | Definição | Data usada | Ausência |
+|---|---|---|---|
+| Previstos | reservas que não foram canceladas nem venceram sem pagamento (inclui o resto do período) | horário marcado | `not_collected` antes da coleta |
+| Concluídos, interrompidos, faltas | desfecho da reserva (a visita acompanha a reserva) | horário marcado | — |
+| Cancelados pelo cliente / pela loja | `cancelled_by` | horário marcado | — |
+| Não pagos no prazo | retenção do Pix vencida (`expired`) | horário marcado | — |
+| A loja não chamou | tolerância passou sem chamada (não é falta do cliente) | horário marcado | — |
+| Remarcações | transições T-AP-02 (cada remarcação conta) | instante da remarcação | — |
+| Taxa de falta | faltas ÷ (faltas + concluídos + interrompidos); futuros, cancelados e não pagos ficam fora | horário marcado | `empty` com denominador 0 ("Sem dados") |
+| Atraso de início | mediana e p90 de max(0, início do atendimento − horário marcado) | horário marcado | `empty` sem amostra |
+| Sinais recebidos / taxas de reserva | Pix principal da reserva, por modo | recebimento | — |
+| Pix pagos depois do prazo | recebimentos excedentes da reserva (devolução integral pedida) | recebimento | — |
+| Sinais descontados | `booking_credit` (não é dinheiro novo; o caixa já contou o Pix) | aplicação | — |
+| Devoluções confirmadas | estornos de reserva confirmados | confirmação | — |
+| Devoluções pendentes, saldo em aberto, aguardando Pix | fotografia de agora | agora | — |
+| Ocupação planejada | minutos reservados (reservas não canceladas nem vencidas, falta incluída) ∩ jornada ÷ minutos de jornada líquidos de pausas, folgas e bloqueios | jornada vigente em cada data | `empty` sem jornada; `days_with_schedule`/`days` = cobertura |
+| Utilização real | minutos em atendimento (concluídos e interrompidos, fila e reserva) DENTRO da jornada ÷ jornada já decorrida; fora dela = hora extra | início/fim do atendimento | idem |
+| Comparação por modalidade | concluídos e ausências por origem da visita (fila × horário marcado); cada visita conta uma vez | fim da visita | — |
+
+Profissional: o da reserva hoje (remarcar para outro profissional leva a reserva); na utilização, o da fila final da visita. Serviço: reservas com o serviço; na ocupação, `not_applicable`. Meio de pagamento: ignorado (aparece em `ignored_filters`). As entradas e a espera da **fila** contam só visitas de origem fila (a visita de uma reserva chamada não é entrada FIFO).
 
 ## O que ainda depende de coleta inexistente
 
 | Métrica | Por que não existe | Dado necessário |
 |---|---|---|
 | Lucro / margem | Não há custos registrados | Custos por serviço (insumos, comissão) e despesas da loja |
-| Ocupação / ociosidade da cadeira | Não há jornada registrada | Turnos de trabalho por profissional (início, fim, pausas) |
+| Ocupação antes da Fila 2.0 | A jornada só existe a partir da adesão à agenda | Dias sem jornada aparecem fora do denominador (cobertura informada) |
 | Tempo de espera desde a entrada até a desistência | A saída do cliente é registrada, mas não o motivo nem quando ele desistiu de fato | Motivo e instante da desistência informados pelo cliente |
 | Espera por trecho antes e depois de uma transferência | Só a última fila fica na participação; `participation_transfer` guarda o instante da troca, mas não a posição | Posição e horário de chamada por trecho |
 | Comissão / repasse por profissional | Não há regra de repasse | Tabela de comissões por serviço e profissional |

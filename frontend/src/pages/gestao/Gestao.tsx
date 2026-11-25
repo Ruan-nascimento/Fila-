@@ -294,7 +294,13 @@ function StaffShell({
     <NotificacoesProvider
       papel="equipe"
       escopo={`equipe:${ctx.estId}:${accountId}`}
-      destino={(n) => (n.queueId ? `${base}/filas/${n.queueId}` : `${base}/filas`)}
+      destino={(n) =>
+        n.agendaData
+          ? `${base}/agenda?data=${n.agendaData}`
+          : n.queueId
+            ? `${base}/filas/${n.queueId}`
+            : `${base}`
+      }
       icon={marca?.logo?.variants[0]?.url}
     >
       <div className="min-h-dvh bg-bg lg:grid lg:grid-cols-[16rem_minmax(0,1fr)]">
@@ -302,7 +308,7 @@ function StaffShell({
         {/* Computador: navegação lateral agrupada por atividade */}
         <aside className="sticky top-0 z-30 hidden h-dvh flex-col border-r border-line bg-surface lg:flex">
           <div className="flex items-center justify-between gap-1 px-4 pt-4 pb-2">
-            <Brand to={`${base}/filas`} store={store} sub="Gestão" />
+            <Brand to={base} store={store} sub="Gestão" />
             <Sino abrirPara="direita" />
           </div>
           <nav aria-label="Gestão da loja" className="flex-1 overflow-y-auto px-3 py-2">
@@ -364,7 +370,7 @@ function StaffShell({
           {/* Celular e tablet: barra superior com a loja em operação */}
           <header className="sticky top-0 z-30 border-b border-line bg-surface/95 backdrop-blur lg:hidden">
             <div className="flex items-center justify-between gap-3 px-4 py-1.5">
-              <Brand to={`${base}/filas`} store={store} sub="Gestão" />
+              <Brand to={base} store={store} sub="Gestão" />
               <Sino className="ml-auto" />
               {ctx.isOwner && <BotaoDashboard estId={ctx.estId} compact />}
               <Link

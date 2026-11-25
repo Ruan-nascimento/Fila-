@@ -35,6 +35,24 @@ func (e AccountStatus) Valid() bool {
 	}
 }
 
+// Defines values for AnalyticsAppointmentsPartModalityOrigin.
+const (
+	AnalyticsAppointmentsPartModalityOriginAppointment AnalyticsAppointmentsPartModalityOrigin = "appointment"
+	AnalyticsAppointmentsPartModalityOriginQueue       AnalyticsAppointmentsPartModalityOrigin = "queue"
+)
+
+// Valid indicates whether the value is a known member of the AnalyticsAppointmentsPartModalityOrigin enum.
+func (e AnalyticsAppointmentsPartModalityOrigin) Valid() bool {
+	switch e {
+	case AnalyticsAppointmentsPartModalityOriginAppointment:
+		return true
+	case AnalyticsAppointmentsPartModalityOriginQueue:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AnalyticsBreakdownStatus.
 const (
 	AnalyticsBreakdownStatusNotApplicable AnalyticsBreakdownStatus = "not_applicable"
@@ -1166,6 +1184,7 @@ func (e EventEnvelopeSchemaVersion) Valid() bool {
 // Defines values for EventType.
 const (
 	EventTypeAppointmentUpdated       EventType = "appointment.updated"
+	EventTypeAvailabilityUpdated      EventType = "availability.updated"
 	EventTypeChangeRequestUpdated     EventType = "change_request.updated"
 	EventTypeDeletionRequestUpdated   EventType = "deletion_request.updated"
 	EventTypeFinancialIssueUpdated    EventType = "financial_issue.updated"
@@ -1185,6 +1204,8 @@ const (
 func (e EventType) Valid() bool {
 	switch e {
 	case EventTypeAppointmentUpdated:
+		return true
+	case EventTypeAvailabilityUpdated:
 		return true
 	case EventTypeChangeRequestUpdated:
 		return true
@@ -2555,6 +2576,42 @@ func (e GetReadiness200JSONResponseBodyStatus) Valid() bool {
 	}
 }
 
+// Defines values for GetAnalyticsAppointmentsParamsCompare.
+const (
+	GetAnalyticsAppointmentsParamsComparePrevious GetAnalyticsAppointmentsParamsCompare = "previous"
+)
+
+// Valid indicates whether the value is a known member of the GetAnalyticsAppointmentsParamsCompare enum.
+func (e GetAnalyticsAppointmentsParamsCompare) Valid() bool {
+	switch e {
+	case GetAnalyticsAppointmentsParamsComparePrevious:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetAnalyticsAppointmentsParamsMethod.
+const (
+	GetAnalyticsAppointmentsParamsMethodCard GetAnalyticsAppointmentsParamsMethod = "card"
+	GetAnalyticsAppointmentsParamsMethodCash GetAnalyticsAppointmentsParamsMethod = "cash"
+	GetAnalyticsAppointmentsParamsMethodPix  GetAnalyticsAppointmentsParamsMethod = "pix"
+)
+
+// Valid indicates whether the value is a known member of the GetAnalyticsAppointmentsParamsMethod enum.
+func (e GetAnalyticsAppointmentsParamsMethod) Valid() bool {
+	switch e {
+	case GetAnalyticsAppointmentsParamsMethodCard:
+		return true
+	case GetAnalyticsAppointmentsParamsMethodCash:
+		return true
+	case GetAnalyticsAppointmentsParamsMethodPix:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for GetAnalyticsBreakdownParamsCompare.
 const (
 	GetAnalyticsBreakdownParamsComparePrevious GetAnalyticsBreakdownParamsCompare = "previous"
@@ -2635,19 +2692,46 @@ func (e GetAnalyticsBreakdownParamsDimension) Valid() bool {
 
 // Defines values for ListAnalyticsRecordsParamsState.
 const (
-	ListAnalyticsRecordsParamsStateOpen     ListAnalyticsRecordsParamsState = "open"
-	ListAnalyticsRecordsParamsStateOpened   ListAnalyticsRecordsParamsState = "opened"
-	ListAnalyticsRecordsParamsStateResolved ListAnalyticsRecordsParamsState = "resolved"
+	ListAnalyticsRecordsParamsStateCancelled           ListAnalyticsRecordsParamsState = "cancelled"
+	ListAnalyticsRecordsParamsStateCancelledByCustomer ListAnalyticsRecordsParamsState = "cancelled_by_customer"
+	ListAnalyticsRecordsParamsStateCancelledByStore    ListAnalyticsRecordsParamsState = "cancelled_by_store"
+	ListAnalyticsRecordsParamsStateCompleted           ListAnalyticsRecordsParamsState = "completed"
+	ListAnalyticsRecordsParamsStateExpiredUnpaid       ListAnalyticsRecordsParamsState = "expired_unpaid"
+	ListAnalyticsRecordsParamsStateInterrupted         ListAnalyticsRecordsParamsState = "interrupted"
+	ListAnalyticsRecordsParamsStateNoShow              ListAnalyticsRecordsParamsState = "no_show"
+	ListAnalyticsRecordsParamsStateOpen                ListAnalyticsRecordsParamsState = "open"
+	ListAnalyticsRecordsParamsStateOpened              ListAnalyticsRecordsParamsState = "opened"
+	ListAnalyticsRecordsParamsStateResolved            ListAnalyticsRecordsParamsState = "resolved"
+	ListAnalyticsRecordsParamsStateScheduled           ListAnalyticsRecordsParamsState = "scheduled"
+	ListAnalyticsRecordsParamsStateStoreLate           ListAnalyticsRecordsParamsState = "store_late"
 )
 
 // Valid indicates whether the value is a known member of the ListAnalyticsRecordsParamsState enum.
 func (e ListAnalyticsRecordsParamsState) Valid() bool {
 	switch e {
+	case ListAnalyticsRecordsParamsStateCancelled:
+		return true
+	case ListAnalyticsRecordsParamsStateCancelledByCustomer:
+		return true
+	case ListAnalyticsRecordsParamsStateCancelledByStore:
+		return true
+	case ListAnalyticsRecordsParamsStateCompleted:
+		return true
+	case ListAnalyticsRecordsParamsStateExpiredUnpaid:
+		return true
+	case ListAnalyticsRecordsParamsStateInterrupted:
+		return true
+	case ListAnalyticsRecordsParamsStateNoShow:
+		return true
 	case ListAnalyticsRecordsParamsStateOpen:
 		return true
 	case ListAnalyticsRecordsParamsStateOpened:
 		return true
 	case ListAnalyticsRecordsParamsStateResolved:
+		return true
+	case ListAnalyticsRecordsParamsStateScheduled:
+		return true
+	case ListAnalyticsRecordsParamsStateStoreLate:
 		return true
 	default:
 		return false
@@ -2719,6 +2803,7 @@ func (e ListAnalyticsRecordsParamsMethod) Valid() bool {
 
 // Defines values for ListAnalyticsRecordsParamsKind.
 const (
+	Appointments    ListAnalyticsRecordsParamsKind = "appointments"
 	FinancialIssues ListAnalyticsRecordsParamsKind = "financial_issues"
 	LoyaltyEntries  ListAnalyticsRecordsParamsKind = "loyalty_entries"
 	Orders          ListAnalyticsRecordsParamsKind = "orders"
@@ -2731,6 +2816,8 @@ const (
 // Valid indicates whether the value is a known member of the ListAnalyticsRecordsParamsKind enum.
 func (e ListAnalyticsRecordsParamsKind) Valid() bool {
 	switch e {
+	case Appointments:
+		return true
 	case FinancialIssues:
 		return true
 	case LoyaltyEntries:
@@ -3114,6 +3201,121 @@ type AgendaView struct {
 	Timezone string             `json:"timezone"`
 	Today    openapi_types.Date `json:"today"`
 }
+
+// AnalyticsAppointments defines model for AnalyticsAppointments.
+type AnalyticsAppointments struct {
+	Compare *AnalyticsAppointmentsPart `json:"compare"`
+	Current AnalyticsAppointmentsPart  `json:"current"`
+	Daily   []struct {
+		Cancelled int                `json:"cancelled"`
+		Completed int                `json:"completed"`
+		Date      openapi_types.Date `json:"date"`
+		NoShow    int                `json:"no_show"`
+		Scheduled int                `json:"scheduled"`
+
+		// Start RFC 3339 em UTC com sufixo Z.
+		Start Timestamp `json:"start"`
+	} `json:"daily"`
+	PendingNow struct {
+		// AwaitingPayment Reservas retidas aguardando o Pix agora.
+		AwaitingPayment int `json:"awaiting_payment"`
+
+		// OpenBalanceCents Devido (total − sinal) das comandas de reserva aguardando pagamento.
+		OpenBalanceCents    int `json:"open_balance_cents"`
+		OpenBalanceOrders   int `json:"open_balance_orders"`
+		RefundsPending      int `json:"refunds_pending"`
+		RefundsPendingCents int `json:"refunds_pending_cents"`
+
+		// SnapshotAt RFC 3339 em UTC com sufixo Z.
+		SnapshotAt Timestamp `json:"snapshot_at"`
+	} `json:"pending_now"`
+}
+
+// AnalyticsAppointmentsPart defines model for AnalyticsAppointmentsPart.
+type AnalyticsAppointmentsPart struct {
+	Counts struct {
+		// CancelledByCustomer value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+		CancelledByCustomer AnalyticsValue `json:"cancelled_by_customer"`
+
+		// CancelledByStore value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+		CancelledByStore AnalyticsValue `json:"cancelled_by_store"`
+
+		// Completed value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+		Completed AnalyticsValue `json:"completed"`
+
+		// ExpiredUnpaid value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+		ExpiredUnpaid AnalyticsValue `json:"expired_unpaid"`
+
+		// Interrupted value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+		Interrupted AnalyticsValue `json:"interrupted"`
+
+		// NoShow value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+		NoShow AnalyticsValue `json:"no_show"`
+
+		// NoShowRate value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+		NoShowRate AnalyticsValue `json:"no_show_rate"`
+
+		// Reschedules value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+		Reschedules AnalyticsValue `json:"reschedules"`
+
+		// Scheduled value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+		Scheduled AnalyticsValue `json:"scheduled"`
+
+		// StartDelayMedianSeconds value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+		StartDelayMedianSeconds AnalyticsValue `json:"start_delay_median_seconds"`
+
+		// StartDelayP90Seconds value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+		StartDelayP90Seconds AnalyticsValue `json:"start_delay_p90_seconds"`
+
+		// StoreLate value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+		StoreLate AnalyticsValue `json:"store_late"`
+	} `json:"counts"`
+	Modality []struct {
+		Completed int                                     `json:"completed"`
+		NoShow    int                                     `json:"no_show"`
+		Origin    AnalyticsAppointmentsPartModalityOrigin `json:"origin"`
+	} `json:"modality"`
+	Money struct {
+		// CreditsAppliedCents value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+		CreditsAppliedCents AnalyticsValue `json:"credits_applied_cents"`
+
+		// DepositsReceivedCents value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+		DepositsReceivedCents AnalyticsValue `json:"deposits_received_cents"`
+
+		// FeesReceivedCents value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+		FeesReceivedCents AnalyticsValue `json:"fees_received_cents"`
+
+		// LatePaymentsCents value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+		LatePaymentsCents AnalyticsValue `json:"late_payments_cents"`
+
+		// RefundsConfirmedCents value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+		RefundsConfirmedCents AnalyticsValue `json:"refunds_confirmed_cents"`
+	} `json:"money"`
+	Occupancy struct {
+		// AvailableSeconds value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+		AvailableSeconds AnalyticsValue `json:"available_seconds"`
+
+		// CommittedSeconds value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+		CommittedSeconds AnalyticsValue `json:"committed_seconds"`
+		Days             int            `json:"days"`
+		DaysWithSchedule int            `json:"days_with_schedule"`
+
+		// InServiceSeconds value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+		InServiceSeconds AnalyticsValue `json:"in_service_seconds"`
+
+		// OvertimeSeconds value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+		OvertimeSeconds AnalyticsValue `json:"overtime_seconds"`
+
+		// Planned value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+		Planned AnalyticsValue `json:"planned"`
+
+		// Real value null ⇔ status ≠ ok. empty = sem observações; not_collected = antes da coleta; not_applicable = filtro sem atribuição.
+		Real AnalyticsValue `json:"real"`
+	} `json:"occupancy"`
+}
+
+// AnalyticsAppointmentsPartModalityOrigin defines model for AnalyticsAppointmentsPart.Modality.Origin.
+type AnalyticsAppointmentsPartModalityOrigin string
 
 // AnalyticsBreakdown defines model for AnalyticsBreakdown.
 type AnalyticsBreakdown struct {
@@ -6055,6 +6257,30 @@ type GoogleAuthCallbackParams struct {
 	Error *string `form:"error,omitempty" json:"error,omitempty"`
 }
 
+// GetAnalyticsAppointmentsParams defines parameters for GetAnalyticsAppointments.
+type GetAnalyticsAppointmentsParams struct {
+	// From Primeiro dia (data LOCAL da loja), inclusivo.
+	From AnalyticsFrom `form:"from" json:"from"`
+
+	// To Último dia (data LOCAL da loja), inclusivo. Intervalo consultado [from 00:00, to+1 00:00) no fuso da loja; no máximo 366 dias.
+	To AnalyticsTo `form:"to" json:"to"`
+
+	// Compare previous = período anterior equivalente, com o mesmo tempo transcorrido.
+	Compare        *GetAnalyticsAppointmentsParamsCompare `form:"compare,omitempty" json:"compare,omitempty"`
+	ProfessionalId *AnalyticsProfessional                 `form:"professional_id,omitempty" json:"professional_id,omitempty"`
+	ServiceId      *AnalyticsService                      `form:"service_id,omitempty" json:"service_id,omitempty"`
+	Method         *GetAnalyticsAppointmentsParamsMethod  `form:"method,omitempty" json:"method,omitempty"`
+
+	// DPoP Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min.
+	DPoP DPoPProof `json:"DPoP"`
+}
+
+// GetAnalyticsAppointmentsParamsCompare defines parameters for GetAnalyticsAppointments.
+type GetAnalyticsAppointmentsParamsCompare string
+
+// GetAnalyticsAppointmentsParamsMethod defines parameters for GetAnalyticsAppointments.
+type GetAnalyticsAppointmentsParamsMethod string
+
 // GetAnalyticsBreakdownParams defines parameters for GetAnalyticsBreakdown.
 type GetAnalyticsBreakdownParams struct {
 	// From Primeiro dia (data LOCAL da loja), inclusivo.
@@ -6091,7 +6317,7 @@ type ListAnalyticsRecordsParams struct {
 	// Ref participations: entered|called|finished; service_items: performed|added
 	Ref *string `form:"ref,omitempty" json:"ref,omitempty"`
 
-	// State financial_issues: open (agora) | opened | resolved (no período)
+	// State financial_issues: open (agora) | opened | resolved (no período). appointments: scheduled | completed | interrupted | no_show | cancelled | cancelled_by_customer | cancelled_by_store | expired_unpaid | store_late (pelo horário marcado)
 	State *ListAnalyticsRecordsParamsState `form:"state,omitempty" json:"state,omitempty"`
 
 	// Kind financial_issues: tipo; loyalty_entries: credited|used|returned|adjusted
@@ -6919,6 +7145,16 @@ type GetAvailabilityParams struct {
 	// Items Serviço ou produto, com quantidade opcional — `<id>` ou `<id>:<quantidade>` (repetido).
 	Items          []string `form:"items" json:"items"`
 	ProfessionalId *[]Id    `form:"professional_id,omitempty" json:"professional_id,omitempty"`
+}
+
+// GetAvailabilityDaysParams defines parameters for GetAvailabilityDays.
+type GetAvailabilityDaysParams struct {
+	From openapi_types.Date `form:"from" json:"from"`
+
+	// To Até 62 dias depois de from.
+	To             openapi_types.Date `form:"to" json:"to"`
+	ProfessionalId Id                 `form:"professional_id" json:"professional_id"`
+	Items          []string           `form:"items" json:"items"`
 }
 
 // OpenEventStreamParams defines parameters for OpenEventStream.

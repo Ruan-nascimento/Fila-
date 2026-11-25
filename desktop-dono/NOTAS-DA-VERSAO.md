@@ -19,6 +19,14 @@ O programa do dono da barbearia para Windows e Linux. Ele abre a gestão do site
 - Uma instância só: abrir o programa de novo traz a janela que já está aberta (inclusive escondida).
 - Dashboard: recebido após custos de recebimento (com a cobertura dos dados; não é lucro), unidades de serviço e produtos.
 
+## Próxima versão (Fila 2.0 — ainda sem release)
+
+Estas mudanças estão no código, mas **não** foram publicadas como versão nova do programa (nenhum release é criado por estas entregas):
+
+- Dashboard: aba **Agendamentos** (previstos, concluídos, faltas e taxa de falta, cancelamentos, não pagos no prazo, remarcações, atraso de início, sinais, créditos, taxas, devoluções, ocupação planejada e utilização real, comparação fila × horário marcado e gráfico diário), com detalhamento das reservas.
+- Clicar numa reserva abre a **Agenda** da gestão no dia dela (destino novo, data conferida no programa).
+- A agenda da gestão em si vem do site e já aparece no programa atual sem atualizar o instalador.
+
 ## Como instalar
 
 - **Windows:** execute `Fila-Gestao_1.0.0_x64-setup.exe`. Se aparecer "O Windows protegeu o computador", clique em *Mais informações* e depois em *Executar assim mesmo* (o programa não tem assinatura de código).

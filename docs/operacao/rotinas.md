@@ -199,3 +199,12 @@ Os segredos são arquivos em `/etc/fila/segredos/<grupo>/`. Troque o arquivo e r
 - `fila-admin verificar -backups /backups` sai com 0. Em agendamento (cron), saída 3 deve avisar o operador.
 - Ver no painel do dono se há pendências antigas.
 - Uma vez por mês: exercício de restauração em ambiente isolado ([backup-restauracao.md](backup-restauracao.md)).
+
+<a id="agenda-chamada-sem-desfecho"></a>
+## 18. Horário chamado sem desfecho (`FilaChamadaDeReservaSemDesfecho`)
+
+A falta automática de um horário chamado só vale até 30 min depois do prazo de chegada. Se o worker ficou parado (deploy, queda, restauração), as chamadas vencidas há mais tempo **não** viram falta em massa: ficam "Chamado · aguardando chegar" para a equipe decidir.
+
+1. Gestão → **Filas**: cada visita chamada aparece na cadeira do profissional.
+2. Cliente presente → **Iniciar**. Não veio → **Registrar ausência** (vira falta; com sinal pago, a política aceita na reserva decide devolver ou reter). A loja errou → **Cancelar** com motivo (com sinal pago, a devolução é pedida).
+3. Avisos de chamada antigos não são enviados depois da volta do worker (validade de 15 min): avise o cliente por outro meio se precisar.

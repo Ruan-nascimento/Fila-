@@ -104,7 +104,8 @@ var tableOwners = map[string][]string{
 // (TestAnalyticsIsReadOnly) e nenhuma tabela de sessão, credencial ou dado pessoal de contato.
 var analyticsReadTables = []string{"establishment", "professional", "queue", "service", "participation",
 	"participation_transfer", "service_order", "order_item", "order_adjustment", "receipt", "refund",
-	"financial_issue", "pix_charge", "loyalty_program", "loyalty_ledger", "reward", "reward_reservation", "receipt_fee", "product"}
+	"financial_issue", "pix_charge", "loyalty_program", "loyalty_ledger", "reward", "reward_reservation", "receipt_fee", "product",
+	"appointment", "appointment_event", "appointment_item", "booking_payment", "booking_credit"}
 
 // Pacotes que podem tocar tabelas da plataforma para manutenção técnica.
 var maintenanceTables = map[string][]string{

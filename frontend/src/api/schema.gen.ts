@@ -2260,6 +2260,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/desktop/analytics/establishments/{establishmentId}/appointments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Área Agendamentos (Fila 2.0) — desfechos, dinheiro da reserva, ocupação e série diária.
+         * @description Exclusivo do programa desktop (ADR-0027). Contagens pela data do horário marcado ("previstos" inclui o
+         *     resto do período); remarcações pelo instante da remarcação; dinheiro pelo instante em que entrou, foi
+         *     aplicado ou confirmado; pendências são fotografia de agora. Taxa de falta = faltas ÷ (faltas +
+         *     comparecimentos) entre reservas com desfecho; denominador zero → status `empty`. Ocupação planejada =
+         *     reservado ÷ jornada líquida (versão de jornada vigente em cada data); utilização real = em atendimento
+         *     dentro da jornada ÷ jornada decorrida (fora dela = hora extra). Dicionário: docs/desktop/metricas.md.
+         */
+        get: operations["getAnalyticsAppointments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/desktop/analytics/establishments/{establishmentId}/series/{metric}": {
         parameters: {
             query?: never;
@@ -2843,6 +2868,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/public/establishments/{establishmentId}/availability/days": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Quais dias de um intervalo (até 62) têm ao menos um horário para a seleção (calendário mensal).
+         * @description Consulta agregada e limitada: jornada, exceções e ocupações do intervalo lidas de uma vez; cada dia é
+         *     calculado com a mesma regra da consulta do dia e da confirmação. Os horários detalhados vêm de
+         *     `getAvailability` só para o dia escolhido. Dias fora da janela de reservas não aparecem.
+         */
+        get: operations["getAvailabilityDays"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/public/establishments/{establishmentId}/availability": {
         parameters: {
             query?: never;
@@ -3189,7 +3236,7 @@ export interface components {
          */
         AudienceKind: "public" | "visit" | "account" | "professional" | "owner";
         /** @enum {string} */
-        EventType: "stream.snapshot" | "stream.session_ended" | "queue.public.updated" | "queue.updated" | "participation.updated" | "order.updated" | "change_request.updated" | "payment.updated" | "financial_issue.updated" | "pendencies.updated" | "loyalty.updated" | "reward_reservation.updated" | "deletion_request.updated" | "appointment.updated";
+        EventType: "stream.snapshot" | "stream.session_ended" | "queue.public.updated" | "availability.updated" | "queue.updated" | "participation.updated" | "order.updated" | "change_request.updated" | "payment.updated" | "financial_issue.updated" | "pendencies.updated" | "loyalty.updated" | "reward_reservation.updated" | "deletion_request.updated" | "appointment.updated";
         EmptyRequest: Record<string, never>;
         TokenRequest: {
             token: string;
@@ -4518,6 +4565,68 @@ export interface components {
                 median_seconds: components["schemas"]["AnalyticsValue"];
                 p90_seconds: components["schemas"]["AnalyticsValue"];
                 ignored_filters: string[];
+            };
+        };
+        AnalyticsAppointments: {
+            current: components["schemas"]["AnalyticsAppointmentsPart"];
+            compare: components["schemas"]["AnalyticsAppointmentsPart"] | null;
+            daily: {
+                /** Format: date */
+                date: string;
+                start: components["schemas"]["Timestamp"];
+                scheduled: number;
+                completed: number;
+                no_show: number;
+                cancelled: number;
+            }[];
+            pending_now: {
+                snapshot_at: components["schemas"]["Timestamp"];
+                refunds_pending: number;
+                refunds_pending_cents: number;
+                /** @description Devido (total − sinal) das comandas de reserva aguardando pagamento. */
+                open_balance_cents: number;
+                open_balance_orders: number;
+                /** @description Reservas retidas aguardando o Pix agora. */
+                awaiting_payment: number;
+            };
+        };
+        AnalyticsAppointmentsPart: {
+            counts: {
+                scheduled: components["schemas"]["AnalyticsValue"];
+                completed: components["schemas"]["AnalyticsValue"];
+                interrupted: components["schemas"]["AnalyticsValue"];
+                no_show: components["schemas"]["AnalyticsValue"];
+                cancelled_by_customer: components["schemas"]["AnalyticsValue"];
+                cancelled_by_store: components["schemas"]["AnalyticsValue"];
+                expired_unpaid: components["schemas"]["AnalyticsValue"];
+                store_late: components["schemas"]["AnalyticsValue"];
+                reschedules: components["schemas"]["AnalyticsValue"];
+                no_show_rate: components["schemas"]["AnalyticsValue"];
+                start_delay_median_seconds: components["schemas"]["AnalyticsValue"];
+                start_delay_p90_seconds: components["schemas"]["AnalyticsValue"];
+            };
+            money: {
+                deposits_received_cents: components["schemas"]["AnalyticsValue"];
+                fees_received_cents: components["schemas"]["AnalyticsValue"];
+                late_payments_cents: components["schemas"]["AnalyticsValue"];
+                credits_applied_cents: components["schemas"]["AnalyticsValue"];
+                refunds_confirmed_cents: components["schemas"]["AnalyticsValue"];
+            };
+            modality: {
+                /** @enum {string} */
+                origin: "queue" | "appointment";
+                completed: number;
+                no_show: number;
+            }[];
+            occupancy: {
+                available_seconds: components["schemas"]["AnalyticsValue"];
+                committed_seconds: components["schemas"]["AnalyticsValue"];
+                planned: components["schemas"]["AnalyticsValue"];
+                in_service_seconds: components["schemas"]["AnalyticsValue"];
+                real: components["schemas"]["AnalyticsValue"];
+                overtime_seconds: components["schemas"]["AnalyticsValue"];
+                days_with_schedule: number;
+                days: number;
             };
         };
         AnalyticsSummary: {
@@ -9083,6 +9192,48 @@ export interface operations {
             default: components["responses"]["Unexpected"];
         };
     };
+    getAnalyticsAppointments: {
+        parameters: {
+            query: {
+                /** @description Primeiro dia (data LOCAL da loja), inclusivo. */
+                from: components["parameters"]["AnalyticsFrom"];
+                /** @description Último dia (data LOCAL da loja), inclusivo. Intervalo consultado [from 00:00, to+1 00:00) no fuso da loja; no máximo 366 dias. */
+                to: components["parameters"]["AnalyticsTo"];
+                /** @description previous = período anterior equivalente, com o mesmo tempo transcorrido. */
+                compare?: components["parameters"]["AnalyticsCompare"];
+                professional_id?: components["parameters"]["AnalyticsProfessional"];
+                service_id?: components["parameters"]["AnalyticsService"];
+                method?: components["parameters"]["AnalyticsMethod"];
+            };
+            header: {
+                /** @description Prova DPoP (RFC 9449) da instalação. Uso único; janela de 2 min. */
+                DPoP: components["parameters"]["DPoPProof"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Indicadores de agendamento com meta. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["AnalyticsAppointments"];
+                        meta: components["schemas"]["AnalyticsMeta"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
     getAnalyticsSeries: {
         parameters: {
             query: {
@@ -9178,8 +9329,8 @@ export interface operations {
                 cursor?: string;
                 /** @description participations: entered|called|finished; service_items: performed|added */
                 ref?: string;
-                /** @description financial_issues: open (agora) | opened | resolved (no período) */
-                state?: "open" | "opened" | "resolved";
+                /** @description financial_issues: open (agora) | opened | resolved (no período). appointments: scheduled | completed | interrupted | no_show | cancelled | cancelled_by_customer | cancelled_by_store | expired_unpaid | store_late (pelo horário marcado) */
+                state?: "open" | "opened" | "resolved" | "scheduled" | "completed" | "interrupted" | "no_show" | "cancelled" | "cancelled_by_customer" | "cancelled_by_store" | "expired_unpaid" | "store_late";
                 /** @description financial_issues: tipo; loyalty_entries: credited|used|returned|adjusted */
                 kind?: string;
                 status?: string;
@@ -9202,7 +9353,7 @@ export interface operations {
             };
             path: {
                 establishmentId: components["parameters"]["EstablishmentId"];
-                kind: "receipts" | "refunds" | "orders" | "participations" | "service_items" | "financial_issues" | "loyalty_entries";
+                kind: "receipts" | "refunds" | "orders" | "participations" | "service_items" | "financial_issues" | "loyalty_entries" | "appointments";
             };
             cookie?: never;
         };
@@ -10290,6 +10441,48 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    getAvailabilityDays: {
+        parameters: {
+            query: {
+                from: string;
+                /** @description Até 62 dias depois de from. */
+                to: string;
+                professional_id: components["schemas"]["Id"];
+                items: string[];
+            };
+            header?: never;
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Dias com e sem vaga. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            timezone: string;
+                            professional_id: components["schemas"]["Id"];
+                            days: {
+                                /** Format: date */
+                                date: string;
+                                has_slots: boolean;
+                            }[];
+                        };
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             default: components["responses"]["Unexpected"];
         };
     };

@@ -1,5 +1,13 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
-import { nativo, type Consulta, type ErroNativo, type Filtros, type Recorte, type Registro, type Resposta } from "./nativo";
+import {
+  nativo,
+  type Consulta,
+  type ErroNativo,
+  type Filtros,
+  type Recorte,
+  type Registro,
+  type Resposta,
+} from "./nativo";
 
 /** Contexto do Dashboard aberto: loja, filtros, versões por área (invalidação) e fim de sessão. */
 export type Ctx = {
@@ -35,23 +43,38 @@ const fimDeSessao = new Set([
   "unauthenticated",
 ]);
 export function encerraSessao(e: ErroNativo): boolean {
-  return e.status === 401 || fimDeSessao.has(e.code) || e.code === "desktop_not_activated";
+  return (
+    e.status === 401 ||
+    fimDeSessao.has(e.code) ||
+    e.code === "desktop_not_activated"
+  );
 }
 
-type Estado<T> = { dados: Resposta<T> | null; erro: ErroNativo | null; carregando: boolean };
+type Estado<T> = {
+  dados: Resposta<T> | null;
+  erro: ErroNativo | null;
+  carregando: boolean;
+};
 
 /**
  * Carrega uma consulta quando o componente aparece (aba aberta) e quando a área é invalidada.
  * Resposta de outra loja ou de um pedido já substituído é ignorada: dados da loja A nunca
  * aparecem sob o cabeçalho da loja B.
  */
-export function useDados<T>(montar: (c: Ctx) => Consulta | null, areas: string[]): Estado<T> & { recarregar: () => void } {
+export function useDados<T>(
+  montar: (c: Ctx) => Consulta | null,
+  areas: string[],
+): Estado<T> & { recarregar: () => void } {
   const ctx = useDash();
   const consulta = montar(ctx);
   const chave = JSON.stringify(consulta);
   const versao = areas.reduce((s, a) => s + (ctx.versoes[a] ?? 0), 0);
   const [manual, setManual] = useState(0);
-  const [st, setSt] = useState<Estado<T>>({ dados: null, erro: null, carregando: true });
+  const [st, setSt] = useState<Estado<T>>({
+    dados: null,
+    erro: null,
+    carregando: true,
+  });
   const seq = useRef(0);
   // Loja ATUAL (não a do momento do pedido): uma resposta que chega depois da troca é descartada.
   const lojaAtual = useRef(ctx.loja);
@@ -59,11 +82,20 @@ export function useDados<T>(montar: (c: Ctx) => Consulta | null, areas: string[]
   useEffect(() => {
     if (!consulta) return;
     const meu = ++seq.current;
-    setSt((s) => ({ dados: s.dados?.meta.establishment_id === ctx.loja ? s.dados : null, erro: null, carregando: true }));
+    setSt((s) => ({
+      dados: s.dados?.meta.establishment_id === ctx.loja ? s.dados : null,
+      erro: null,
+      carregando: true,
+    }));
     nativo
       .consultar<T>(consulta)
       .then((r) => {
-        if (meu !== seq.current || r.meta.establishment_id !== lojaAtual.current || r.meta.establishment_id !== consulta.loja) return; // atrasada ou de outra loja
+        if (
+          meu !== seq.current ||
+          r.meta.establishment_id !== lojaAtual.current ||
+          r.meta.establishment_id !== consulta.loja
+        )
+          return; // atrasada ou de outra loja
         setSt({ dados: r, erro: null, carregando: false });
       })
       .catch((e: ErroNativo) => {

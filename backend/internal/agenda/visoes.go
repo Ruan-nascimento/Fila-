@@ -346,6 +346,12 @@ func (s *Service) afterChange(ctx context.Context, q database.Querier, estID, id
 	if err := s.planNotices(ctx, q, a, action, at); err != nil {
 		return err
 	}
+	if freesOrTakesSlot(action, a.Status) {
+		day := a.LocalDate.Format(time.DateOnly)
+		if err := availabilityChanged(ctx, q, estID, &a.ProfessionalID, &day, at); err != nil {
+			return err
+		}
+	}
 	forCustomer, err := view(ctx, q, a, false)
 	if err != nil {
 		return err
@@ -376,4 +382,39 @@ func hora(t time.Time, loc *time.Location) string {
 		return fmt.Sprintf("%dh", l.Hour())
 	}
 	return fmt.Sprintf("%dh%02d", l.Hour(), l.Minute())
+}
+
+// Evento público de disponibilidade (ADR-0038/0039, parte 3): só loja, profissional e data, nunca
+// quem reservou. As telas públicas abertas releem o dia visível (agrupando eventos em sequência).
+const evAvailability = "availability.updated"
+
+type availabilityHint struct {
+	ProfessionalID *uuid.UUID `json:"professional_id"`
+	Date           *string    `json:"date"`
+}
+
+func availabilityChanged(ctx context.Context, q database.Querier, estID uuid.UUID, prof *uuid.UUID, day *string, at time.Time) error {
+	// Recurso = (loja, profissional, data): remarcação gera dois eventos distintos (dia antigo e novo).
+	key := "loja"
+	if prof != nil {
+		key = prof.String()
+	}
+	if day != nil {
+		key += "|" + *day
+	}
+	rid := uuid.NewSHA1(estID, []byte(key))
+	return outbox.Record(ctx, q, outbox.Event{EstablishmentID: estID, Type: evAvailability, ResourceType: "availability",
+		ResourceID: rid, ResourceVersion: at.UnixMicro(), OccurredAt: at, Audience: outbox.Audience{Kind: outbox.Public},
+		Data: availabilityHint{ProfessionalID: prof, Date: day}})
+}
+
+// freesOrTakesSlot: a transição ocupa ou libera um intervalo da cadeira.
+func freesOrTakesSlot(action, status string) bool {
+	switch action {
+	case "T-AP-01", "T-AP-02", "T-AP-03", "T-AP-09":
+		return true
+	case "T-AP-07":
+		return terminal(status)
+	}
+	return false
 }

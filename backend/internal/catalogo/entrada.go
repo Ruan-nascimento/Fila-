@@ -35,12 +35,22 @@ func (s Snapshot) Enabled(professionalID uuid.UUID) bool {
 // alteração de preço ou desativação simultânea espera a entrada terminar (ou vice-versa), então
 // o snapshot gravado é sempre uma versão real do catálogo. Serviços de outra loja não voltam.
 func ServicesForEntry(ctx context.Context, q database.Querier, estID uuid.UUID, ids []uuid.UUID) (map[uuid.UUID]Snapshot, error) {
+	return services(ctx, q, estID, ids, " FOR SHARE OF s")
+}
+
+// ServicesForRead é ServicesForEntry SEM trava, para leituras públicas (disponibilidade): muitos
+// leitores simultâneos não disputam trava compartilhada na mesma linha. Quem grava (confirmação)
+// relê com ServicesForEntry.
+func ServicesForRead(ctx context.Context, q database.Querier, estID uuid.UUID, ids []uuid.UUID) (map[uuid.UUID]Snapshot, error) {
+	return services(ctx, q, estID, ids, "")
+}
+
+func services(ctx context.Context, q database.Querier, estID uuid.UUID, ids []uuid.UUID, lock string) (map[uuid.UUID]Snapshot, error) {
 	rows, err := q.Query(ctx, `
 		SELECT s.id, s.name, s.price_cents, s.duration_minutes, s.points, s.status = 'active',
 		       coalesce((SELECT array_agg(sp.professional_id) FROM service_professional sp WHERE sp.service_id = s.id), '{}')
 		FROM service s WHERE s.establishment_id = $1 AND s.id = ANY($2)
-		ORDER BY s.id
-		FOR SHARE OF s`, estID, ids)
+		ORDER BY s.id`+lock, estID, ids)
 	if err != nil {
 		return nil, err
 	}

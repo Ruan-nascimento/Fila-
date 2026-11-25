@@ -109,7 +109,65 @@ func comanda(est, order uuid.UUID) string {
 	return "/gestao/" + est.String() + "/comandas/" + order.String()
 }
 
+var apptStates = map[string]string{
+	"scheduled":             " AND a.status NOT IN ('held', 'expired', 'cancelled')",
+	"completed":             " AND a.status = 'completed'",
+	"interrupted":           " AND a.status = 'interrupted'",
+	"no_show":               " AND a.status = 'no_show'",
+	"cancelled_by_customer": " AND a.status = 'cancelled' AND a.cancelled_by = 'customer'",
+	"cancelled_by_store":    " AND a.status = 'cancelled' AND a.cancelled_by = 'store'",
+	"cancelled":             " AND a.status = 'cancelled'",
+	"expired_unpaid":        " AND a.status = 'expired'",
+	"store_late":            " AND a.store_late_at IS NOT NULL",
+}
+
 var recordKinds = map[string]recordKind{
+	// Reservas pelo horário marcado (ADR-0039). Sem dado de contato: só horário, profissional,
+	// situação, valor e o pagamento da reserva.
+	"appointments": {
+		extra: []string{"state"},
+		ts:    "a.starts_at", idCol: "a.id", cents: "a.price_cents",
+		from: "appointment a JOIN professional pr ON pr.id = a.professional_id LEFT JOIN booking_payment b ON b.appointment_id = a.id",
+		cols: "a.id, a.starts_at, a.status, a.cancelled_by, a.origin, a.price_cents, pr.display_name, a.local_date, b.mode, b.amount_cents, b.status, b.outcome",
+		scan: func(rows pgx.Rows, est uuid.UUID) (any, time.Time, uuid.UUID, error) {
+			var x struct {
+				ID             uuid.UUID `json:"id"`
+				At             time.Time `json:"at"`
+				Status         string    `json:"status"`
+				CancelledBy    *string   `json:"cancelled_by"`
+				Origin         string    `json:"origin"`
+				PriceCents     int64     `json:"price_cents"`
+				Professional   string    `json:"professional"`
+				BookingMode    *string   `json:"booking_mode"`
+				BookingCents   *int64    `json:"booking_amount_cents"`
+				BookingStatus  *string   `json:"booking_status"`
+				BookingOutcome *string   `json:"booking_outcome"`
+				GestaoPath     string    `json:"gestao_path"`
+			}
+			var day time.Time
+			err := rows.Scan(&x.ID, &x.At, &x.Status, &x.CancelledBy, &x.Origin, &x.PriceCents, &x.Professional, &day,
+				&x.BookingMode, &x.BookingCents, &x.BookingStatus, &x.BookingOutcome)
+			x.GestaoPath = "/gestao/" + est.String() + "/agenda?data=" + day.Format(time.DateOnly)
+			return x, x.At, x.ID, err
+		},
+		where: func(v url.Values, sc *scope, next func(any) string) (string, error) {
+			w := ""
+			if st := v.Get("state"); st != "" {
+				cond, known := apptStates[st]
+				if !known {
+					return "", fieldErr("/state", hs.FieldNotAllowed, "situação desconhecida")
+				}
+				w += cond
+			}
+			if sc.q.Filters.ProfessionalID != nil {
+				w += " AND a.professional_id = " + next(*sc.q.Filters.ProfessionalID)
+			}
+			if sc.q.Filters.ServiceID != nil {
+				w += " AND EXISTS (SELECT 1 FROM appointment_item i WHERE i.appointment_id = a.id AND i.service_id = " + next(*sc.q.Filters.ServiceID) + ")"
+			}
+			return w, nil
+		},
+	},
 	"receipts": {
 		inapplicable: []string{"service_id"},
 		ts:           "r.registered_at", idCol: "r.id", cents: "r.amount_cents",
@@ -367,7 +425,7 @@ func init() {
 			for _, wb := range waitBands {
 				if wb.Key == b {
 					found = true
-					w += " AND p.called_at IS NOT NULL AND p.called_at >= p.created_at AND p.called_at - p.created_at >= make_interval(mins => " + next(wb.From) + ")"
+					w += " AND p.origin = 'queue' AND p.called_at IS NOT NULL AND p.called_at >= p.created_at AND p.called_at - p.created_at >= make_interval(mins => " + next(wb.From) + ")"
 					if wb.To > 0 {
 						w += " AND p.called_at - p.created_at < make_interval(mins => " + next(wb.To) + ")"
 					}
@@ -455,6 +513,9 @@ func (s *Service) records(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	start, end := sc.q.Period.Start, sc.q.Period.EffectiveEnd
+	if kind == "appointments" {
+		end = sc.q.Period.End // "previstos" inclui o resto do período (reservas futuras)
+	}
 	if kind == "financial_issues" && (v.Get("state") == "" || v.Get("state") == "open") {
 		start, end = sc.created, sc.now.Add(time.Second) // fotografia atual: todas as abertas
 	}

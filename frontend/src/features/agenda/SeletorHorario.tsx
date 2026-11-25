@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CalendarClock } from "lucide-react";
 import { api } from "../../api/client";
 import { call, problemMessage } from "../../api/problem";
@@ -6,6 +6,7 @@ import type { components } from "../../api/schema.gen";
 import { espera } from "../../tempo";
 import { Button, LoadError, Loading, Notice } from "../../ui/ui";
 import { cx } from "../../ui/cx";
+import { useStreamMessages } from "../../stream/context";
 import { horaNoFuso, rotuloDia, somarDias } from "./horario";
 
 export type Availability = components["schemas"]["Availability"];
@@ -13,8 +14,10 @@ export type Slot = components["schemas"]["AvailabilitySlot"];
 
 /**
  * Escolha de dia e horário (ADR-0038). Uma consulta por dia escolhido (nunca uma por horário); a
- * consulta anterior é descartada quando a pessoa troca de dia ou de itens. `items` no formato do
- * contrato: "<id>" ou "<id>:<quantidade>".
+ * consulta anterior é CANCELADA quando a pessoa troca de dia ou de itens, e resposta antiga é
+ * ignorada. Os dias com vaga vêm de UMA consulta agregada (getAvailabilityDays) para a janela
+ * inteira. Sem consulta repetida em intervalo: voltar à aba revalida só o dia visível.
+ * `items` no formato do contrato: "<id>" ou "<id>:<quantidade>".
  */
 export function SeletorHorario({
   estId,
@@ -43,9 +46,19 @@ export function SeletorHorario({
   const [attempt, setAttempt] = useState(0);
   const key = `${estId}|${professionalId}|${items.join(",")}|${date ?? ""}|${attempt}`;
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  // Voltou para a aba/aparelho desbloqueado: uma revalidação do dia visível (outra pessoa pode ter
+  // reservado). Nada de consulta periódica.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") setAttempt((n) => n + 1);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
   useEffect(() => {
     if (items.length === 0) return;
     let active = true;
+    const ctrl = new AbortController();
     const today = date ?? new Date().toISOString().slice(0, 10);
     void call(() =>
       api.GET("/v1/public/establishments/{establishmentId}/availability", {
@@ -53,6 +66,7 @@ export function SeletorHorario({
           path: { establishmentId: estId },
           query: { date: today, items, professional_id: [professionalId] },
         },
+        signal: ctrl.signal,
       }),
     ).then((out) => {
       if (!active) return; // resposta antiga (trocou de dia/itens): ignorada
@@ -68,9 +82,63 @@ export function SeletorHorario({
     });
     return () => {
       active = false;
+      ctrl.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- key resume as dependências
   }, [key]);
+  // Dias com vaga na janela inteira: uma consulta por seleção (profissional + itens + janela).
+  const [vagas, setVagas] = useState<{ key: string; days: Record<string, boolean> } | null>(null);
+  const [geracao, setGeracao] = useState(0);
+  const janela = data ? `${data.first_date}|${lastDateFor ? lastDateFor(data) : data.last_date}` : "";
+  const diasKey = `${estId}|${professionalId}|${items.join(",")}|${janela}|${geracao}`;
+  // Outra pessoa reservou/cancelou (evento público, só profissional e data): relê o dia visível e o
+  // agregado, uma vez por rajada de eventos.
+  const rajada = useRef<number | null>(null);
+  useStreamMessages((m) => {
+    if (m.type !== "availability.updated") return;
+    const h = (m.data ?? {}) as { professional_id?: string | null; date?: string | null };
+    if (h.professional_id && h.professional_id !== professionalId) return;
+    if (rajada.current) window.clearTimeout(rajada.current);
+    rajada.current = window.setTimeout(() => {
+      if (!h.date || h.date === date) setAttempt((n) => n + 1);
+      setGeracao((n) => n + 1);
+    }, 400);
+  });
+  useEffect(
+    () => () => {
+      if (rajada.current) window.clearTimeout(rajada.current);
+    },
+    [],
+  );
+  useEffect(() => {
+    if (!data || items.length === 0) return;
+    const [from, ate] = janela.split("|");
+    if (!from || !ate) return;
+    const to = ate < somarDias(from, 61) ? ate : somarDias(from, 61);
+    let active = true;
+    const ctrl = new AbortController();
+    void call(() =>
+      api.GET("/v1/public/establishments/{establishmentId}/availability/days", {
+        params: {
+          path: { establishmentId: estId },
+          query: { from, to, professional_id: professionalId, items },
+        },
+        signal: ctrl.signal,
+      }),
+    ).then((out) => {
+      if (!active || !out.ok) return; // sem o agregado, os dias aparecem sem marca (a consulta do dia decide)
+      setVagas({
+        key: diasKey,
+        days: Object.fromEntries(out.data.data.days.map((d) => [d.date, d.has_slots])),
+      });
+    });
+    return () => {
+      active = false;
+      ctrl.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- diasKey resume as dependências
+  }, [diasKey]);
+  const semVaga = (d: string) => vagas?.key === diasKey && vagas.days[d] === false;
 
   if (items.length === 0) return null;
   if (error && !data) return <LoadError message={error} onRetry={() => setAttempt((n) => n + 1)} />;
@@ -93,15 +161,19 @@ export function SeletorHorario({
             key={d}
             type="button"
             aria-pressed={d === date}
+            aria-label={semVaga(d) ? `${rotuloDia(d, data.first_date)}, sem vaga` : undefined}
             onClick={() => setDate(d)}
             className={cx(
-              "min-h-11 shrink-0 rounded-lg border px-3 text-sm font-semibold",
+              "grid min-h-11 shrink-0 place-items-center rounded-lg border px-3 text-sm font-semibold",
               d === date
                 ? "border-primary bg-select text-accent"
-                : "border-line bg-surface text-fg hover:bg-surface-2",
+                : semVaga(d)
+                  ? "border-line bg-surface-2 text-fg-muted line-through"
+                  : "border-line bg-surface text-fg hover:bg-surface-2",
             )}
           >
             {rotuloDia(d, data.first_date)}
+            {semVaga(d) && <span className="text-[0.7rem] font-normal no-underline">sem vaga</span>}
           </button>
         ))}
       </div>

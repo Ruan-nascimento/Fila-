@@ -3580,6 +3580,44 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         default: { $ref: '#/components/responses/Unexpected' }
+  /v1/desktop/analytics/establishments/{establishmentId}/appointments:
+    get:
+      operationId: getAnalyticsAppointments
+      tags: [analitico, agenda]
+      summary: Área Agendamentos (Fila 2.0) — desfechos, dinheiro da reserva, ocupação e série diária.
+      description: |
+        Exclusivo do programa desktop (ADR-0027). Contagens pela data do horário marcado ("previstos" inclui o
+        resto do período); remarcações pelo instante da remarcação; dinheiro pelo instante em que entrou, foi
+        aplicado ou confirmado; pendências são fotografia de agora. Taxa de falta = faltas ÷ (faltas +
+        comparecimentos) entre reservas com desfecho; denominador zero → status `empty`. Ocupação planejada =
+        reservado ÷ jornada líquida (versão de jornada vigente em cada data); utilização real = em atendimento
+        dentro da jornada ÷ jornada decorrida (fora dela = hora extra). Dicionário: docs/desktop/metricas.md.
+      security: [{ desktopToken: [], desktopProof: [] }]
+      x-authz: [{ actor: owner_desktop, scope: establishment }]
+      parameters:
+        - { $ref: '#/components/parameters/DPoPProof' }
+        - { $ref: '#/components/parameters/EstablishmentId' }
+        - { $ref: '#/components/parameters/AnalyticsFrom' }
+        - { $ref: '#/components/parameters/AnalyticsTo' }
+        - { $ref: '#/components/parameters/AnalyticsCompare' }
+        - { $ref: '#/components/parameters/AnalyticsProfessional' }
+        - { $ref: '#/components/parameters/AnalyticsService' }
+        - { $ref: '#/components/parameters/AnalyticsMethod' }
+      responses:
+        '200':
+          description: Indicadores de agendamento com meta.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data: { $ref: '#/components/schemas/AnalyticsAppointments' }
+                  meta: { $ref: '#/components/schemas/AnalyticsMeta' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
   /v1/desktop/analytics/establishments/{establishmentId}/series/{metric}:
     get:
       operationId: getAnalyticsSeries
@@ -3680,12 +3718,12 @@ paths:
         - name: kind
           in: path
           required: true
-          schema: { type: string, enum: [receipts, refunds, orders, participations, service_items, financial_issues, loyalty_entries] }
+          schema: { type: string, enum: [receipts, refunds, orders, participations, service_items, financial_issues, loyalty_entries, appointments] }
         - { name: bucket_start, in: query, required: false, schema: { $ref: '#/components/schemas/Timestamp' } }
         - { name: bucket_end, in: query, required: false, schema: { $ref: '#/components/schemas/Timestamp' } }
         - { name: cursor, in: query, required: false, schema: { type: string, maxLength: 300 } }
         - { name: ref, in: query, required: false, description: 'participations: entered|called|finished; service_items: performed|added', schema: { type: string } }
-        - { name: state, in: query, required: false, description: 'financial_issues: open (agora) | opened | resolved (no período)', schema: { type: string, enum: [open, opened, resolved] } }
+        - { name: state, in: query, required: false, description: 'financial_issues: open (agora) | opened | resolved (no período). appointments: scheduled | completed | interrupted | no_show | cancelled | cancelled_by_customer | cancelled_by_store | expired_unpaid | store_late (pelo horário marcado)', schema: { type: string, enum: [open, opened, resolved, scheduled, completed, interrupted, no_show, cancelled, cancelled_by_customer, cancelled_by_store, expired_unpaid, store_late] } }
         - { name: kind, in: query, required: false, description: 'financial_issues: tipo; loyalty_entries: credited|used|returned|adjusted', schema: { type: string } }
         - { name: status, in: query, required: false, schema: { type: string } }
         - { name: dow, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 7 } }
@@ -4660,6 +4698,59 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/public/establishments/{establishmentId}/availability/days:
+    get:
+      operationId: getAvailabilityDays
+      tags: [publico, agenda]
+      summary: Quais dias de um intervalo (até 62) têm ao menos um horário para a seleção (calendário mensal).
+      description: |
+        Consulta agregada e limitada: jornada, exceções e ocupações do intervalo lidas de uma vez; cada dia é
+        calculado com a mesma regra da consulta do dia e da confirmação. Os horários detalhados vêm de
+        `getAvailability` só para o dia escolhido. Dias fora da janela de reservas não aparecem.
+      security: []
+      x-authz: [{ actor: public, scope: none }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, description: Até 62 dias depois de from., schema: { type: string, format: date } }
+        - { name: professional_id, in: query, required: true, schema: { $ref: '#/components/schemas/Id' } }
+        - name: items
+          in: query
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: array
+            minItems: 1
+            maxItems: 20
+            items: { type: string, pattern: '^[0-9a-fA-F-]{36}(:[0-9]{1,2})?$' }
+      responses:
+        '200':
+          description: Dias com e sem vaga.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [timezone, professional_id, days]
+                    properties:
+                      timezone: { type: string }
+                      professional_id: { $ref: '#/components/schemas/Id' }
+                      days:
+                        type: array
+                        items:
+                          type: object
+                          required: [date, has_slots]
+                          properties:
+                            date: { type: string, format: date }
+                            has_slots: { type: boolean }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
         default: { $ref: '#/components/responses/Unexpected' }
   /v1/public/establishments/{establishmentId}/availability:
     get:
@@ -5770,6 +5861,7 @@ components:
         - stream.snapshot
         - stream.session_ended
         - queue.public.updated
+        - availability.updated
         - queue.updated
         - participation.updated
         - order.updated
@@ -7560,6 +7652,85 @@ components:
             median_seconds: { $ref: '#/components/schemas/AnalyticsValue' }
             p90_seconds: { $ref: '#/components/schemas/AnalyticsValue' }
             ignored_filters: { type: array, items: { type: string } }
+    AnalyticsAppointments:
+      type: object
+      required: [current, compare, daily, pending_now]
+      properties:
+        current: { $ref: '#/components/schemas/AnalyticsAppointmentsPart' }
+        compare: { oneOf: [{ $ref: '#/components/schemas/AnalyticsAppointmentsPart' }, { type: 'null' }] }
+        daily:
+          type: array
+          items:
+            type: object
+            required: [date, start, scheduled, completed, no_show, cancelled]
+            properties:
+              date: { type: string, format: date }
+              start: { $ref: '#/components/schemas/Timestamp' }
+              scheduled: { type: integer }
+              completed: { type: integer }
+              no_show: { type: integer }
+              cancelled: { type: integer }
+        pending_now:
+          type: object
+          required: [snapshot_at, refunds_pending, refunds_pending_cents, open_balance_cents, open_balance_orders, awaiting_payment]
+          properties:
+            snapshot_at: { $ref: '#/components/schemas/Timestamp' }
+            refunds_pending: { type: integer }
+            refunds_pending_cents: { type: integer }
+            open_balance_cents: { type: integer, description: 'Devido (total − sinal) das comandas de reserva aguardando pagamento.' }
+            open_balance_orders: { type: integer }
+            awaiting_payment: { type: integer, description: Reservas retidas aguardando o Pix agora. }
+    AnalyticsAppointmentsPart:
+      type: object
+      required: [counts, money, modality, occupancy]
+      properties:
+        counts:
+          type: object
+          required: [scheduled, completed, interrupted, no_show, cancelled_by_customer, cancelled_by_store, expired_unpaid, store_late,
+                     reschedules, no_show_rate, start_delay_median_seconds, start_delay_p90_seconds]
+          properties:
+            scheduled: { $ref: '#/components/schemas/AnalyticsValue' }
+            completed: { $ref: '#/components/schemas/AnalyticsValue' }
+            interrupted: { $ref: '#/components/schemas/AnalyticsValue' }
+            no_show: { $ref: '#/components/schemas/AnalyticsValue' }
+            cancelled_by_customer: { $ref: '#/components/schemas/AnalyticsValue' }
+            cancelled_by_store: { $ref: '#/components/schemas/AnalyticsValue' }
+            expired_unpaid: { $ref: '#/components/schemas/AnalyticsValue' }
+            store_late: { $ref: '#/components/schemas/AnalyticsValue' }
+            reschedules: { $ref: '#/components/schemas/AnalyticsValue' }
+            no_show_rate: { $ref: '#/components/schemas/AnalyticsValue' }
+            start_delay_median_seconds: { $ref: '#/components/schemas/AnalyticsValue' }
+            start_delay_p90_seconds: { $ref: '#/components/schemas/AnalyticsValue' }
+        money:
+          type: object
+          required: [deposits_received_cents, fees_received_cents, late_payments_cents, credits_applied_cents, refunds_confirmed_cents]
+          properties:
+            deposits_received_cents: { $ref: '#/components/schemas/AnalyticsValue' }
+            fees_received_cents: { $ref: '#/components/schemas/AnalyticsValue' }
+            late_payments_cents: { $ref: '#/components/schemas/AnalyticsValue' }
+            credits_applied_cents: { $ref: '#/components/schemas/AnalyticsValue' }
+            refunds_confirmed_cents: { $ref: '#/components/schemas/AnalyticsValue' }
+        modality:
+          type: array
+          items:
+            type: object
+            required: [origin, completed, no_show]
+            properties:
+              origin: { type: string, enum: [queue, appointment] }
+              completed: { type: integer }
+              no_show: { type: integer }
+        occupancy:
+          type: object
+          required: [available_seconds, committed_seconds, planned, in_service_seconds, real, overtime_seconds, days_with_schedule, days]
+          properties:
+            available_seconds: { $ref: '#/components/schemas/AnalyticsValue' }
+            committed_seconds: { $ref: '#/components/schemas/AnalyticsValue' }
+            planned: { $ref: '#/components/schemas/AnalyticsValue' }
+            in_service_seconds: { $ref: '#/components/schemas/AnalyticsValue' }
+            real: { $ref: '#/components/schemas/AnalyticsValue' }
+            overtime_seconds: { $ref: '#/components/schemas/AnalyticsValue' }
+            days_with_schedule: { type: integer }
+            days: { type: integer }
     AnalyticsSummary:
       type: object
       required: [current, compare, pending_now]

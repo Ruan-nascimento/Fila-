@@ -4,7 +4,14 @@ import { formatar, textoValor, type Unidade } from "../formato";
 import { CORES, escala } from "./escala";
 import { useLargura } from "./useLargura";
 
-export type Bucket = { start: string; end: string; label: string; collected: boolean; partial: boolean; values: Record<string, Valor> };
+export type Bucket = {
+  start: string;
+  end: string;
+  label: string;
+  collected: boolean;
+  partial: boolean;
+  values: Record<string, Valor>;
+};
 export type DefSerie = { key: string; label: string; unit: Unidade };
 
 /**
@@ -36,21 +43,32 @@ export function SerieTemporal({
   const w = largura - m.l - m.r;
   const h = altura - m.t - m.b;
   let max = 0;
-  for (const b of buckets) for (const s of visiveis) {
-    const v = b.values[s.key];
-    if (v?.status === "ok" && (v.value ?? 0) > max) max = v.value ?? 0;
-  }
-  const { topo, marcas } = escala(max, unidade === "count" || unidade === "points");
+  for (const b of buckets)
+    for (const s of visiveis) {
+      const v = b.values[s.key];
+      if (v?.status === "ok" && (v.value ?? 0) > max) max = v.value ?? 0;
+    }
+  const { topo, marcas } = escala(
+    max,
+    unidade === "count" || unidade === "points",
+  );
   const passo = buckets.length ? w / buckets.length : w;
   const x = (i: number) => m.l + passo * i + passo / 2;
   const y = (v: number) => m.t + h - (v / topo) * h;
-  const cada = Math.max(1, Math.ceil(buckets.length / Math.max(2, Math.floor(w / 64))));
+  const cada = Math.max(
+    1,
+    Math.ceil(buckets.length / Math.max(2, Math.floor(w / 64))),
+  );
   const b = ativo !== null ? buckets[ativo] : undefined;
 
   return (
     <div className="grid gap-2">
       {series.length > 1 && (
-        <div role="group" aria-label="Séries do gráfico" className="flex flex-wrap gap-2">
+        <div
+          role="group"
+          aria-label="Séries do gráfico"
+          className="flex flex-wrap gap-2"
+        >
           {series.map((s, i) => {
             const on = !ocultas.has(s.key);
             return (
@@ -68,7 +86,11 @@ export function SerieTemporal({
                 }
                 className={`inline-flex min-h-9 items-center gap-2 rounded-full border px-3 text-sm ${on ? "border-line-strong/40 text-fg" : "border-line text-fg-muted line-through"}`}
               >
-                <span aria-hidden="true" className="inline-block size-2.5 rounded-full" style={{ background: CORES[i] }} />
+                <span
+                  aria-hidden="true"
+                  className="inline-block size-2.5 rounded-full"
+                  style={{ background: CORES[i] }}
+                />
                 {s.label}
               </button>
             );
@@ -76,18 +98,43 @@ export function SerieTemporal({
         </div>
       )}
       <div ref={ref} className="relative">
-        <svg width={largura} height={altura} role="img" aria-label={rotulo} className="block max-w-full overflow-visible">
+        <svg
+          width={largura}
+          height={altura}
+          role="img"
+          aria-label={rotulo}
+          className="block max-w-full overflow-visible"
+        >
           {marcas.map((v) => (
             <g key={v}>
-              <line x1={m.l} x2={m.l + w} y1={y(v)} y2={y(v)} stroke="var(--line)" />
-              <text x={m.l - 8} y={y(v)} dy="0.32em" textAnchor="end" className="fill-fg-muted text-[11px] tabular-nums">
+              <line
+                x1={m.l}
+                x2={m.l + w}
+                y1={y(v)}
+                y2={y(v)}
+                stroke="var(--line)"
+              />
+              <text
+                x={m.l - 8}
+                y={y(v)}
+                dy="0.32em"
+                textAnchor="end"
+                className="fill-fg-muted text-[11px] tabular-nums"
+              >
                 {formatar(v, unidade)}
               </text>
             </g>
           ))}
           {buckets.map((bk, i) =>
             !bk.collected ? (
-              <rect key={`nc${i}`} x={m.l + passo * i} y={m.t} width={passo} height={h} fill="var(--surface-2)" />
+              <rect
+                key={`nc${i}`}
+                x={m.l + passo * i}
+                y={m.t}
+                width={passo}
+                height={h}
+                fill="var(--surface-2)"
+              />
             ) : null,
           )}
           {forma === "coluna"
@@ -102,7 +149,12 @@ export function SerieTemporal({
                   return (
                     <path
                       key={`${i}-${s.key}`}
-                      d={barra(m.l + passo * i + 1 + j * (bw + 2), top, bw, m.t + h - top)}
+                      d={barra(
+                        m.l + passo * i + 1 + j * (bw + 2),
+                        top,
+                        bw,
+                        m.t + h - top,
+                      )}
                       fill={cor}
                     />
                   );
@@ -112,7 +164,9 @@ export function SerieTemporal({
                 const cor = CORES[series.indexOf(s)];
                 const pts = buckets.map((bk, i) => {
                   const v = bk.values[s.key];
-                  return v?.status === "ok" ? `${x(i)},${y(v.value ?? 0)}` : null;
+                  return v?.status === "ok"
+                    ? `${x(i)},${y(v.value ?? 0)}`
+                    : null;
                 });
                 // Lacunas (sem coleta, sem amostra) quebram a linha: nada de zero inventado.
                 const trechos: string[][] = [[]];
@@ -122,12 +176,29 @@ export function SerieTemporal({
                 }
                 return (
                   <g key={s.key}>
-                    {trechos.filter((t) => t.length > 1).map((t, k) => (
-                      <polyline key={k} points={t.join(" ")} fill="none" stroke={cor} strokeWidth={2} strokeLinejoin="round" />
-                    ))}
+                    {trechos
+                      .filter((t) => t.length > 1)
+                      .map((t, k) => (
+                        <polyline
+                          key={k}
+                          points={t.join(" ")}
+                          fill="none"
+                          stroke={cor}
+                          strokeWidth={2}
+                          strokeLinejoin="round"
+                        />
+                      ))}
                     {pts.map((p, i) =>
                       p && (buckets.length <= 40 || ativo === i) ? (
-                        <circle key={i} cx={x(i)} cy={Number(p.split(",")[1])} r={4} fill={cor} stroke="var(--surface)" strokeWidth={2} />
+                        <circle
+                          key={i}
+                          cx={x(i)}
+                          cy={Number(p.split(",")[1])}
+                          r={4}
+                          fill={cor}
+                          stroke="var(--surface)"
+                          strokeWidth={2}
+                        />
                       ) : null,
                     )}
                   </g>
@@ -135,12 +206,27 @@ export function SerieTemporal({
               })}
           {buckets.map((bk, i) =>
             i % cada === 0 ? (
-              <text key={`l${i}`} x={x(i)} y={altura - 8} textAnchor="middle" className="fill-fg-muted text-[11px]">
+              <text
+                key={`l${i}`}
+                x={x(i)}
+                y={altura - 8}
+                textAnchor="middle"
+                className="fill-fg-muted text-[11px]"
+              >
                 {bk.label}
               </text>
             ) : null,
           )}
-          {ativo !== null && <line x1={x(ativo)} x2={x(ativo)} y1={m.t} y2={m.t + h} stroke="var(--line-strong)" strokeDasharray="3 3" />}
+          {ativo !== null && (
+            <line
+              x1={x(ativo)}
+              x2={x(ativo)}
+              y1={m.t}
+              y2={m.t + h}
+              stroke="var(--line-strong)"
+              strokeDasharray="3 3"
+            />
+          )}
           {buckets.map((bk, i) => (
             <rect
               key={`alvo${i}`}
@@ -169,29 +255,56 @@ export function SerieTemporal({
         </svg>
         {buckets.some((bk) => !bk.collected) && (
           <p className="m-0 flex items-center gap-2 text-xs text-fg-muted">
-            <span aria-hidden="true" className="inline-block size-3 rounded-sm bg-surface-2" /> Área cinza: antes do início da coleta
-            desta loja (sem dados, não é zero).
+            <span
+              aria-hidden="true"
+              className="inline-block size-3 rounded-sm bg-surface-2"
+            />{" "}
+            Área cinza: antes do início da coleta desta loja (sem dados, não é
+            zero).
           </p>
         )}
         {b && ativo !== null && (
           <div
             role="tooltip"
             className="pointer-events-none absolute top-0 z-10 grid min-w-44 gap-1 rounded-lg border border-line bg-surface px-3 py-2 text-sm shadow-lg"
-            style={{ left: Math.min(Math.max(0, x(ativo) + 12), Math.max(0, largura - 200)) }}
+            style={{
+              left: Math.min(
+                Math.max(0, x(ativo) + 12),
+                Math.max(0, largura - 200),
+              ),
+            }}
           >
-            <strong className="font-semibold">{b.label}{b.partial ? " (parcial)" : ""}</strong>
-            {!b.collected && <span className="text-fg-muted">Antes do início da coleta</span>}
+            <strong className="font-semibold">
+              {b.label}
+              {b.partial ? " (parcial)" : ""}
+            </strong>
+            {!b.collected && (
+              <span className="text-fg-muted">Antes do início da coleta</span>
+            )}
             {visiveis.map((s, i) => {
               const v = b.values[s.key];
               return (
-                <span key={s.key} className="flex items-center justify-between gap-3">
+                <span
+                  key={s.key}
+                  className="flex items-center justify-between gap-3"
+                >
                   <span className="flex items-center gap-1.5">
-                    <span aria-hidden="true" className="inline-block size-2 rounded-full" style={{ background: CORES[series.indexOf(s)] ?? CORES[i] }} />
+                    <span
+                      aria-hidden="true"
+                      className="inline-block size-2 rounded-full"
+                      style={{
+                        background: CORES[series.indexOf(s)] ?? CORES[i],
+                      }}
+                    />
                     {s.label}
                   </span>
                   <span className="tabular-nums">
                     {textoValor(v, s.unit)}
-                    {v?.sample !== undefined && v.status === "ok" && s.unit === "seconds" ? ` · n=${v.sample}` : ""}
+                    {v?.sample !== undefined &&
+                    v.status === "ok" &&
+                    s.unit === "seconds"
+                      ? ` · n=${v.sample}`
+                      : ""}
                   </span>
                 </span>
               );

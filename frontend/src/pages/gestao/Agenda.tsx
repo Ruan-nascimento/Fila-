@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { CalendarDays, CalendarPlus, Clock, Columns3, List, Scissors, UserCheck } from "lucide-react";
 import { api } from "../../api/client";
 import { call, problemMessage } from "../../api/problem";
@@ -47,10 +47,13 @@ export function Agenda({ ctx, initialTab = "hoje" }: { ctx: StaffContext; initia
   const [view, setView] = useState<AgendaView | null>(null);
   const [queues, setQueues] = useState<StaffQueue[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [date, setDate] = useState<string | null>(null);
+  // ?data=AAAA-MM-DD (vindo do Dashboard do computador ou de um aviso) abre "Por dia" nesse dia.
+  const [params] = useSearchParams();
+  const dataPedida = /^\d{4}-\d{2}-\d{2}$/.test(params.get("data") ?? "") ? params.get("data") : null;
+  const [date, setDate] = useState<string | null>(dataPedida);
   const [prof, setProf] = useState<string>(ctx.isOwner ? "" : (ctx.professionalId ?? ""));
   const [layout, setLayout] = useState<"colunas" | "lista">("colunas");
-  const [aba, setAba] = useState<"hoje" | "dia">(initialTab);
+  const [aba, setAba] = useState<"hoje" | "dia">(dataPedida ? "dia" : initialTab);
   const [attempt, setAttempt] = useState(0);
   const reload = useCallback(() => setAttempt((n) => n + 1), []);
   useEffect(() => {

@@ -5,20 +5,34 @@ export type ErroNativo = { status: number; code: string; detail: string };
 
 type Tauri = {
   core: { invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> };
-  event: { listen<T>(evt: string, cb: (e: { payload: T }) => void): Promise<() => void> };
+  event: {
+    listen<T>(
+      evt: string,
+      cb: (e: { payload: T }) => void,
+    ): Promise<() => void>;
+  };
 };
 
 function tauri(): Tauri | null {
-  return ((globalThis as { __TAURI__?: Tauri }).__TAURI__ ?? null) as Tauri | null;
+  return ((globalThis as { __TAURI__?: Tauri }).__TAURI__ ??
+    null) as Tauri | null;
 }
 
 export function noPrograma(): boolean {
   return tauri() !== null;
 }
 
-export async function invocar<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+export async function invocar<T>(
+  cmd: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
   const t = tauri();
-  if (!t) throw { status: 0, code: "sem_programa", detail: "Abra o Dashboard pelo programa Fila Gestão." } as ErroNativo;
+  if (!t)
+    throw {
+      status: 0,
+      code: "sem_programa",
+      detail: "Abra o Dashboard pelo programa Fila Gestão.",
+    } as ErroNativo;
   try {
     return await t.core.invoke<T>(cmd, args);
   } catch (e) {
@@ -32,10 +46,12 @@ export function ouvir<T>(evt: string, cb: (payload: T) => void): () => void {
   if (!t) return () => {};
   let solto = false;
   let soltar: (() => void) | null = null;
-  void t.event.listen<T>(evt, (e) => cb(e.payload)).then((u) => {
-    if (solto) u();
-    else soltar = u;
-  });
+  void t.event
+    .listen<T>(evt, (e) => cb(e.payload))
+    .then((u) => {
+      if (solto) u();
+      else soltar = u;
+    });
   return () => {
     solto = true;
     soltar?.();
@@ -69,29 +85,82 @@ export type Filtros = {
 
 export type Consulta =
   | { tipo: "resumo"; loja: string; filtros: Filtros }
-  | { tipo: "serie"; loja: string; metrica: Metrica; granularidade?: Gran | null; filtros: Filtros }
+  | {
+      tipo: "serie";
+      loja: string;
+      metrica: Metrica;
+      granularidade?: Gran | null;
+      filtros: Filtros;
+    }
   | { tipo: "detalhamento"; loja: string; dimensao: Dimensao; filtros: Filtros }
-  | { tipo: "registros"; loja: string; registro: Registro; filtros: Filtros; recorte: Recorte };
+  | {
+      tipo: "registros";
+      loja: string;
+      registro: Registro;
+      filtros: Filtros;
+      recorte: Recorte;
+    }
+  | { tipo: "agendamentos"; loja: string; filtros: Filtros };
 
-export type Metrica = "cash" | "ticket" | "movement" | "wait" | "duration" | "loyalty";
+export type Metrica =
+  "cash" | "ticket" | "movement" | "wait" | "duration" | "loyalty";
 export type Gran = "hour" | "day" | "week" | "month";
 export type Dimensao =
-  | "payment_methods" | "outcomes" | "professionals" | "services" | "products" | "peak_hours"
-  | "wait_bands" | "pending" | "rewards" | "recurrence";
+  | "payment_methods"
+  | "outcomes"
+  | "professionals"
+  | "services"
+  | "products"
+  | "peak_hours"
+  | "wait_bands"
+  | "pending"
+  | "rewards"
+  | "recurrence";
 export type Registro =
-  | "receipts" | "refunds" | "orders" | "participations" | "service_items" | "financial_issues" | "loyalty_entries";
+  | "receipts"
+  | "refunds"
+  | "orders"
+  | "participations"
+  | "service_items"
+  | "financial_issues"
+  | "loyalty_entries"
+  | "appointments";
 export type Recorte = Partial<{
-  bucket_start: string; bucket_end: string; cursor: string; ref: string; state: string;
-  kind: string; status: string; dow: number; hour: number; band: string;
+  bucket_start: string;
+  bucket_end: string;
+  cursor: string;
+  ref: string;
+  state: string;
+  kind: string;
+  status: string;
+  dow: number;
+  hour: number;
+  band: string;
 }>;
 
-export type Valor = { value: number | null; status: "ok" | "empty" | "not_collected" | "not_applicable"; sample?: number };
+export type Valor = {
+  value: number | null;
+  status: "ok" | "empty" | "not_collected" | "not_applicable";
+  sample?: number;
+};
 export type Meta = {
   establishment_id: string;
   establishment_name: string;
   timezone: string;
-  period: { from: string; to: string; start: string; end: string; effective_end: string };
-  compare_period: { from: string; to: string; start: string; end: string; effective_end: string } | null;
+  period: {
+    from: string;
+    to: string;
+    start: string;
+    end: string;
+    effective_end: string;
+  };
+  compare_period: {
+    from: string;
+    to: string;
+    start: string;
+    end: string;
+    effective_end: string;
+  } | null;
   granularity?: Gran;
   generated_at: string;
   snapshot_at?: string;
@@ -100,25 +169,42 @@ export type Meta = {
 };
 export type Resposta<T> = { data: T; meta: Meta };
 
-export type Destino = { tela: "filas" } | { tela: "pendencias" } | { tela: "comanda"; id: string };
+export type Destino =
+  | { tela: "filas" }
+  | { tela: "pendencias" }
+  | { tela: "comanda"; id: string }
+  | { tela: "agenda"; data: string | null };
 
 export const nativo = {
   estado: () => invocar<EstadoDashboard>("estado_dashboard"),
-  ativar: (codigo: string) => invocar<Instalacao>("ativar_instalacao", { codigo }),
+  ativar: (codigo: string) =>
+    invocar<Instalacao>("ativar_instalacao", { codigo }),
   vincular: () => invocar<Contexto>("vincular_sessao"),
   contexto: () => invocar<Contexto>("contexto_dashboard"),
-  consultar: <T>(consulta: Consulta) => invocar<Resposta<T>>("consultar", { consulta }),
+  consultar: <T>(consulta: Consulta) =>
+    invocar<Resposta<T>>("consultar", { consulta }),
   iniciarFluxo: (loja: string) => invocar<void>("iniciar_fluxo", { loja }),
   pararFluxo: () => invocar<void>("parar_fluxo"),
-  abrirGestao: (loja: string, destino: Destino) => invocar<void>("abrir_gestao", { loja, destino }),
+  abrirGestao: (loja: string, destino: Destino) =>
+    invocar<void>("abrir_gestao", { loja, destino }),
   sair: () => invocar<void>("sair_dashboard"),
   esquecer: () => invocar<void>("esquecer_instalacao"),
 };
 
 /** O caminho de gestão devolvido pela API vira um destino tipado (ou nada, se não houver tela). */
-export function destinoDe(path: string | undefined, loja: string): Destino | null {
+export function destinoDe(
+  path: string | undefined,
+  loja: string,
+): Destino | null {
   if (!path) return null;
-  const m = path.match(/^\/gestao\/([0-9a-f-]{36})\/(comandas\/([0-9a-f-]{36})|pendencias|filas)$/);
+  const ag = path.match(
+    /^\/gestao\/([0-9a-f-]{36})\/agenda(?:\?data=(\d{4}-\d{2}-\d{2}))?$/,
+  );
+  if (ag)
+    return ag[1] === loja ? { tela: "agenda", data: ag[2] ?? null } : null;
+  const m = path.match(
+    /^\/gestao\/([0-9a-f-]{36})\/(comandas\/([0-9a-f-]{36})|pendencias|filas)$/,
+  );
   if (!m || m[1] !== loja) return null;
   if (m[3]) return { tela: "comanda", id: m[3] };
   return m[2] === "pendencias" ? { tela: "pendencias" } : { tela: "filas" };

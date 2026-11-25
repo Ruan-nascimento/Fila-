@@ -10,6 +10,7 @@ type StaffQueue = components["schemas"]["StaffQueue"];
 type StaffEntry = StaffQueue["entries"][number];
 type LoyaltySummary = components["schemas"]["LoyaltySummary"];
 type Snapshot = components["schemas"]["StreamSnapshot"];
+type Appointment = components["schemas"]["Appointment"];
 
 /**
  * Uma notificação para a pessoa. `id` é a chave LÓGICA do acontecimento (ex.: "chamada de tal
@@ -27,7 +28,9 @@ export type Notificacao = {
   group?: string;
   /** Para onde levar ao tocar: a fila do barbeiro (equipe) ou uma aba da loja (cliente). */
   queueId?: string;
-  aba?: "pontos";
+  aba?: "pontos" | "reservas";
+  /** Equipe: abrir a Agenda neste dia (AAAA-MM-DD). */
+  agendaData?: string;
 };
 
 const time = new Intl.DateTimeFormat("pt-BR", { timeStyle: "short" });
@@ -87,9 +90,33 @@ export class RegrasCliente {
         return m.audience === "visit" ? this.pedido(m.data as ChangeRequest) : [];
       case "loyalty.updated":
         return this.fidelidade(m.data as LoyaltySummary);
+      case "appointment.updated":
+        return m.audience === "visit" ? this.reserva(m.data as Appointment, m.resource.version) : [];
       default:
         return [];
     }
+  }
+
+  /** Horário marcado: a barbearia chamou ou cancelou (o que o próprio cliente faz não notifica). */
+  private reserva(a: Appointment, versao: number): Notificacao[] {
+    if (!this.mem.nova(`a:${a.id}`, versao)) return [];
+    const out: Notificacao[] = [];
+    if (a.status === "called")
+      out.push({
+        id: `reserva-chamada:${a.id}:${a.called_at ?? ""}`,
+        important: true,
+        aba: "reservas",
+        title: "Chegou a sua vez",
+        body: `${a.professional.display_name} está chamando você para o horário das ${a.local_time}.`,
+      });
+    if (a.status === "cancelled" && a.cancelled_by === "store")
+      out.push({
+        id: `reserva-cancelada:${a.id}`,
+        aba: "reservas",
+        title: "A barbearia cancelou sua reserva",
+        body: `Horário das ${a.local_time}. Se houve pagamento, a devolução é feita pelo Pix.`,
+      });
+    return out.filter((n) => this.mem.primeira(n.id));
   }
 
   /** Base sem notificar: o estado que a pessoa já está vendo na tela. */
@@ -299,9 +326,58 @@ export class RegrasEquipe {
         return this.fila(m.data as StaffQueue, m.resource.version);
       case "participation.updated":
         return m.audience === "visit" ? [] : this.participacao(m.data as Participation);
+      case "appointment.updated":
+        return m.audience === "visit" ? [] : this.reserva(m.data as Appointment, m.resource.version);
       default:
         return [];
     }
+  }
+
+  private reservas = new Map<string, { status: Appointment["status"]; sinal: string | null }>();
+
+  /** Reservas: o que o CLIENTE fez — reservou online, pagou, cancelou, avisou que chegou. */
+  private reserva(a: Appointment, versao: number): Notificacao[] {
+    if (!this.mem.nova(`a:${a.id}`, versao)) return [];
+    const antes = this.reservas.get(a.id);
+    this.reservas.set(a.id, { status: a.status, sinal: a.arrival_signal_at ?? null });
+    const quem = a.nick ?? "Cliente";
+    const quando = `${a.local_date.slice(8, 10)}/${a.local_date.slice(5, 7)} às ${a.local_time}`;
+    const out: Notificacao[] = [];
+    const base = { agendaData: a.local_date };
+    if (versao === 1 && a.origin === "online" && (a.status === "confirmed" || a.status === "held"))
+      out.push({
+        ...base,
+        id: `reservou:${a.id}`,
+        title: "Nova reserva",
+        body: `${quem} marcou ${quando} com ${a.professional.display_name}.`,
+      });
+    if (
+      a.status === "confirmed" &&
+      a.payment.booking?.status === "paid" &&
+      (!antes || antes.status === "held")
+    )
+      out.push({
+        ...base,
+        id: `pagou:${a.id}`,
+        title: "Reserva paga",
+        body: `${quem} pagou pelo Pix o horário de ${quando}.`,
+      });
+    if (a.status === "cancelled" && a.cancelled_by === "customer" && antes?.status !== "cancelled")
+      out.push({
+        ...base,
+        id: `cancelou:${a.id}`,
+        title: "Reserva cancelada pelo cliente",
+        body: `${quem} cancelou ${quando}. O horário ficou livre.`,
+      });
+    if (a.arrival_signal_at && !a.arrived_at && (!antes || !antes.sinal))
+      out.push({
+        ...base,
+        id: `chegou:${a.id}:${a.arrival_signal_at}`,
+        important: true,
+        title: `${quem} avisou que chegou`,
+        body: `Horário das ${a.local_time} com ${a.professional.display_name}. Confirme a chegada na Agenda.`,
+      });
+    return out.filter((n) => this.mem.primeira(n.id));
   }
 
   private snapshot(d: Snapshot) {

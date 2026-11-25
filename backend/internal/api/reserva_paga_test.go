@@ -537,3 +537,103 @@ func TestReservaAvisosERecuperacaoPorEmail(t *testing.T) {
 		t.Fatal("avisos vencidos ficaram pendentes")
 	}
 }
+
+// C-BK-09 — Agendamentos no Dashboard do computador: contagens pelo horário marcado, taxa de falta
+// com denominador explicado, sinais, créditos e devoluções em centavos, ocupação planejada pela
+// jornada vigente e detalhamento que reconcilia com o número.
+func TestPainelAgendamentos(t *testing.T) {
+	e := newEnv(t)
+	s := e.paidShop(t, "deposit", 1500, 12, "refund")
+	c := e.verifiedCustomer("c@exemplo.com")
+	d := e.verifiedCustomer("d@exemplo.com")
+	x := e.verifiedCustomer("x@exemplo.com")
+	f := e.verifiedCustomer("f@exemplo.com")
+	pay := func(b *browser, at string) map[string]any {
+		t.Helper()
+		a := b.mustStatus(b.book(s.id, s.beto, e.at(at), s.corte25), 201).data()
+		ch := b.mustStatus(b.bookingPix(s.id, a, newIdemKey()), 201).data()
+		e.payBooking(ch["id"])
+		return a
+	}
+	ac := pay(c, "10:00")
+	ad := pay(d, "12:00")
+	ax := pay(x, "14:00")
+	f.mustStatus(f.book(s.id, s.beto, e.at("15:00"), s.corte25), 201) // nunca paga
+	balcao := s.owner.mustStatus(s.owner.cmd("POST", estPath(s.id, "/appointments"), map[string]any{"professional_id": s.caio.String(),
+		"starts_at": e.at("16:00").UTC().Format(time.RFC3339), "items": []map[string]any{{"service_id": s.corte25}},
+		"counter_customer": map[string]any{"nick": "Seu Zé"}}), 201).data()
+	s.owner.mustStatus(s.owner.apptCmd(s.id, balcao, "reschedule", map[string]any{"starts_at": e.at("16:30").UTC().Format(time.RFC3339),
+		"reason": "cliente pediu"}), 200)
+	e.advanceTo("09:30")
+	e.agendaTick() // a reserva das 15h vence sem pagamento
+	x.mustStatus(x.apptCmd(s.id, x.appt(s.id, ax["id"]), "cancel", nil), 200)
+	e.advanceTo("09:55")
+	o := s.serveAppointment(t, ac, "complete", func(string) string { return "performed" }, nil)
+	o = s.betoB.mustStatus(s.betoB.receive(s.id, o, map[string]any{"method": "cash", "amount_cents": 2500, "cash_tendered_cents": 2500}), 201).data()
+	if o["status"] != "settled" {
+		s.betoB.mustStatus(s.betoB.confer(s.id, o, receiptsOf(o)[0]["id"]), 200)
+	}
+	e.advanceTo("11:50")
+	s.betoB.mustStatus(s.betoB.apptCmd(s.id, s.betoB.appt(s.id, ad["id"]), "call", nil), 200)
+	e.advanceTo("12:11")
+	e.agendaTick() // falta (chamado, sem chegada, prazo 12:10)
+	e.reconcile()
+	e.reconcile() // devoluções (cancelamento e falta, política "devolver") confirmadas pelo provedor
+
+	pc := e.pc()
+	pc.activate(s.email, "PC do balcão")
+	pc.b.mustStatus(pc.link(s.owner), 201)
+	q := "?from=" + e.today() + "&to=" + e.today()
+	r := pc.call("GET", analyticsPath(s.id, "/appointments"+q), nil)
+	v := r.data()
+	cur := v["current"].(map[string]any)
+	cnt, money := cur["counts"].(map[string]any), cur["money"].(map[string]any)
+	val := func(m map[string]any, k string) float64 {
+		t.Helper()
+		x, ok := m[k].(map[string]any)["value"].(float64)
+		if !ok {
+			t.Fatalf("%s sem valor: %v", k, m[k])
+		}
+		return x
+	}
+	want := map[string]float64{"scheduled": 3, "completed": 1, "no_show": 1, "cancelled_by_customer": 1, "cancelled_by_store": 0,
+		"expired_unpaid": 1, "reschedules": 1, "no_show_rate": 0.5}
+	for k, w := range want {
+		if got := val(cnt, k); got != w {
+			t.Errorf("%s = %v, esperado %v (%s)", k, got, w, r.raw)
+		}
+	}
+	wantMoney := map[string]float64{"deposits_received_cents": 4500, "credits_applied_cents": 1500, "refunds_confirmed_cents": 3000,
+		"fees_received_cents": 0, "late_payments_cents": 0}
+	for k, w := range wantMoney {
+		if got := val(money, k); got != w {
+			t.Errorf("%s = %v, esperado %v", k, got, w)
+		}
+	}
+	occ := cur["occupancy"].(map[string]any)
+	// Jornada 09–18 para Beto e Caio = 18 h; comprometido = 3 × 30 min (corte 25 + limpeza 5).
+	if val(occ, "available_seconds") != 18*3600 || val(occ, "committed_seconds") != 3*30*60 || occ["days_with_schedule"].(float64) != 1 {
+		t.Errorf("ocupação: %v", occ)
+	}
+	var appt map[string]any
+	for _, m := range cur["modality"].([]any) {
+		if mm := m.(map[string]any); mm["origin"] == "appointment" {
+			appt = mm
+		}
+	}
+	if appt == nil || appt["completed"].(float64) != 1 || appt["no_show"].(float64) != 1 {
+		t.Errorf("comparação por modalidade: %v", cur["modality"])
+	}
+	if p := v["pending_now"].(map[string]any); p["refunds_pending"].(float64) != 0 {
+		t.Errorf("devoluções pendentes: %v", p)
+	}
+	rec := pc.call("GET", analyticsPath(s.id, "/records/appointments"+q+"&state=no_show"), nil)
+	if rec.status != 200 || rec.data()["total"].(float64) != 1 {
+		t.Fatalf("detalhamento das faltas: %d %s", rec.status, rec.raw)
+	}
+	// Antes de existir agenda/loja: "não coletado", nunca zero inventado.
+	old := pc.call("GET", analyticsPath(s.id, "/appointments?from=2026-01-01&to=2026-01-31"), nil).data()
+	if st := old["current"].(map[string]any)["counts"].(map[string]any)["scheduled"].(map[string]any)["status"]; st != "not_collected" {
+		t.Errorf("período anterior à coleta: %v", st)
+	}
+}

@@ -19,6 +19,11 @@ import (
 
 const batch = 50
 
+// noShowGrace: a falta automática só vale para prazos vencidos há até 30 min. Depois de o worker
+// ficar parado (deploy, queda, restauração), chamadas vencidas há mais tempo NÃO viram falta em
+// massa: ficam "chamado" para a equipe decidir (registrar ausência, iniciar ou cancelar).
+const noShowGrace = 30 * time.Minute
+
 // Run executa as tarefas a cada intervalo até ctx terminar.
 func (s *Service) Run(ctx context.Context, every time.Duration) {
 	t := time.NewTicker(every)
@@ -47,7 +52,8 @@ func (s *Service) Tick(ctx context.Context) (int, error) {
 	}
 	// 1. Falta: chamada válida, prazo vencido (no instante exato do prazo já venceu), sem presença.
 	rows, err := s.Pool.Query(ctx, `SELECT establishment_id, participation_id FROM appointment
-		WHERE status = 'called' AND deadline_at <= $1 AND arrived_at IS NULL ORDER BY deadline_at LIMIT $2`, now, batch)
+		WHERE status = 'called' AND deadline_at <= $1 AND deadline_at > $3 AND arrived_at IS NULL ORDER BY deadline_at LIMIT $2`,
+		now, batch, now.Add(-noShowGrace))
 	if err != nil {
 		return done, err
 	}
@@ -77,7 +83,7 @@ func (s *Service) Tick(ctx context.Context) (int, error) {
 	// 2. Atraso da loja: horário confirmado, tolerância passou e a loja não chamou. Não é falta do
 	// cliente: a reserva fica sinalizada para a equipe resolver (chamar, remarcar ou cancelar).
 	rows, err = s.Pool.Query(ctx, `SELECT id, establishment_id, professional_id FROM appointment
-		WHERE status = 'confirmed' AND store_late_at IS NULL
+		WHERE status = 'confirmed' AND store_late_at IS NULL AND starts_at <= $1
 		  AND starts_at + make_interval(mins => tolerance_minutes) <= $1 ORDER BY starts_at LIMIT $2`, now, batch)
 	if err != nil {
 		return done, err

@@ -7,7 +7,9 @@ export function useLargura<T extends HTMLElement>(inicial = 640) {
   useEffect(() => {
     const el = ref.current;
     if (!el || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(([e]) => e && setW(Math.max(280, Math.floor(e.contentRect.width))));
+    const ro = new ResizeObserver(
+      ([e]) => e && setW(Math.max(280, Math.floor(e.contentRect.width))),
+    );
     ro.observe(el);
     return () => ro.disconnect();
   }, []);

@@ -493,13 +493,22 @@ func (s *Service) finishProduct(ctx context.Context, tx pgx.Tx, actor acesso.Act
 // ProductsForEntry lê os produtos DESTA loja com bloqueio compartilhado (como ServicesForEntry):
 // o snapshot gravado na comanda é sempre uma versão real do catálogo.
 func ProductsForEntry(ctx context.Context, q database.Querier, estID uuid.UUID, ids []uuid.UUID) (map[uuid.UUID]Snapshot, error) {
+	return products(ctx, q, estID, ids, " FOR SHARE")
+}
+
+// ProductsForRead é ProductsForEntry sem trava (leituras públicas).
+func ProductsForRead(ctx context.Context, q database.Querier, estID uuid.UUID, ids []uuid.UUID) (map[uuid.UUID]Snapshot, error) {
+	return products(ctx, q, estID, ids, "")
+}
+
+func products(ctx context.Context, q database.Querier, estID uuid.UUID, ids []uuid.UUID, lock string) (map[uuid.UUID]Snapshot, error) {
 	out := map[uuid.UUID]Snapshot{}
 	if len(ids) == 0 {
 		return out, nil
 	}
 	rows, err := q.Query(ctx, `
 		SELECT id, name, price_cents, status = 'active' FROM product
-		WHERE establishment_id = $1 AND id = ANY($2) ORDER BY id FOR SHARE`, estID, ids)
+		WHERE establishment_id = $1 AND id = ANY($2) ORDER BY id`+lock, estID, ids)
 	if err != nil {
 		return nil, err
 	}

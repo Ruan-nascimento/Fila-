@@ -33,6 +33,7 @@ const allEventTypes: Record<EventType, true> = {
   "reward_reservation.updated": true,
   "deletion_request.updated": true,
   "appointment.updated": true,
+  "availability.updated": true,
 };
 const eventTypes = Object.keys(allEventTypes) as EventType[];
 

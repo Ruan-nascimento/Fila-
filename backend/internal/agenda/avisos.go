@@ -130,8 +130,9 @@ func (s *Service) deliverOne(ctx context.Context, tx pgx.Tx, id uuid.UUID, now t
 	var apptID uuid.UUID
 	var revision int
 	var kind string
-	err := tx.QueryRow(ctx, `SELECT appointment_id, revision, kind FROM appointment_notice WHERE id = $1 AND status = 'pending'
-		FOR UPDATE SKIP LOCKED`, id).Scan(&apptID, &revision, &kind)
+	var due time.Time
+	err := tx.QueryRow(ctx, `SELECT appointment_id, revision, kind, due_at FROM appointment_notice WHERE id = $1 AND status = 'pending'
+		FOR UPDATE SKIP LOCKED`, id).Scan(&apptID, &revision, &kind, &due)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil // outro worker pegou
 	}
@@ -146,7 +147,7 @@ func (s *Service) deliverOne(ctx context.Context, tx pgx.Tx, id uuid.UUID, now t
 		_, err := tx.Exec(ctx, `UPDATE appointment_notice SET status = 'skipped', skip_reason = $2, done_at = $3 WHERE id = $1`, id, reason, now)
 		return false, err
 	}
-	if reason := staleNotice(a, revision, kind, now); reason != "" {
+	if reason := staleNotice(a, revision, kind, due, now); reason != "" {
 		return skip(reason)
 	}
 	to, ok, err := s.NoticeEmail(ctx, tx, a.AccountID, a.VisitorID)
@@ -172,8 +173,19 @@ func (s *Service) deliverOne(ctx context.Context, tx pgx.Tx, id uuid.UUID, now t
 	return err == nil, err
 }
 
+// Validade de cada aviso a partir do vencimento: depois de uma parada longa do worker, aviso velho
+// é pulado em vez de chegar fora de hora (chamada de horas atrás, confirmação de ontem).
+var noticeMaxAge = map[string]time.Duration{
+	noticeCalled: 15 * time.Minute, noticeConfirmed: 6 * time.Hour, noticeRescheduled: 6 * time.Hour,
+	noticeCancelled: 12 * time.Hour, noticeNoShow: 12 * time.Hour, noticeExpired: 6 * time.Hour, noticeRefund: 72 * time.Hour,
+	noticeReminder: 12 * time.Hour,
+}
+
 // staleNotice devolve o motivo para não enviar um aviso que deixou de valer ("" = enviar).
-func staleNotice(a appointment, revision int, kind string, now time.Time) string {
+func staleNotice(a appointment, revision int, kind string, due, now time.Time) string {
+	if age, ok := noticeMaxAge[kind]; ok && now.Sub(due) > age {
+		return "vencido"
+	}
 	switch kind {
 	case noticeConfirmed, noticeRescheduled:
 		if a.Revision != revision || a.Status != StatusConfirmed {

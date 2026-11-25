@@ -627,7 +627,7 @@ func TestReceiptFees(t *testing.T) {
 		t.Fatalf("fixo por transação: %d", feeTres)
 	}
 	// Cliente e profissional não veem custo nenhum na comanda.
-	if r := b.betoB.do("GET", orderPath(b.id, um["id"]), nil); bytesContains(r.raw, "estimated") || bytesContains(r.raw, "fee") {
+	if r := b.betoB.do("GET", orderPath(b.id, um["id"]), nil); bytesContains(r.raw, `"estimated`) || bytesContains(r.raw, `"fee`) { // chaves JSON (um UUID pode conter "fee")
 		t.Fatalf("custo exposto na comanda: %s", r.raw)
 	}
 	// Custo muda depois: o recebimento antigo não é recalculado.

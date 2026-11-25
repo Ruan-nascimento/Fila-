@@ -47,6 +47,9 @@ Definidos em [`deploy/monitoramento/alertas.yml`](../../deploy/monitoramento/ale
 | FilaExclusaoSemProcessamento | exclusão sem reavaliação há > 15 min | crítico | operador | [worker-parado](rotinas.md#worker-parado) |
 | FilaExclusaoPertoDaMeta | exclusão há ≥ 25 dias | aviso | operador e dono | [exclusao-atrasada](rotinas.md#exclusao-atrasada) |
 | FilaReservaVencidaPresa | reserva vencida há > 5 min e não liberada | crítico | operador | [worker-parado](rotinas.md#worker-parado) |
+| FilaRetencaoDeHorarioPresa | horário retido para Pix com prazo vencido há > 2 min e não liberado | crítico | operador | [worker-parado](rotinas.md#worker-parado) |
+| FilaAvisoDeReservaParado | aviso de reserva esperando há > 15 min | aviso | operador | [worker-parado](rotinas.md#worker-parado) |
+| FilaChamadaDeReservaSemDesfecho | horário chamado com prazo vencido há > 30 min (fora da falta automática) | aviso | dono da loja | [agenda-chamada-sem-desfecho](rotinas.md#agenda-chamada-sem-desfecho) |
 | FilaEmailParado | e-mail esperando há > 15 min | aviso | operador | [email](rotinas.md#email) |
 | FilaEmailFalhou | e-mail desistido nas últimas 24 h | aviso | operador | [email](rotinas.md#email) |
 | FilaBackupAtrasado / FilaBackupAusente (só `verificar -backups`) | sem backup conferido há > 26 h | crítico | operador | [backup](rotinas.md#backup) |
