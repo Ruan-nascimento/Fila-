@@ -35,17 +35,19 @@ type chargeRow struct {
 	TestMode        bool
 	Attempts        int
 	amount          int64
+	// BookingID: a cobrança é de uma reserva (sinal ou taxa, ADR-0039); OrderID fica zerado.
+	BookingID *uuid.UUID
 }
 
 const chargeSelect = `
-	SELECT id, order_id, status, amount_cents, br_code, expires_at, created_at, resolved_at, cancel_requested_at,
-	       establishment_id, provider_charge_id, test_mode, check_attempts
+	SELECT id, coalesce(order_id, '00000000-0000-0000-0000-000000000000'), status, amount_cents, br_code, expires_at, created_at,
+	       resolved_at, cancel_requested_at, establishment_id, provider_charge_id, test_mode, check_attempts, booking_payment_id
 	FROM pix_charge`
 
 func scanCharge(r pgx.Row) (chargeRow, error) {
 	var c chargeRow
 	err := r.Scan(&c.ID, &c.OrderID, &c.Status, &c.amount, &c.BRCode, &c.ExpiresAt, &c.CreatedAt, &c.ResolvedAt,
-		&c.CancelRequestedAt, &c.EstablishmentID, &c.ProviderID, &c.TestMode, &c.Attempts)
+		&c.CancelRequestedAt, &c.EstablishmentID, &c.ProviderID, &c.TestMode, &c.Attempts, &c.BookingID)
 	c.Amount = brl(c.amount)
 	return c, err
 }

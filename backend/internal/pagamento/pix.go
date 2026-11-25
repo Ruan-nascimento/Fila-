@@ -109,7 +109,7 @@ func (s *Service) createPixCharge(w http.ResponseWriter, r *http.Request) error 
 			                        created_at, updated_at, next_check_at)
 			VALUES ($1, $2, $3, 'abacatepay', $4, $5, $6, $7, $7, $8)
 			RETURNING id, order_id, status, amount_cents, br_code, expires_at, created_at, resolved_at, cancel_requested_at,
-			          establishment_id, provider_charge_id, test_mode, check_attempts`,
+			          establishment_id, provider_charge_id, test_mode, check_attempts, booking_payment_id`,
 			p.EstablishmentID, p.ID, due, s.Provider.TestMode(), keyHash[:], who.CreatedBy(lp), now, now.Add(2*s.Timeout)))
 		if database.IsUniqueViolation(err, "pix_charge_one_active_uq") {
 			return conflict("pix_charge_active", "Já existe um Pix em aberto", "Use o Pix já gerado para esta comanda.", nil)

@@ -29,6 +29,7 @@ import { CodigoUmaVez, ContaNaLoja, Identificacao, VisitanteAtual } from "./fila
 import { MinhaVisita } from "./fila/MinhaVisita";
 import { Agendar } from "./agenda/Agendar";
 import { MinhasReservas } from "./agenda/MinhasReservas";
+import { AcessoReserva } from "./agenda/AcessoReserva";
 
 type PublicEstablishment = components["schemas"]["PublicEstablishment"];
 type VisitorCreated = components["schemas"]["VisitorSessionCreated"];
@@ -247,6 +248,7 @@ function LojaConteudo({ shop }: { shop: PublicEstablishment }) {
             identified ? <MinhasReservas shopId={shop.id} slug={shop.slug} /> : <Navigate to={base} replace />
           }
         />
+        <Route path="acesso" element={<AcessoReserva shopId={shop.id} slug={shop.slug} />} />
         <Route
           path="historico"
           element={account ? <Historico shopId={shop.id} /> : <Navigate to={base} replace />}

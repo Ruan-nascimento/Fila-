@@ -170,6 +170,8 @@ type ScheduledVisit struct {
 	ToleranceMinutes int
 	Now              time.Time
 	Audit            auditoria.Event
+	// OrderID da comanda nova (a agenda liga o pagamento da reserva a ela); vazio = gerado aqui.
+	OrderID uuid.UUID
 }
 
 // OpenScheduledVisit abre, na transação da chamada da reserva (fila JÁ travada pela agenda), a
@@ -201,7 +203,10 @@ func (s *Service) OpenScheduledVisit(ctx context.Context, tx pgx.Tx, in Schedule
 		return uuid.Nil, err
 	}
 	partID, _ := uuid.NewV7()
-	orderID, _ := uuid.NewV7()
+	orderID := in.OrderID
+	if orderID == uuid.Nil {
+		orderID, _ = uuid.NewV7()
+	}
 	oi := atendimento.Identity{AccountID: in.AccountID, VisitorID: in.VisitorID}
 	if _, err := atendimento.CreateOrder(ctx, tx, atendimento.NewOrder{ID: orderID, EstablishmentID: in.EstablishmentID,
 		ParticipationID: partID, ProfessionalID: in.Queue.ProfessionalID, Identity: oi, LoyaltyEligible: loyaltyEligible,

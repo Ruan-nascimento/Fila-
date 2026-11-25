@@ -62,7 +62,7 @@ export function CopiaECola({ code }: { code: string }) {
 }
 
 /** Cobrança Pix em aberto: QR, copia-e-cola, validade e situação. */
-export function PixAberto({ charge }: { charge: PixCharge }) {
+export function PixAberto({ charge }: { charge: Pick<PixCharge, "br_code" | "amount" | "expires_at"> }) {
   if (!charge.br_code) return null;
   return (
     <div className="grid justify-items-center gap-4">

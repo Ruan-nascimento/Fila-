@@ -275,6 +275,21 @@ A coluna **Referências** cita operações do OpenAPI (`operationId`), eventos, 
 
 ---
 
+## 16. Reserva com Pix, avisos e recuperação (Fila 2.0, parte 2, ADR-0039)
+
+| ID | Regra | Referências |
+|---|---|---|
+| R-BK-01 | A loja escolhe reserva gratuita (padrão), sinal (abatido) ou taxa (além do atendimento), com valor, janela de cancelamento e política de falta/atraso; cobrar exige a liberação do servidor e o Pix ligado; reter exige liberação própria; reserva de balcão é gratuita; mudanças valem para reservas novas. | `updateAgendaSettings`, T-ST-04, T-BK-01 |
+| R-BK-02 | A cotação (agora / na barbearia / total, com a política) vem do servidor e aparece antes de pagar; sinal nunca passa do valor dos serviços. | `getAvailability`, `createAppointment` |
+| R-BK-03 | Reserva paga segura o horário até o prazo de pagamento; o QR vence antes; sem pagamento o horário é liberado; sem tempo de pagar antes do horário a reserva é recusada. | T-AP-09, T-BK-01, T-BK-04 |
+| R-BK-04 | Só o provedor confirma o pagamento (webhook ou consulta), dentro do prazo no relógio do servidor; pago depois, encerrado ou duplicado vira excedente com pendência e devolução integral; nunca toma o horário de outra pessoa. | T-BK-03, T-AP-10, T-RF-01 |
+| R-BK-05 | O sinal pago entra na comanda como um único crédito = min(sinal, total); devido = total − crédito; sinal ≥ total quita sem recebimento de R$ 0; sobra vira devolução parcial confirmada pelo dono; taxa nunca vira crédito; o caixa conta o Pix da reserva uma vez. | T-BK-06, `confirmBookingRefund` |
+| R-BK-06 | Loja cancela → devolve; cliente dentro da janela → devolve; fora da janela ou falta → conforme a política aceita (reter exige confirmação explícita do cliente ao cancelar); "a loja não chamou" não é falta; devolução solicitada não é devolvida. | `cancelAppointment`, T-BK-05 |
+| R-BK-07 | Avisos por e-mail (confirmada, lembrete, chamada, remarcada, cancelada, falta, expirada, devolução) gravados com a mudança, um por revisão e tipo, revalidados antes de sair; sem e-mail verificado o aviso é pulado. | worker da agenda |
+| R-BK-08 | Visitante confirma um e-mail por código para receber avisos e recuperar a reserva por link de uso único; o pedido não revela se o e-mail existe; abrir o link não muda nada. | `setVisitorContact`, `verifyVisitorContact`, `requestAppointmentAccess`, `exchangeAppointmentAccess`, T-VC-01…04 |
+
+---
+
 ## Decisões já tomadas (não são dúvidas)
 
 As decisões abaixo vêm do anexo e **não devem ser reabertas** nas próximas etapas, salvo nova versão do documento de regras:

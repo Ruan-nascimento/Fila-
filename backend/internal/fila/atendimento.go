@@ -78,15 +78,16 @@ func (s *Service) completeService(w http.ResponseWriter, r *http.Request) error 
 				return s.invalid(ctx, tx, p, who, "Só é possível concluir um atendimento em andamento.")
 			}
 			now := s.Clock.Now()
+			// Reserva antes da comanda (ordem de travas: reserva → comanda → obrigação da reserva).
+			if err := s.visitChanged(ctx, tx, p, Completed, ""); err != nil {
+				return idempotency.Result{}, err
+			}
 			if err := atendimento.Complete(ctx, tx, atendimento.Closing{EstablishmentID: p.EstablishmentID, OrderID: p.OrderID,
 				ExpectedVersion: *body.OrderExpectedVersion, Items: *body.Items, Now: now}, s.auditBase(ctx, p, who)); err != nil {
 				return s.withVisit(ctx, tx, p, who, err)
 			}
 			if _, err := tx.Exec(ctx, `UPDATE participation SET status = 'completed', finished_at = $2, version = version + 1, updated_at = $2 WHERE id = $1`,
 				p.ID, now); err != nil {
-				return idempotency.Result{}, err
-			}
-			if err := s.visitChanged(ctx, tx, p, Completed, ""); err != nil {
 				return idempotency.Result{}, err
 			}
 			return s.finish(ctx, tx, p.EstablishmentID, p.ID, who, "T-P-08", InService, Completed, "", http.StatusOK, p.QueueID)
@@ -105,15 +106,15 @@ func (s *Service) interruptService(w http.ResponseWriter, r *http.Request) error
 			}
 			reason, _ := validate.Text("/reason", *body.Reason, 3, 500)
 			now := s.Clock.Now()
+			if err := s.visitChanged(ctx, tx, p, Interrupted, reason); err != nil {
+				return idempotency.Result{}, err
+			}
 			if err := atendimento.Interrupt(ctx, tx, atendimento.Closing{EstablishmentID: p.EstablishmentID, OrderID: p.OrderID,
 				ExpectedVersion: *body.OrderExpectedVersion, Items: *body.Items, Reason: reason, Now: now}, s.auditBase(ctx, p, who)); err != nil {
 				return s.withVisit(ctx, tx, p, who, err)
 			}
 			if _, err := tx.Exec(ctx, `UPDATE participation SET status = 'interrupted', finished_at = $2, end_reason = $3, version = version + 1, updated_at = $2 WHERE id = $1`,
 				p.ID, now, reason); err != nil {
-				return idempotency.Result{}, err
-			}
-			if err := s.visitChanged(ctx, tx, p, Interrupted, reason); err != nil {
 				return idempotency.Result{}, err
 			}
 			return s.finish(ctx, tx, p.EstablishmentID, p.ID, who, "T-P-09", InService, Interrupted, reason, http.StatusOK, p.QueueID)

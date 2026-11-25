@@ -371,6 +371,17 @@ function SecaoFilas({ ctx, settings, onSaved, onConflict }: SectionProps) {
 // --------------------------------------------------------------------------------- Agenda
 
 type Mode = components["schemas"]["ServiceMode"];
+type BookingMode = components["schemas"]["BookingMode"];
+
+const cobrancas: { value: BookingMode; label: string; hint: string }[] = [
+  { value: "free", label: "Reserva gratuita", hint: "Nada a pagar ao reservar; tudo na barbearia." },
+  { value: "deposit", label: "Sinal pelo Pix", hint: "Parte paga ao reservar e descontada do atendimento." },
+  {
+    value: "fee",
+    label: "Taxa de reserva pelo Pix",
+    hint: "Valor cobrado além do atendimento para garantir o horário.",
+  },
+];
 type Impact = components["schemas"]["AgendaImpact"];
 
 const modos: { value: Mode; label: string; hint: string }[] = [
@@ -405,6 +416,11 @@ function SecaoAgenda({ ctx, settings, onSaved, onConflict }: SectionProps) {
     checkin: String(a.checkin_window_minutes),
     max: String(a.max_future_appointments),
     block: a.professionals_can_block,
+    bmode: a.booking_payment_mode,
+    bcents: a.booking_payment_cents != null ? centsToInput(a.booking_payment_cents) : "",
+    window: String(a.cancel_window_hours),
+    late: a.late_cancel_policy,
+    reminder: String(a.reminder_hours),
   });
   const cmd = useCommand();
   const [local, setLocal] = useState<Record<string, string>>({});
@@ -418,7 +434,14 @@ function SecaoAgenda({ ctx, settings, onSaved, onConflict }: SectionProps) {
     const tol = f.inherit ? null : intIn(f.tolerance, 1, 60);
     const checkin = intIn(f.checkin, 0, 60);
     const max = intIn(f.max, 1, 20);
+    const bcents = f.bmode === "free" ? null : parseCents(f.bcents);
+    const cancelWindow = intIn(f.window, 0, 168);
+    const reminder = intIn(f.reminder, 0, 72);
     const errs: Record<string, string> = {};
+    if (f.bmode !== "free" && (bcents === null || bcents < 100 || bcents > 100000))
+      errs.bcents = "Use de R$ 1,00 a R$ 1.000,00.";
+    if (cancelWindow === null) errs.window = "Use de 0 a 168 horas.";
+    if (reminder === null) errs.reminder = "Use de 0 a 72 horas.";
     if (step === null) errs.step = "Use de 5 a 120 minutos.";
     if (buffer === null) errs.buffer = "Use de 0 a 60 minutos.";
     if (lead === null) errs.lead = "Use de 0 a 1440 minutos (24 h).";
@@ -434,7 +457,9 @@ function SecaoAgenda({ ctx, settings, onSaved, onConflict }: SectionProps) {
       lead === null ||
       horizon === null ||
       checkin === null ||
-      max === null
+      max === null ||
+      cancelWindow === null ||
+      reminder === null
     )
       return;
     const body = {
@@ -448,6 +473,12 @@ function SecaoAgenda({ ctx, settings, onSaved, onConflict }: SectionProps) {
       ...(checkin !== a.checkin_window_minutes ? { checkin_window_minutes: checkin } : {}),
       ...(max !== a.max_future_appointments ? { max_future_appointments: max } : {}),
       ...(f.block !== a.professionals_can_block ? { professionals_can_block: f.block } : {}),
+      ...(f.bmode !== a.booking_payment_mode || bcents !== (a.booking_payment_cents ?? null)
+        ? { booking_payment_mode: f.bmode, booking_payment_cents: bcents }
+        : {}),
+      ...(cancelWindow !== a.cancel_window_hours ? { cancel_window_hours: cancelWindow } : {}),
+      ...(f.late !== a.late_cancel_policy ? { late_cancel_policy: f.late } : {}),
+      ...(reminder !== a.reminder_hours ? { reminder_hours: reminder } : {}),
     };
     const out = await cmd.run(`cfg:agenda:${a.version}:${JSON.stringify(body)}`, (key) =>
       api.PATCH("/v1/establishments/{establishmentId}/settings/agenda", {
@@ -457,6 +488,8 @@ function SecaoAgenda({ ctx, settings, onSaved, onConflict }: SectionProps) {
     );
     setImpact(null);
     if (out.ok) {
+      // Mostra o valor como o servidor guardou ("15" → "15,00"), senão a seção pareceria não salva.
+      s.set({ bcents: bcents !== null ? centsToInput(bcents) : "" });
       onSaved(out.data.data);
       s.setSaved(true);
     } else if (out.problem?.status === 409 && out.problem.code === "version_conflict") {
@@ -597,6 +630,91 @@ function SecaoAgenda({ ctx, settings, onSaved, onConflict }: SectionProps) {
           checked={s.form.block}
           onChange={(v) => s.set({ block: v })}
         />
+        {usesSchedule && (
+          <fieldset className="m-0 grid gap-3 rounded-xl border border-line p-4">
+            <legend className="px-1 text-sm font-semibold">Cobrança da reserva</legend>
+            {!a.charge_available && (
+              <Notice kind="info" title="Cobrança da reserva indisponível">
+                <p>
+                  Cobrar a reserva exige o Pix ligado e verificado (em Pagamentos) e a liberação da cobrança
+                  nesta instalação. Enquanto isso, as reservas são gratuitas.
+                </p>
+              </Notice>
+            )}
+            {cobrancas.map((m) => (
+              <Choice
+                key={m.value}
+                type="radio"
+                name="cobranca-reserva"
+                checked={s.form.bmode === m.value}
+                disabled={!a.charge_available && m.value !== "free" && a.booking_payment_mode !== m.value}
+                onChange={() => s.set({ bmode: m.value })}
+                label={m.label}
+                description={m.hint}
+              />
+            ))}
+            {s.form.bmode !== "free" && (
+              <Field
+                label={s.form.bmode === "deposit" ? "Valor do sinal (R$)" : "Valor da taxa (R$)"}
+                inputMode="decimal"
+                value={s.form.bcents}
+                error={local.bcents ?? errors.booking_payment_cents}
+                hint={
+                  s.form.bmode === "deposit"
+                    ? "Pago pelo Pix ao reservar e descontado do atendimento. Se os serviços custarem menos, cobra-se só o valor deles."
+                    : "Pago pelo Pix ao reservar, além do atendimento. Nunca vira desconto."
+                }
+                onChange={(e) => s.set({ bcents: e.target.value })}
+                wrapperClassName="max-w-xs"
+              />
+            )}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field
+                label="Cancelamento com devolução até (horas antes)"
+                inputMode="numeric"
+                value={s.form.window}
+                error={local.window ?? errors.cancel_window_hours}
+                hint="De 0 a 168 (sugestão: 12). Cancelando até aí, o cliente recebe o valor de volta. A loja que cancela sempre devolve."
+                onChange={(e) => s.set({ window: e.target.value })}
+              />
+              <Field
+                label="Lembrete por e-mail (horas antes)"
+                inputMode="numeric"
+                value={s.form.reminder}
+                error={local.reminder ?? errors.reminder_hours}
+                hint="De 0 a 72 (sugestão: 24). 0 = sem lembrete."
+                onChange={(e) => s.set({ reminder: e.target.value })}
+              />
+            </div>
+            <fieldset className="m-0 grid gap-2 border-0 p-0">
+              <legend className="mb-1 p-0 text-sm font-semibold">Cancelamento depois disso ou falta</legend>
+              <Choice
+                type="radio"
+                name="politica-atraso"
+                checked={s.form.late === "refund"}
+                onChange={() => s.set({ late: "refund" })}
+                label="Devolver o valor"
+                description="Padrão. O cliente sempre recebe de volta o que pagou se não for atendido."
+              />
+              <Choice
+                type="radio"
+                name="politica-atraso"
+                checked={s.form.late === "retain"}
+                disabled={!a.retain_available && a.late_cancel_policy !== "retain"}
+                onChange={() => s.set({ late: "retain" })}
+                label="Reter o valor"
+                description={
+                  a.retain_available
+                    ? "O cliente vê a regra antes de pagar e confirma ao cancelar fora do prazo. Vale para reservas feitas depois de salvar."
+                    : "Ainda não liberado nesta instalação (exige a política comercial aprovada)."
+                }
+              />
+            </fieldset>
+            <p className="m-0 text-sm text-fg-muted">
+              Mudanças valem para reservas novas; cada reserva guarda a regra aceita pelo cliente.
+            </p>
+          </fieldset>
+        )}
         {impact ? (
           <ConfirmPanel
             title={`Mudar para “${modos.find((m) => m.value === s.form.mode)?.label ?? ""}”?`}

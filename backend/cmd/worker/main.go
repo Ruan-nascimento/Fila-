@@ -180,8 +180,17 @@ func runJobs(ctx context.Context, rt *app.Runtime, ring *keys.Ring, clk clock.Cl
 	// módulo fila recebe o guarda da agenda para que a reserva acompanhe a visita encerrada.
 	agendaFila := fila.New(fila.Deps{Pool: rt.Pool, Clock: clk, Log: log.With("tarefa", "agenda"), AgendaEnabled: cfg.Ops.AgendaEnabled})
 	agendaSvc := agenda.New(agenda.Deps{Pool: rt.Pool, Clock: clk, Log: log.With("tarefa", "agenda"), Visits: agendaFila,
-		Enabled: cfg.Ops.AgendaEnabled})
+		Enabled: cfg.Ops.AgendaEnabled, Mail: mail.NewOutbox(ring), NoticeEmail: ident.NoticeEmail, PublicBaseURL: cfg.Security.PublicBaseURL})
 	agendaFila.Agenda = agendaSvc
+	agendaFila.VisitClosed = ident.VisitClosed
+
+	// Pagamentos: reconsulta cobranças Pix pendentes ou de resultado desconhecido (R-PAG-09/16).
+	// O serviço existe mesmo sem Pix: o crédito do sinal na comanda (falta, fechamento pelo worker)
+	// é dele. Reserva paga (ADR-0039): retenção vencida, Pix e devolução da reserva passam pela agenda.
+	pay := pagamento.New(pagamento.Deps{Pool: rt.Pool, Clock: clk, Log: log.With("tarefa", "pagamentos"), Provider: prov, Loyalty: loyalty,
+		ExpiresIn: cfg.Payments.ExpiresIn, Timeout: cfg.Payments.Timeout, Pendencies: painel.Record, VisitClosed: ident.VisitClosed})
+	pay.Bookings = agendaSvc
+	agendaSvc.Payments, agendaSvc.Charge = pay, cfg.Ops.AgendaEnabled && cfg.Ops.AgendaCharge
 	wg.Go(func() { agendaSvc.Run(ctx, 30*time.Second) })
 
 	// Fidelidade: vence reservas de prêmio (24 h) e libera pontos e unidade uma vez (T-RW-03).
@@ -210,10 +219,7 @@ func runJobs(ctx context.Context, rt *app.Runtime, ring *keys.Ring, clk clock.Cl
 		}
 	})
 
-	// Pagamentos: reconsulta cobranças Pix pendentes ou de resultado desconhecido (R-PAG-09/16).
 	if prov != nil {
-		pay := pagamento.New(pagamento.Deps{Pool: rt.Pool, Clock: clk, Log: log.With("tarefa", "pagamentos"), Provider: prov, Loyalty: loyalty,
-			ExpiresIn: cfg.Payments.ExpiresIn, Timeout: cfg.Payments.Timeout, Pendencies: painel.Record})
 		wg.Go(func() { pay.Run(ctx, 2*time.Second) })
 	}
 	wg.Wait()

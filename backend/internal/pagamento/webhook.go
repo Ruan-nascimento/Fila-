@@ -172,6 +172,9 @@ func (s *Service) applyWebhook(ctx context.Context, tx pgx.Tx, env webhookEnvelo
 		s.Log.Warn("webhook de cobrança desconhecida", "evento", env.Event)
 		return webhookOutcome{name: "unknown_charge"}, chargeID, status, amount
 	}
+	if c.BookingID != nil {
+		return s.webhookBooking(ctx, tx, env, c, now)
+	}
 	// Pedido: os metadados que enviamos na criação precisam apontar para a mesma comanda e loja.
 	if t.Metadata["charge_id"] != c.ID.String() || t.Metadata["order_id"] != c.OrderID.String() ||
 		t.Metadata["establishment_id"] != c.EstablishmentID.String() {

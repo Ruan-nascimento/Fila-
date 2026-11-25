@@ -1,9 +1,11 @@
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Link } from "react-router";
 import { CalendarCheck, ChevronLeft, UserRound } from "lucide-react";
 import { api } from "../../api/client";
 import type { components } from "../../api/schema.gen";
 import { dataPorExtenso, itensTexto, type Appointment } from "../../features/agenda/horario";
+import { PagamentoReserva } from "../../features/agenda/PagamentoReserva";
+import { useStreamMessages } from "../../stream/context";
 import { SeletorHorario, type Availability, type Slot } from "../../features/agenda/SeletorHorario";
 import { formatCents } from "../../money";
 import { useSession } from "../../session/context";
@@ -47,6 +49,20 @@ export function Agendar({ shop }: { shop: PublicEstablishment }) {
   const [created, setCreated] = useState<VisitorCreated | null>(null);
   const nickRef = useRef<HTMLInputElement>(null);
   const cmd = useCommand();
+  // Reserva retida aguardando o Pix: a confirmação chega pelo evento da reserva (nunca pela tela).
+  const recarregar = useCallback(() => {
+    if (!done) return;
+    void api
+      .GET("/v1/establishments/{establishmentId}/appointments/{appointmentId}", {
+        params: { path: { establishmentId: shop.id, appointmentId: done.id } },
+      })
+      .then((r) => {
+        if (r.data) setDone(r.data.data);
+      });
+  }, [done, shop.id]);
+  useStreamMessages((m) => {
+    if (m.type === "appointment.updated") recarregar();
+  });
   if (servicesError && !services) return <LoadError message={servicesError} onRetry={retryServices} />;
   if (!queues || !services) return <Loading>Carregando…</Loading>;
   const account = state.status === "ready" ? state.session.account : null;
@@ -94,6 +110,23 @@ export function Agendar({ shop }: { shop: PublicEstablishment }) {
     }
   }
 
+  if (passo === "feito" && done && (done.status === "held" || done.status === "expired"))
+    return (
+      <Card className="grid gap-4 p-5" role="status">
+        <p className="m-0 text-lg font-bold">
+          {done.status === "held" ? "Falta pagar para garantir o horário" : "O prazo para pagar acabou"}
+        </p>
+        <p className="m-0">
+          {dataPorExtenso(done.local_date)}, às {done.local_time}, com {done.professional.display_name}.
+        </p>
+        <PagamentoReserva a={done} onChanged={recarregar} />
+        <p className="m-0 text-xs text-fg-muted">{done.terms}</p>
+        <Link to={`/loja/${shop.slug}/reservas`} className="inline-flex min-h-11 items-center font-semibold">
+          Ver minhas reservas
+        </Link>
+      </Card>
+    );
+
   if (passo === "feito" && done)
     return (
       <Card className="grid gap-4 p-5" role="status">
@@ -104,8 +137,13 @@ export function Agendar({ shop }: { shop: PublicEstablishment }) {
           {dataPorExtenso(done.local_date)}, às {done.local_time}, com {done.professional.display_name}.
         </p>
         <p className="m-0 text-sm text-fg-muted">
-          {itensTexto(done)} · {formatCents(done.price.amount_cents)} na barbearia · nada a pagar agora.
+          {itensTexto(done)} ·{" "}
+          {done.payment.booking
+            ? `${formatCents(done.payment.due_at_store.amount_cents)} na barbearia`
+            : `${formatCents(done.price.amount_cents)} na barbearia · nada a pagar agora`}
+          .
         </p>
+        <PagamentoReserva a={done} onChanged={recarregar} />
         <p className="m-0 text-sm">
           Chegue até {done.tolerance_minutes} min depois do horário. Se não puder ir, cancele para liberar o
           horário.
@@ -264,11 +302,28 @@ export function Agendar({ shop }: { shop: PublicEstablishment }) {
                 {info.buffer_minutes > 0 ? ` (+ ${info.buffer_minutes} min de preparação)` : ""}
               </dd>
               <dt className="font-semibold">Valor previsto</dt>
-              <dd className="m-0">
-                {formatCents(info.price.amount_cents)} na barbearia.{" "}
-                <strong>Reserva gratuita: nada a pagar agora.</strong>
-              </dd>
+              {info.payment.mode === "free" ? (
+                <dd className="m-0">
+                  {formatCents(info.price.amount_cents)} na barbearia.{" "}
+                  <strong>Reserva gratuita: nada a pagar agora.</strong>
+                </dd>
+              ) : (
+                <dd className="m-0 grid gap-1">
+                  <span>
+                    <strong>Agora, pelo Pix: {formatCents(info.payment.due_now.amount_cents)}</strong> (
+                    {info.payment.mode === "deposit" ? "sinal, descontado do atendimento" : "taxa de reserva"}
+                    )
+                  </span>
+                  <span>Na barbearia: {formatCents(info.payment.due_at_store.amount_cents)}</span>
+                  <span>Total previsto: {formatCents(info.payment.estimated_total.amount_cents)}</span>
+                </dd>
+              )}
             </dl>
+            {info.payment.mode !== "free" && (
+              <Notice kind="info" title="Antes de pagar">
+                <p>{info.payment.terms}</p>
+              </Notice>
+            )}
             <p className="m-0 text-sm text-fg-muted">
               Chegue no horário; há uma tolerância depois dele. Se não puder ir, cancele em “Minhas reservas”
               para liberar o horário. O valor final é o dos serviços feitos.
@@ -284,7 +339,11 @@ export function Agendar({ shop }: { shop: PublicEstablishment }) {
                   aria-busy={cmd.busy !== null}
                   onClick={() => void confirmar()}
                 >
-                  {cmd.busy ? "Confirmando…" : `Confirmar ${slot.local_time}`}
+                  {cmd.busy
+                    ? "Confirmando…"
+                    : info.payment.mode === "free"
+                      ? `Confirmar ${slot.local_time}`
+                      : `Reservar ${slot.local_time} e pagar ${formatCents(info.payment.due_now.amount_cents)}`}
                 </Button>
               </div>
             ) : (
@@ -313,6 +372,11 @@ export function Agendar({ shop }: { shop: PublicEstablishment }) {
               await refresh();
             }}
           />
+        )}
+        {!identified && (
+          <Link to={`/loja/${shop.slug}/acesso`} className="text-sm font-semibold">
+            Já reservou sem conta e confirmou um e-mail? Recuperar pelo e-mail
+          </Link>
         )}
       </aside>
     </div>

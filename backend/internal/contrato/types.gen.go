@@ -275,21 +275,6 @@ func (e AppointmentOrigin) Valid() bool {
 	}
 }
 
-// Defines values for AppointmentPaymentMode.
-const (
-	AppointmentPaymentModeFree AppointmentPaymentMode = "free"
-)
-
-// Valid indicates whether the value is a known member of the AppointmentPaymentMode enum.
-func (e AppointmentPaymentMode) Valid() bool {
-	switch e {
-	case AppointmentPaymentModeFree:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for AppointmentCreatedCancelledBy.
 const (
 	AppointmentCreatedCancelledByCustomer    AppointmentCreatedCancelledBy = "customer"
@@ -347,21 +332,6 @@ func (e AppointmentCreatedOrigin) Valid() bool {
 	}
 }
 
-// Defines values for AppointmentCreatedPaymentMode.
-const (
-	AppointmentCreatedPaymentModeFree AppointmentCreatedPaymentMode = "free"
-)
-
-// Valid indicates whether the value is a known member of the AppointmentCreatedPaymentMode enum.
-func (e AppointmentCreatedPaymentMode) Valid() bool {
-	switch e {
-	case AppointmentCreatedPaymentModeFree:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for AppointmentItemKind.
 const (
 	AppointmentItemKindProduct AppointmentItemKind = "product"
@@ -386,6 +356,8 @@ const (
 	AppointmentStatusCancelled   AppointmentStatus = "cancelled"
 	AppointmentStatusCompleted   AppointmentStatus = "completed"
 	AppointmentStatusConfirmed   AppointmentStatus = "confirmed"
+	AppointmentStatusExpired     AppointmentStatus = "expired"
+	AppointmentStatusHeld        AppointmentStatus = "held"
 	AppointmentStatusInService   AppointmentStatus = "in_service"
 	AppointmentStatusInterrupted AppointmentStatus = "interrupted"
 	AppointmentStatusNoShow      AppointmentStatus = "no_show"
@@ -401,6 +373,10 @@ func (e AppointmentStatus) Valid() bool {
 	case AppointmentStatusCompleted:
 		return true
 	case AppointmentStatusConfirmed:
+		return true
+	case AppointmentStatusExpired:
+		return true
+	case AppointmentStatusHeld:
 		return true
 	case AppointmentStatusInService:
 		return true
@@ -467,6 +443,93 @@ func (e AuditEventActorKind) Valid() bool {
 	case AuditEventActorKindSystem:
 		return true
 	case AuditEventActorKindVisitor:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BookingMode.
+const (
+	BookingModeDeposit BookingMode = "deposit"
+	BookingModeFee     BookingMode = "fee"
+	BookingModeFree    BookingMode = "free"
+)
+
+// Valid indicates whether the value is a known member of the BookingMode enum.
+func (e BookingMode) Valid() bool {
+	switch e {
+	case BookingModeDeposit:
+		return true
+	case BookingModeFee:
+		return true
+	case BookingModeFree:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BookingPaymentMode.
+const (
+	BookingPaymentModeDeposit BookingPaymentMode = "deposit"
+	BookingPaymentModeFee     BookingPaymentMode = "fee"
+)
+
+// Valid indicates whether the value is a known member of the BookingPaymentMode enum.
+func (e BookingPaymentMode) Valid() bool {
+	switch e {
+	case BookingPaymentModeDeposit:
+		return true
+	case BookingPaymentModeFee:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BookingPaymentOutcome.
+const (
+	BookingPaymentOutcomeApplied     BookingPaymentOutcome = "applied"
+	BookingPaymentOutcomeKept        BookingPaymentOutcome = "kept"
+	BookingPaymentOutcomeLessThannil BookingPaymentOutcome = "<nil>"
+	BookingPaymentOutcomeRefundDue   BookingPaymentOutcome = "refund_due"
+)
+
+// Valid indicates whether the value is a known member of the BookingPaymentOutcome enum.
+func (e BookingPaymentOutcome) Valid() bool {
+	switch e {
+	case BookingPaymentOutcomeApplied:
+		return true
+	case BookingPaymentOutcomeKept:
+		return true
+	case BookingPaymentOutcomeLessThannil:
+		return true
+	case BookingPaymentOutcomeRefundDue:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BookingPaymentStatus.
+const (
+	BookingPaymentStatusAwaitingPayment BookingPaymentStatus = "awaiting_payment"
+	BookingPaymentStatusCancelled       BookingPaymentStatus = "cancelled"
+	BookingPaymentStatusExpired         BookingPaymentStatus = "expired"
+	BookingPaymentStatusPaid            BookingPaymentStatus = "paid"
+)
+
+// Valid indicates whether the value is a known member of the BookingPaymentStatus enum.
+func (e BookingPaymentStatus) Valid() bool {
+	switch e {
+	case BookingPaymentStatusAwaitingPayment:
+		return true
+	case BookingPaymentStatusCancelled:
+		return true
+	case BookingPaymentStatusExpired:
+		return true
+	case BookingPaymentStatusPaid:
 		return true
 	default:
 		return false
@@ -685,6 +748,7 @@ func (e EntryState) Valid() bool {
 
 // Defines values for ErrorCode.
 const (
+	ErrorCodeAccessLinkInvalid                   ErrorCode = "access_link_invalid"
 	ErrorCodeAccountRequired                     ErrorCode = "account_required"
 	ErrorCodeActiveParticipationExists           ErrorCode = "active_participation_exists"
 	ErrorCodeAgendaUnavailable                   ErrorCode = "agenda_unavailable"
@@ -692,8 +756,17 @@ const (
 	ErrorCodeAppointmentLimitReached             ErrorCode = "appointment_limit_reached"
 	ErrorCodeAppointmentOverlapsOwn              ErrorCode = "appointment_overlaps_own"
 	ErrorCodeAppointmentTooEarly                 ErrorCode = "appointment_too_early"
+	ErrorCodeBookingAlreadyPaid                  ErrorCode = "booking_already_paid"
+	ErrorCodeBookingHoldExpired                  ErrorCode = "booking_hold_expired"
+	ErrorCodeBookingNotPayable                   ErrorCode = "booking_not_payable"
+	ErrorCodeBookingPaymentUnavailable           ErrorCode = "booking_payment_unavailable"
+	ErrorCodeBookingTooClose                     ErrorCode = "booking_too_close"
+	ErrorCodeCancelRetainsPayment                ErrorCode = "cancel_retains_payment"
 	ErrorCodeChairReserved                       ErrorCode = "chair_reserved"
 	ErrorCodeChangeRequestPending                ErrorCode = "change_request_pending"
+	ErrorCodeContactCodeExpired                  ErrorCode = "contact_code_expired"
+	ErrorCodeContactCodeInvalid                  ErrorCode = "contact_code_invalid"
+	ErrorCodeCreditExceedsTotal                  ErrorCode = "credit_exceeds_total"
 	ErrorCodeCsrfFailed                          ErrorCode = "csrf_failed"
 	ErrorCodeCustomerHasActiveVisit              ErrorCode = "customer_has_active_visit"
 	ErrorCodeDeletionInProgress                  ErrorCode = "deletion_in_progress"
@@ -725,6 +798,7 @@ const (
 	ErrorCodeMediaDisabled                       ErrorCode = "media_disabled"
 	ErrorCodeMediaNotAttachable                  ErrorCode = "media_not_attachable"
 	ErrorCodeNoPassword                          ErrorCode = "no_password"
+	ErrorCodeNoPaymentMethod                     ErrorCode = "no_payment_method"
 	ErrorCodeNoWaitingParticipant                ErrorCode = "no_waiting_participant"
 	ErrorCodeNotFound                            ErrorCode = "not_found"
 	ErrorCodeOrderNotEditable                    ErrorCode = "order_not_editable"
@@ -763,6 +837,7 @@ const (
 	ErrorCodeRefundNotAllowed                    ErrorCode = "refund_not_allowed"
 	ErrorCodeReservationAlreadyActive            ErrorCode = "reservation_already_active"
 	ErrorCodeReservationExpired                  ErrorCode = "reservation_expired"
+	ErrorCodeRetentionUnavailable                ErrorCode = "retention_unavailable"
 	ErrorCodeRewardInactive                      ErrorCode = "reward_inactive"
 	ErrorCodeRewardOutOfStock                    ErrorCode = "reward_out_of_stock"
 	ErrorCodeScheduleConflictsAppointments       ErrorCode = "schedule_conflicts_appointments"
@@ -782,12 +857,15 @@ const (
 	ErrorCodeValidationFailed                    ErrorCode = "validation_failed"
 	ErrorCodeVersionConflict                     ErrorCode = "version_conflict"
 	ErrorCodeVisitorVisitInProgress              ErrorCode = "visitor_visit_in_progress"
+	ErrorCodeVisitorsDisabled                    ErrorCode = "visitors_disabled"
 	ErrorCodeWebhookUnauthenticated              ErrorCode = "webhook_unauthenticated"
 )
 
 // Valid indicates whether the value is a known member of the ErrorCode enum.
 func (e ErrorCode) Valid() bool {
 	switch e {
+	case ErrorCodeAccessLinkInvalid:
+		return true
 	case ErrorCodeAccountRequired:
 		return true
 	case ErrorCodeActiveParticipationExists:
@@ -802,9 +880,27 @@ func (e ErrorCode) Valid() bool {
 		return true
 	case ErrorCodeAppointmentTooEarly:
 		return true
+	case ErrorCodeBookingAlreadyPaid:
+		return true
+	case ErrorCodeBookingHoldExpired:
+		return true
+	case ErrorCodeBookingNotPayable:
+		return true
+	case ErrorCodeBookingPaymentUnavailable:
+		return true
+	case ErrorCodeBookingTooClose:
+		return true
+	case ErrorCodeCancelRetainsPayment:
+		return true
 	case ErrorCodeChairReserved:
 		return true
 	case ErrorCodeChangeRequestPending:
+		return true
+	case ErrorCodeContactCodeExpired:
+		return true
+	case ErrorCodeContactCodeInvalid:
+		return true
+	case ErrorCodeCreditExceedsTotal:
 		return true
 	case ErrorCodeCsrfFailed:
 		return true
@@ -867,6 +963,8 @@ func (e ErrorCode) Valid() bool {
 	case ErrorCodeMediaNotAttachable:
 		return true
 	case ErrorCodeNoPassword:
+		return true
+	case ErrorCodeNoPaymentMethod:
 		return true
 	case ErrorCodeNoWaitingParticipant:
 		return true
@@ -944,6 +1042,8 @@ func (e ErrorCode) Valid() bool {
 		return true
 	case ErrorCodeReservationExpired:
 		return true
+	case ErrorCodeRetentionUnavailable:
+		return true
 	case ErrorCodeRewardInactive:
 		return true
 	case ErrorCodeRewardOutOfStock:
@@ -981,6 +1081,8 @@ func (e ErrorCode) Valid() bool {
 	case ErrorCodeVersionConflict:
 		return true
 	case ErrorCodeVisitorVisitInProgress:
+		return true
+	case ErrorCodeVisitorsDisabled:
 		return true
 	case ErrorCodeWebhookUnauthenticated:
 		return true
@@ -1156,6 +1258,9 @@ const (
 	ActivePixOnMethodSwitch  FinancialIssueKind = "active_pix_on_method_switch"
 	AdjustmentExcess         FinancialIssueKind = "adjustment_excess"
 	AmountMismatch           FinancialIssueKind = "amount_mismatch"
+	BookingLatePayment       FinancialIssueKind = "booking_late_payment"
+	BookingNoticeFailed      FinancialIssueKind = "booking_notice_failed"
+	BookingRefundDue         FinancialIssueKind = "booking_refund_due"
 	ChargeOutcomeUnresolved  FinancialIssueKind = "charge_outcome_unresolved"
 	DuplicateReceipt         FinancialIssueKind = "duplicate_receipt"
 	LateReceipt              FinancialIssueKind = "late_receipt"
@@ -1172,6 +1277,12 @@ func (e FinancialIssueKind) Valid() bool {
 	case AdjustmentExcess:
 		return true
 	case AmountMismatch:
+		return true
+	case BookingLatePayment:
+		return true
+	case BookingNoticeFailed:
+		return true
+	case BookingRefundDue:
 		return true
 	case ChargeOutcomeUnresolved:
 		return true
@@ -1265,6 +1376,24 @@ func (e InviteStatus) Valid() bool {
 	case InviteStatusPending:
 		return true
 	case InviteStatusRevoked:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for LateCancelPolicy.
+const (
+	LateCancelPolicyRefund LateCancelPolicy = "refund"
+	LateCancelPolicyRetain LateCancelPolicy = "retain"
+)
+
+// Valid indicates whether the value is a known member of the LateCancelPolicy enum.
+func (e LateCancelPolicy) Valid() bool {
+	switch e {
+	case LateCancelPolicyRefund:
+		return true
+	case LateCancelPolicyRetain:
 		return true
 	default:
 		return false
@@ -2911,13 +3040,32 @@ type AgendaImpact struct {
 // AgendaSettings defines model for AgendaSettings.
 type AgendaSettings struct {
 	// Available Agenda liberada neste servidor (FILA_AGENDA).
-	Available             bool `json:"available"`
-	BufferMinutes         int  `json:"buffer_minutes"`
-	CheckinWindowMinutes  int  `json:"checkin_window_minutes"`
-	HorizonDays           int  `json:"horizon_days"`
-	MaxFutureAppointments int  `json:"max_future_appointments"`
-	MinLeadMinutes        int  `json:"min_lead_minutes"`
-	ProfessionalsCanBlock bool `json:"professionals_can_block"`
+	Available bool `json:"available"`
+
+	// BookingPaymentCents Valor do sinal ou da taxa; nulo na reserva gratuita.
+	BookingPaymentCents *int `json:"booking_payment_cents"`
+
+	// BookingPaymentMode Reserva gratuita, sinal (abatido do atendimento) ou taxa de reserva (cobrada além do atendimento).
+	BookingPaymentMode BookingMode `json:"booking_payment_mode"`
+	BufferMinutes      int         `json:"buffer_minutes"`
+	CancelWindowHours  int         `json:"cancel_window_hours"`
+
+	// ChargeAvailable Cobrança da reserva liberada (FILA_AGENDA_COBRANCA) e Pix operacional.
+	ChargeAvailable      bool `json:"charge_available"`
+	CheckinWindowMinutes int  `json:"checkin_window_minutes"`
+	HorizonDays          int  `json:"horizon_days"`
+
+	// LateCancelPolicy Cancelamento fora da janela ou falta do cliente — devolver ou reter o valor pago.
+	LateCancelPolicy      LateCancelPolicy `json:"late_cancel_policy"`
+	MaxFutureAppointments int              `json:"max_future_appointments"`
+	MinLeadMinutes        int              `json:"min_lead_minutes"`
+	ProfessionalsCanBlock bool             `json:"professionals_can_block"`
+
+	// ReminderHours Lembrete por e-mail antes do horário; 0 = sem lembrete.
+	ReminderHours int `json:"reminder_hours"`
+
+	// RetainAvailable Retenção na falta ou cancelamento tardio liberada (FILA_AGENDA_RETENCAO).
+	RetainAvailable bool `json:"retain_available"`
 
 	// ScheduleToleranceMinutes null = herda a tolerância de chamada da fila.
 	ScheduleToleranceMinutes *int `json:"schedule_tolerance_minutes"`
@@ -2932,16 +3080,25 @@ type AgendaSettings struct {
 
 // AgendaSettingsRequest defines model for AgendaSettingsRequest.
 type AgendaSettingsRequest struct {
-	BufferMinutes        *int `json:"buffer_minutes,omitempty"`
-	CheckinWindowMinutes *int `json:"checkin_window_minutes,omitempty"`
+	BookingPaymentCents *int `json:"booking_payment_cents,omitempty"`
+
+	// BookingPaymentMode Reserva gratuita, sinal (abatido do atendimento) ou taxa de reserva (cobrada além do atendimento).
+	BookingPaymentMode   *BookingMode `json:"booking_payment_mode,omitempty"`
+	BufferMinutes        *int         `json:"buffer_minutes,omitempty"`
+	CancelWindowHours    *int         `json:"cancel_window_hours,omitempty"`
+	CheckinWindowMinutes *int         `json:"checkin_window_minutes,omitempty"`
 
 	// ExpectedVersion Versão do agregado; incrementa a cada mudança.
-	ExpectedVersion          Version `json:"expected_version"`
-	HorizonDays              *int    `json:"horizon_days,omitempty"`
-	MaxFutureAppointments    *int    `json:"max_future_appointments,omitempty"`
-	MinLeadMinutes           *int    `json:"min_lead_minutes,omitempty"`
-	ProfessionalsCanBlock    *bool   `json:"professionals_can_block,omitempty"`
-	ScheduleToleranceMinutes *int    `json:"schedule_tolerance_minutes,omitempty"`
+	ExpectedVersion Version `json:"expected_version"`
+	HorizonDays     *int    `json:"horizon_days,omitempty"`
+
+	// LateCancelPolicy Cancelamento fora da janela ou falta do cliente — devolver ou reter o valor pago.
+	LateCancelPolicy         *LateCancelPolicy `json:"late_cancel_policy,omitempty"`
+	MaxFutureAppointments    *int              `json:"max_future_appointments,omitempty"`
+	MinLeadMinutes           *int              `json:"min_lead_minutes,omitempty"`
+	ProfessionalsCanBlock    *bool             `json:"professionals_can_block,omitempty"`
+	ReminderHours            *int              `json:"reminder_hours,omitempty"`
+	ScheduleToleranceMinutes *int              `json:"schedule_tolerance_minutes,omitempty"`
 
 	// ServiceMode Forma de atendimento: por ordem de chegada (fila), com horário marcado (agenda) ou os dois.
 	ServiceMode     *ServiceMode `json:"service_mode,omitempty"`
@@ -3188,6 +3345,9 @@ type Appointment struct {
 	EstablishmentId Id         `json:"establishment_id"`
 	FinishedAt      *Timestamp `json:"finished_at"`
 
+	// HoldExpiresAt Fim do prazo para pagar a reserva (`held`); depois disso o horário é liberado.
+	HoldExpiresAt *Timestamp `json:"hold_expires_at"`
+
 	// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
 	Id Id `json:"id"`
 
@@ -3202,12 +3362,18 @@ type Appointment struct {
 	Origin          AppointmentOrigin `json:"origin"`
 	ParticipationId *Id               `json:"participation_id"`
 
-	// Payment Parte 1 — reserva gratuita (nada agora; tudo na barbearia).
+	// Payment Valores aceitos na reserva. `booking` = obrigação paga (sinal ou taxa); nulo na reserva gratuita.
 	Payment struct {
-		DueAtStore     Money                  `json:"due_at_store"`
-		DueNow         Money                  `json:"due_now"`
-		EstimatedTotal Money                  `json:"estimated_total"`
-		Mode           AppointmentPaymentMode `json:"mode"`
+		Booking        *BookingPayment `json:"booking"`
+		DueAtStore     Money           `json:"due_at_store"`
+		DueNow         Money           `json:"due_now"`
+		EstimatedTotal Money           `json:"estimated_total"`
+
+		// FreeCancelUntil Até este instante o cancelamento pelo cliente devolve o valor pago. Nulo na reserva gratuita.
+		FreeCancelUntil *Timestamp `json:"free_cancel_until"`
+
+		// Mode Reserva gratuita, sinal (abatido do atendimento) ou taxa de reserva (cobrada além do atendimento).
+		Mode BookingMode `json:"mode"`
 	} `json:"payment"`
 	Price        Money `json:"price"`
 	Professional struct {
@@ -3220,8 +3386,10 @@ type Appointment struct {
 	ServiceMinutes int `json:"service_minutes"`
 
 	// StartsAt RFC 3339 em UTC com sufixo Z.
-	StartsAt Timestamp         `json:"starts_at"`
-	Status   AppointmentStatus `json:"status"`
+	StartsAt Timestamp `json:"starts_at"`
+
+	// Status `held` = aguardando o Pix da reserva até `hold_expires_at`; `expired` = o prazo venceu sem pagamento.
+	Status AppointmentStatus `json:"status"`
 
 	// StoreLate A tolerância passou e a loja não chamou (não é falta do cliente).
 	StoreLate bool   `json:"store_late"`
@@ -3243,9 +3411,6 @@ type AppointmentIdentityKind string
 
 // AppointmentOrigin defines model for Appointment.Origin.
 type AppointmentOrigin string
-
-// AppointmentPaymentMode defines model for Appointment.Payment.Mode.
-type AppointmentPaymentMode string
 
 // AppointmentCreated defines model for AppointmentCreated.
 type AppointmentCreated struct {
@@ -3278,6 +3443,9 @@ type AppointmentCreated struct {
 	EstablishmentId Id         `json:"establishment_id"`
 	FinishedAt      *Timestamp `json:"finished_at"`
 
+	// HoldExpiresAt Fim do prazo para pagar a reserva (`held`); depois disso o horário é liberado.
+	HoldExpiresAt *Timestamp `json:"hold_expires_at"`
+
 	// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
 	Id Id `json:"id"`
 
@@ -3292,12 +3460,18 @@ type AppointmentCreated struct {
 	Origin          AppointmentCreatedOrigin `json:"origin"`
 	ParticipationId *Id                      `json:"participation_id"`
 
-	// Payment Parte 1 — reserva gratuita (nada agora; tudo na barbearia).
+	// Payment Valores aceitos na reserva. `booking` = obrigação paga (sinal ou taxa); nulo na reserva gratuita.
 	Payment struct {
-		DueAtStore     Money                         `json:"due_at_store"`
-		DueNow         Money                         `json:"due_now"`
-		EstimatedTotal Money                         `json:"estimated_total"`
-		Mode           AppointmentCreatedPaymentMode `json:"mode"`
+		Booking        *BookingPayment `json:"booking"`
+		DueAtStore     Money           `json:"due_at_store"`
+		DueNow         Money           `json:"due_now"`
+		EstimatedTotal Money           `json:"estimated_total"`
+
+		// FreeCancelUntil Até este instante o cancelamento pelo cliente devolve o valor pago. Nulo na reserva gratuita.
+		FreeCancelUntil *Timestamp `json:"free_cancel_until"`
+
+		// Mode Reserva gratuita, sinal (abatido do atendimento) ou taxa de reserva (cobrada além do atendimento).
+		Mode BookingMode `json:"mode"`
 	} `json:"payment"`
 	Price        Money `json:"price"`
 	Professional struct {
@@ -3310,8 +3484,10 @@ type AppointmentCreated struct {
 	ServiceMinutes int `json:"service_minutes"`
 
 	// StartsAt RFC 3339 em UTC com sufixo Z.
-	StartsAt Timestamp         `json:"starts_at"`
-	Status   AppointmentStatus `json:"status"`
+	StartsAt Timestamp `json:"starts_at"`
+
+	// Status `held` = aguardando o Pix da reserva até `hold_expires_at`; `expired` = o prazo venceu sem pagamento.
+	Status AppointmentStatus `json:"status"`
 
 	// StoreLate A tolerância passou e a loja não chamou (não é falta do cliente).
 	StoreLate bool   `json:"store_late"`
@@ -3334,9 +3510,6 @@ type AppointmentCreatedIdentityKind string
 // AppointmentCreatedOrigin defines model for AppointmentCreated.Origin.
 type AppointmentCreatedOrigin string
 
-// AppointmentCreatedPaymentMode defines model for AppointmentCreated.Payment.Mode.
-type AppointmentCreatedPaymentMode string
-
 // AppointmentItem defines model for AppointmentItem.
 type AppointmentItem struct {
 	DurationMinutes int                 `json:"duration_minutes"`
@@ -3351,7 +3524,7 @@ type AppointmentItem struct {
 // AppointmentItemKind defines model for AppointmentItem.Kind.
 type AppointmentItemKind string
 
-// AppointmentStatus defines model for AppointmentStatus.
+// AppointmentStatus `held` = aguardando o Pix da reserva até `hold_expires_at`; `expired` = o prazo venceu sem pagamento.
 type AppointmentStatus string
 
 // AudienceKind Canal/audiência de eventos SSE.
@@ -3394,7 +3567,10 @@ type Availability struct {
 	LastDate      openapi_types.Date `json:"last_date"`
 
 	// Mode Forma de atendimento: por ordem de chegada (fila), com horário marcado (agenda) ou os dois.
-	Mode           ServiceMode                `json:"mode"`
+	Mode ServiceMode `json:"mode"`
+
+	// Payment Cotação calculada no servidor (a confirmação refaz a conta).
+	Payment        BookingQuote               `json:"payment"`
 	Price          Money                      `json:"price"`
 	Professionals  []AvailabilityProfessional `json:"professionals"`
 	ServiceMinutes int                        `json:"service_minutes"`
@@ -3441,10 +3617,110 @@ type AvailabilitySlot struct {
 	StartsAt Timestamp `json:"starts_at"`
 }
 
+// BookingCharge defines model for BookingCharge.
+type BookingCharge struct {
+	Amount Money `json:"amount"`
+
+	// BrCode Copia-e-cola; nulo depois de vencido ou cancelado.
+	BrCode *string `json:"br_code"`
+
+	// CreatedAt RFC 3339 em UTC com sufixo Z.
+	CreatedAt Timestamp  `json:"created_at"`
+	ExpiresAt *Timestamp `json:"expires_at"`
+
+	// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	Id     Id              `json:"id"`
+	Status PixChargeStatus `json:"status"`
+}
+
+// BookingChargeResult defines model for BookingChargeResult.
+type BookingChargeResult struct {
+	Amount      Money       `json:"amount"`
+	Appointment Appointment `json:"appointment"`
+
+	// BrCode Copia-e-cola; nulo depois de vencido ou cancelado.
+	BrCode *string `json:"br_code"`
+
+	// CreatedAt RFC 3339 em UTC com sufixo Z.
+	CreatedAt Timestamp  `json:"created_at"`
+	ExpiresAt *Timestamp `json:"expires_at"`
+
+	// Id Identificador opaco gerado pelo servidor (UUIDv7). Não serve como prova de acesso.
+	Id     Id              `json:"id"`
+	Status PixChargeStatus `json:"status"`
+}
+
+// BookingMode Reserva gratuita, sinal (abatido do atendimento) ou taxa de reserva (cobrada além do atendimento).
+type BookingMode string
+
+// BookingPayment defines model for BookingPayment.
+type BookingPayment struct {
+	Amount            Money          `json:"amount"`
+	CancelWindowHours int            `json:"cancel_window_hours"`
+	Charge            *BookingCharge `json:"charge"`
+	CreditApplied     Money          `json:"credit_applied"`
+
+	// HoldExpiresAt RFC 3339 em UTC com sufixo Z.
+	HoldExpiresAt Timestamp `json:"hold_expires_at"`
+
+	// LateCancelPolicy Cancelamento fora da janela ou falta do cliente — devolver ou reter o valor pago.
+	LateCancelPolicy LateCancelPolicy   `json:"late_cancel_policy"`
+	Mode             BookingPaymentMode `json:"mode"`
+
+	// Outcome Desfecho do valor pago: abatido na comanda, mantido pela barbearia ou a devolver.
+	Outcome *BookingPaymentOutcome `json:"outcome"`
+	PaidAt  *Timestamp             `json:"paid_at"`
+
+	// Refund Devolução (solicitada não é devolvida: o estado vem do provedor ou da confirmação do dono).
+	Refund *struct {
+		Amount  Money        `json:"amount"`
+		Partial bool         `json:"partial"`
+		Status  RefundStatus `json:"status"`
+	} `json:"refund"`
+	Status BookingPaymentStatus `json:"status"`
+
+	// Verifying Resultado do Pix ainda desconhecido (mostrar "Verificando pagamento").
+	Verifying bool `json:"verifying"`
+}
+
+// BookingPaymentMode defines model for BookingPayment.Mode.
+type BookingPaymentMode string
+
+// BookingPaymentOutcome Desfecho do valor pago: abatido na comanda, mantido pela barbearia ou a devolver.
+type BookingPaymentOutcome string
+
+// BookingPaymentStatus defines model for BookingPaymentStatus.
+type BookingPaymentStatus string
+
+// BookingQuote Cotação calculada no servidor (a confirmação refaz a conta).
+type BookingQuote struct {
+	CancelWindowHours int   `json:"cancel_window_hours"`
+	DueAtStore        Money `json:"due_at_store"`
+	DueNow            Money `json:"due_now"`
+	EstimatedTotal    Money `json:"estimated_total"`
+
+	// LateCancelPolicy Cancelamento fora da janela ou falta do cliente — devolver ou reter o valor pago.
+	LateCancelPolicy LateCancelPolicy `json:"late_cancel_policy"`
+
+	// Mode Reserva gratuita, sinal (abatido do atendimento) ou taxa de reserva (cobrada além do atendimento).
+	Mode  BookingMode `json:"mode"`
+	Terms string      `json:"terms"`
+}
+
 // CallNextRequest defines model for CallNextRequest.
 type CallNextRequest struct {
 	// StartImmediately O cliente já está na cadeira; chama e inicia juntos (a agenda reserva só duração + margem, sem a tolerância).
 	StartImmediately *bool `json:"start_immediately,omitempty"`
+}
+
+// CancelAppointmentRequest defines model for CancelAppointmentRequest.
+type CancelAppointmentRequest struct {
+	// AcceptRetention O cliente confirma que o valor pago fica com a barbearia (fora da janela).
+	AcceptRetention *bool `json:"accept_retention,omitempty"`
+
+	// ExpectedVersion Versão do agregado; incrementa a cada mudança.
+	ExpectedVersion Version `json:"expected_version"`
+	Reason          *Reason `json:"reason,omitempty"`
 }
 
 // CatalogCategory defines model for CatalogCategory.
@@ -3932,6 +4208,12 @@ type FieldErrorCode string
 type FinancialIssue struct {
 	Amount *Money `json:"amount,omitempty"`
 
+	// AppointmentId Reserva paga da pendência (Pix tardio, sobra do sinal a devolver; ADR-0039).
+	AppointmentId *Id `json:"appointment_id,omitempty"`
+
+	// BookingRefundId Devolução de reserva que o dono confirma (`confirmBookingRefund`) ou dá como falha por esta pendência.
+	BookingRefundId *Id `json:"booking_refund_id,omitempty"`
+
 	// CreatedAt RFC 3339 em UTC com sufixo Z.
 	CreatedAt Timestamp `json:"created_at"`
 
@@ -3939,7 +4221,7 @@ type FinancialIssue struct {
 	Id   Id                 `json:"id"`
 	Kind FinancialIssueKind `json:"kind"`
 
-	// OrderId Comanda da pendência. Nulo só em `restored_orphan_charge` (cobrança paga no provedor cuja comanda não existe no banco restaurado; etapa 12).
+	// OrderId Comanda da pendência. Nulo em `restored_orphan_charge` (cobrança paga no provedor cuja comanda não existe no banco restaurado; etapa 12) e nas pendências de reserva paga (`appointment_id`).
 	OrderId *Id `json:"order_id"`
 
 	// ProviderReference Id da cobrança no provedor (para localizar no painel do provedor), quando a pendência veio da conciliação pós-restauração.
@@ -4052,6 +4334,9 @@ type ItemQuantityRequest struct {
 	ItemId   Id  `json:"item_id"`
 	Quantity int `json:"quantity"`
 }
+
+// LateCancelPolicy Cancelamento fora da janela ou falta do cliente — devolver ou reter o valor pago.
+type LateCancelPolicy string
 
 // LedgerEntry defines model for LedgerEntry.
 type LedgerEntry struct {
@@ -4379,11 +4664,14 @@ type OrderLines = []OrderLineRequest
 // OrderPayment defines model for OrderPayment.
 type OrderPayment struct {
 	Amounts struct {
-		Conferred   Money `json:"conferred"`
-		Due         Money `json:"due"`
-		Outstanding Money `json:"outstanding"`
-		Received    Money `json:"received"`
-		Refunded    Money `json:"refunded"`
+		Conferred Money `json:"conferred"`
+
+		// Credit Sinal pago na reserva e abatido desta comanda (não é dinheiro novo); `due` já o desconta.
+		Credit      *Money `json:"credit,omitempty"`
+		Due         Money  `json:"due"`
+		Outstanding Money  `json:"outstanding"`
+		Received    Money  `json:"received"`
+		Refunded    Money  `json:"refunded"`
 	} `json:"amounts"`
 	Charges      []PixCharge    `json:"charges"`
 	MethodChoice *PaymentMethod `json:"method_choice"`
@@ -5462,6 +5750,15 @@ type Visit struct {
 // VisitOrigin Entrada pela fila (FIFO) ou horário marcado chamado (não conta como entrada FIFO).
 type VisitOrigin string
 
+// VisitorContact defines model for VisitorContact.
+type VisitorContact struct {
+	CodeExpiresAt *Timestamp `json:"code_expires_at"`
+
+	// EmailMasked Ex.: an***@exemplo.com (o endereço completo nunca volta).
+	EmailMasked string `json:"email_masked"`
+	Verified    bool   `json:"verified"`
+}
+
 // VisitorSessionCreated defines model for VisitorSessionCreated.
 type VisitorSessionCreated struct {
 	// RecoveryCode Exibido uma única vez; não é armazenado em claro.
@@ -5632,6 +5929,16 @@ type AppointmentOk struct {
 // BadRequest RFC 9457 (application/problem+json) com extensões.
 type BadRequest = Problem
 
+// BookingChargeOk defines model for BookingChargeOk.
+type BookingChargeOk struct {
+	Data BookingChargeResult `json:"data"`
+}
+
+// BookingPaymentOk defines model for BookingPaymentOk.
+type BookingPaymentOk struct {
+	Data BookingPayment `json:"data"`
+}
+
 // Conflict RFC 9457 (application/problem+json) com extensões.
 type Conflict = Problem
 
@@ -5728,6 +6035,11 @@ type UnsupportedMediaType = Problem
 // VisitOk defines model for VisitOk.
 type VisitOk struct {
 	Data Visit `json:"data"`
+}
+
+// VisitorContactOk defines model for VisitorContactOk.
+type VisitorContactOk struct {
+	Data VisitorContact `json:"data"`
 }
 
 // GetLiveness200JSONResponseBodyStatus defines parameters for GetLiveness.
@@ -5990,6 +6302,12 @@ type CancelAppointmentParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// CreateAppointmentPixChargeParams defines parameters for CreateAppointmentPixCharge.
+type CreateAppointmentPixChargeParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // RescheduleAppointmentParams defines parameters for RescheduleAppointment.
 type RescheduleAppointmentParams struct {
 	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
@@ -6002,6 +6320,18 @@ type ListAuditEventsParams struct {
 
 	// Cursor Cursor opaco de paginação devolvido em page.next_cursor.
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// ConfirmBookingRefundParams defines parameters for ConfirmBookingRefund.
+type ConfirmBookingRefundParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// MarkBookingRefundFailedParams defines parameters for MarkBookingRefundFailed.
+type MarkBookingRefundFailedParams struct {
+	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
 // CreateCategoryParams defines parameters for CreateCategory.
@@ -6477,6 +6807,16 @@ type UpdateQueueSettingsParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// SetVisitorContactJSONBody defines parameters for SetVisitorContact.
+type SetVisitorContactJSONBody struct {
+	Email openapi_types.Email `json:"email"`
+}
+
+// VerifyVisitorContactJSONBody defines parameters for VerifyVisitorContact.
+type VerifyVisitorContactJSONBody struct {
+	Code string `json:"code"`
+}
+
 // UpdateMyProfileParams defines parameters for UpdateMyProfile.
 type UpdateMyProfileParams struct {
 	// IdempotencyKey Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação.
@@ -6560,6 +6900,16 @@ type ListPublicEstablishmentsParams struct {
 
 // ListPublicEstablishmentsParamsSort defines parameters for ListPublicEstablishments.
 type ListPublicEstablishmentsParamsSort string
+
+// RequestAppointmentAccessJSONBody defines parameters for RequestAppointmentAccess.
+type RequestAppointmentAccessJSONBody struct {
+	Email openapi_types.Email `json:"email"`
+}
+
+// ExchangeAppointmentAccessJSONBody defines parameters for ExchangeAppointmentAccess.
+type ExchangeAppointmentAccessJSONBody struct {
+	Token string `json:"token"`
+}
 
 // GetAvailabilityParams defines parameters for GetAvailability.
 type GetAvailabilityParams struct {
@@ -6654,10 +7004,16 @@ type SignalAppointmentArrivalJSONRequestBody = VersionedRequest
 type CallAppointmentJSONRequestBody = VersionedRequest
 
 // CancelAppointmentJSONRequestBody defines body for CancelAppointment for application/json ContentType.
-type CancelAppointmentJSONRequestBody = VersionedReasonRequest
+type CancelAppointmentJSONRequestBody = CancelAppointmentRequest
 
 // RescheduleAppointmentJSONRequestBody defines body for RescheduleAppointment for application/json ContentType.
 type RescheduleAppointmentJSONRequestBody = RescheduleAppointmentRequest
+
+// ConfirmBookingRefundJSONRequestBody defines body for ConfirmBookingRefund for application/json ContentType.
+type ConfirmBookingRefundJSONRequestBody = ConfirmRefundRequest
+
+// MarkBookingRefundFailedJSONRequestBody defines body for MarkBookingRefundFailed for application/json ContentType.
+type MarkBookingRefundFailedJSONRequestBody = ConfirmRefundRequest
 
 // CreateCategoryJSONRequestBody defines body for CreateCategory for application/json ContentType.
 type CreateCategoryJSONRequestBody = CategoryRequest
@@ -6872,6 +7228,12 @@ type UpdatePaymentSettingsJSONRequestBody = PaymentSettingsRequest
 // UpdateQueueSettingsJSONRequestBody defines body for UpdateQueueSettings for application/json ContentType.
 type UpdateQueueSettingsJSONRequestBody = QueueSettingsRequest
 
+// SetVisitorContactJSONRequestBody defines body for SetVisitorContact for application/json ContentType.
+type SetVisitorContactJSONRequestBody SetVisitorContactJSONBody
+
+// VerifyVisitorContactJSONRequestBody defines body for VerifyVisitorContact for application/json ContentType.
+type VerifyVisitorContactJSONRequestBody VerifyVisitorContactJSONBody
+
 // CreateVisitorSessionJSONRequestBody defines body for CreateVisitorSession for application/json ContentType.
 type CreateVisitorSessionJSONRequestBody = CreateVisitorSessionRequest
 
@@ -6889,6 +7251,12 @@ type RemoveMyAvatarJSONRequestBody = VersionedRequest
 
 // RequestAccountDeletionJSONRequestBody defines body for RequestAccountDeletion for application/json ContentType.
 type RequestAccountDeletionJSONRequestBody = RequestDeletionRequest
+
+// RequestAppointmentAccessJSONRequestBody defines body for RequestAppointmentAccess for application/json ContentType.
+type RequestAppointmentAccessJSONRequestBody RequestAppointmentAccessJSONBody
+
+// ExchangeAppointmentAccessJSONRequestBody defines body for ExchangeAppointmentAccess for application/json ContentType.
+type ExchangeAppointmentAccessJSONRequestBody ExchangeAppointmentAccessJSONBody
 
 // ReceiveAbacatePayWebhookJSONRequestBody defines body for ReceiveAbacatePayWebhook for application/json ContentType.
 type ReceiveAbacatePayWebhookJSONRequestBody = ReceiveAbacatePayWebhookJSONBody

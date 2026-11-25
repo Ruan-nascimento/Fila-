@@ -12,12 +12,13 @@ import (
 	"fila/internal/acesso"
 	"fila/internal/auditoria"
 	"fila/internal/estabelecimento"
+	"fila/internal/pagamento"
 	"fila/internal/platform/database"
 	hs "fila/internal/platform/httpserver"
 	"fila/internal/platform/outbox"
 )
 
-// Estados da reserva (AppointmentStatus).
+// Estados da reserva (AppointmentStatus). held/expired: cobrança da reserva (cobranca.go).
 const (
 	StatusConfirmed   = "confirmed"
 	StatusCalled      = "called"
@@ -29,7 +30,7 @@ const (
 )
 
 func terminal(s string) bool {
-	return s == StatusCompleted || s == StatusInterrupted || s == StatusNoShow || s == StatusCancelled
+	return s == StatusCompleted || s == StatusInterrupted || s == StatusNoShow || s == StatusCancelled || s == StatusExpired
 }
 
 // Tipo de evento (EventType) e recurso.
@@ -70,13 +71,15 @@ type appointment struct {
 	Version          int64
 	CreatedAt        time.Time
 	FinishedAt       *time.Time
+	HoldExpiresAt    *time.Time
 }
 
 const appointmentSelect = `
 	SELECT id, establishment_id, professional_id, account_id, visitor_id, nick, origin, status, cancelled_by,
 	       local_date, timezone, starts_at, ends_at, service_minutes, buffer_minutes, tolerance_minutes,
 	       checkin_window_minutes, policy_version, price_cents, called_at, deadline_at, arrived_at,
-	       arrival_signal_at, store_late_at, participation_id, end_reason, revision, version, created_at, finished_at
+	       arrival_signal_at, store_late_at, participation_id, end_reason, revision, version, created_at, finished_at,
+	       hold_expires_at
 	FROM appointment`
 
 func scanAppointment(r pgx.Row) (appointment, error) {
@@ -84,7 +87,8 @@ func scanAppointment(r pgx.Row) (appointment, error) {
 	err := r.Scan(&a.ID, &a.EstablishmentID, &a.ProfessionalID, &a.AccountID, &a.VisitorID, &a.Nick, &a.Origin, &a.Status,
 		&a.CancelledBy, &a.LocalDate, &a.Timezone, &a.StartsAt, &a.EndsAt, &a.ServiceMinutes, &a.BufferMinutes, &a.Tolerance,
 		&a.CheckinWindow, &a.PolicyVersion, &a.PriceCents, &a.CalledAt, &a.DeadlineAt, &a.ArrivedAt, &a.ArrivalSignalAt,
-		&a.StoreLateAt, &a.ParticipationID, &a.EndReason, &a.Revision, &a.Version, &a.CreatedAt, &a.FinishedAt)
+		&a.StoreLateAt, &a.ParticipationID, &a.EndReason, &a.Revision, &a.Version, &a.CreatedAt, &a.FinishedAt,
+		&a.HoldExpiresAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return a, errNoAppointment
 	}
@@ -151,12 +155,17 @@ type professionalRef struct {
 	DisplayName string    `json:"display_name"`
 }
 
-// paymentView: na parte 1 a reserva é gratuita (nada a pagar agora; tudo na barbearia).
+// paymentView: o que se paga agora e na barbearia. Booking: obrigação da reserva paga (sinal ou
+// taxa), com o Pix, a devolução e o crédito aplicado; nulo na reserva gratuita.
 type paymentView struct {
-	Mode         string `json:"mode"`
-	DueNow       money  `json:"due_now"`
-	DueAtStore   money  `json:"due_at_store"`
-	EstimatedFor money  `json:"estimated_total"`
+	Mode         string                 `json:"mode"`
+	DueNow       money                  `json:"due_now"`
+	DueAtStore   money                  `json:"due_at_store"`
+	EstimatedFor money                  `json:"estimated_total"`
+	Booking      *pagamento.BookingView `json:"booking"`
+	// FreeCancelUntil: até este instante o cancelamento pelo cliente devolve o valor (janela
+	// aceita na reserva). Nulo na reserva gratuita.
+	FreeCancelUntil *time.Time `json:"free_cancel_until"`
 }
 
 type appointmentView struct {
@@ -189,6 +198,7 @@ type appointmentView struct {
 	Version              int64           `json:"version"`
 	CreatedAt            time.Time       `json:"created_at"`
 	FinishedAt           *time.Time      `json:"finished_at"`
+	HoldExpiresAt        *time.Time      `json:"hold_expires_at"`
 	// Só para a equipe.
 	Nick         string  `json:"nick,omitempty"`
 	IdentityKind string  `json:"identity_kind,omitempty"`
@@ -234,6 +244,10 @@ func views(ctx context.Context, q database.Querier, list []appointment, forStaff
 	if err != nil {
 		return nil, err
 	}
+	bookings, err := pagamento.BookingViews(ctx, q, ids)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]appointmentView, len(list))
 	for i, a := range list {
 		loc, err := time.LoadLocation(a.Timezone)
@@ -248,7 +262,10 @@ func views(ctx context.Context, q database.Querier, list []appointment, forStaff
 			Payment: paymentView{Mode: "free", DueNow: brl(0), DueAtStore: brl(a.PriceCents), EstimatedFor: brl(a.PriceCents)},
 			Terms:   termsFree, CalledAt: a.CalledAt, DeadlineAt: a.DeadlineAt, ArrivedAt: a.ArrivedAt, ArrivalSignalAt: a.ArrivalSignalAt,
 			StoreLate: a.StoreLateAt != nil && a.Status == StatusConfirmed, ParticipationID: a.ParticipationID, Revision: a.Revision,
-			Version: a.Version, CreatedAt: a.CreatedAt, FinishedAt: a.FinishedAt}
+			Version: a.Version, CreatedAt: a.CreatedAt, FinishedAt: a.FinishedAt, HoldExpiresAt: utc(a.HoldExpiresAt)}
+		if b, ok := bookings[a.ID]; ok {
+			v.Payment, v.Terms = bookingPayment(a, b), bookingTerms(a, b)
+		}
 		// Instantes sempre em UTC (o contrato usa o sufixo Z); a hora local vem em local_time.
 		v.StartsAt, v.EndsAt, v.CreatedAt = v.StartsAt.UTC(), v.EndsAt.UTC(), v.CreatedAt.UTC()
 		v.CalledAt, v.DeadlineAt, v.ArrivedAt = utc(v.CalledAt), utc(v.DeadlineAt), utc(v.ArrivedAt)
@@ -324,6 +341,9 @@ func (s *Service) afterChange(ctx context.Context, q database.Querier, estID, id
 	if err := auditoria.Record(ctx, q, auditoria.Event{EstablishmentID: &estID, OccurredAt: at, ActorKind: actor.kind,
 		ActorID: actor.id, Action: action, TargetType: "appointment", TargetID: a.ID, FromState: from, ToState: a.Status,
 		Reason: reason, RequestID: hs.RequestIDFrom(ctx)}); err != nil {
+		return err
+	}
+	if err := s.planNotices(ctx, q, a, action, at); err != nil {
 		return err
 	}
 	forCustomer, err := view(ctx, q, a, false)

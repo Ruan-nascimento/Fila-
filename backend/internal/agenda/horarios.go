@@ -242,7 +242,7 @@ func (s *Service) setHours(w http.ResponseWriter, r *http.Request) error {
 			}
 			affected = profs[i : i+1]
 		}
-		if err := lockChairs(ctx, tx, estID, affected); err != nil {
+		if err := s.lockChairs(ctx, tx, estID, affected); err != nil {
 			return idempotency.Result{}, err
 		}
 		shifts := []ShiftDef{}
@@ -351,7 +351,7 @@ func (s *Service) outsideHours(ctx context.Context, tx pgx.Tx, estID uuid.UUID, 
 		ids[i] = p.ID
 	}
 	rows, err := tx.Query(ctx, appointmentSelect+` WHERE establishment_id = $1 AND professional_id = ANY($2)
-		AND status = 'confirmed' AND local_date >= $3 ORDER BY starts_at LIMIT 500`, estID, ids, from.Date())
+		AND status IN ('held', 'confirmed') AND local_date >= $3 ORDER BY starts_at LIMIT 500`, estID, ids, from.Date())
 	if err != nil {
 		return nil, err
 	}
@@ -554,7 +554,7 @@ func (s *Service) createException(w http.ResponseWriter, r *http.Request) error 
 			}
 			profs = profs[i : i+1]
 		}
-		if err := lockChairs(ctx, tx, estID, profs); err != nil {
+		if err := s.lockChairs(ctx, tx, estID, profs); err != nil {
 			return idempotency.Result{}, err
 		}
 		var sm, em *int
@@ -611,7 +611,7 @@ func (s *Service) createException(w http.ResponseWriter, r *http.Request) error 
 // activeAppointmentsIn lista reservas ativas (confirmadas, chamadas ou em atendimento) no período.
 func activeAppointmentsIn(ctx context.Context, q database.Querier, estID uuid.UUID, profIDs []uuid.UUID, iv Interval) ([]conflictItem, error) {
 	rows, err := q.Query(ctx, `SELECT id, professional_id, starts_at, nick FROM appointment
-		WHERE establishment_id = $1 AND professional_id = ANY($2) AND status IN ('confirmed', 'called', 'in_service')
+		WHERE establishment_id = $1 AND professional_id = ANY($2) AND status IN ('held', 'confirmed', 'called', 'in_service')
 		  AND tstzrange(starts_at, ends_at, '[)') && tstzrange($3, $4, '[)') ORDER BY starts_at LIMIT 200`,
 		estID, profIDs, iv.Start, iv.End)
 	if err != nil {

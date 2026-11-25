@@ -57,6 +57,11 @@ export const issueText: Record<IssueKind, string> = {
     "Pix pago que o backup restaurado não conhecia (a comanda não existe mais): localize pela referência no painel da AbacatePay e devolva ou registre o atendimento.",
   restored_refund_unrecorded:
     "Estorno feito na AbacatePay depois do backup e que o sistema não tinha: registre o estorno de novo na comanda.",
+  booking_late_payment:
+    "Pix da reserva pago depois do prazo (o horário já tinha sido liberado): a devolução integral foi pedida ao banco.",
+  booking_refund_due:
+    "Sobra do sinal da reserva a devolver (o atendimento custou menos que o sinal): devolva pelo Pix e confirme aqui.",
+  booking_notice_failed: "Aviso da reserva por e-mail não enviado: avise o cliente por outro meio.",
 };
 
 /** Estorno que ainda conta como ativo ou feito (não falhou). */

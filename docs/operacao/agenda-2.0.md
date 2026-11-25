@@ -6,8 +6,8 @@ Documento de retomada do trabalho descrito em `Fila-2.0-Prompt-de-implementacao.
 |---|---|
 | Worktree | `../Fila-2.0` (branch `agenda-2.0`) |
 | Base usada | `36e2d08` (origin/main, "Merge pull request #27 … docs-1.0.0") — a mesma citada no documento; nenhuma divergência entre HEAD e a base |
-| Situação | **Parte 1 concluída e testada localmente**, sem commit (aguardando autorização) |
-| Decisão | [ADR-0038](../adr/0038-agenda-hibrida-e-uma-cadeira.md) |
+| Situação | Parte 1 concluída, publicada na homologação (`cd3a110`, `d4da562`). **Parte 2 concluída e testada localmente** (base da parte 2: `d4da562`; origin/main ainda em `36e2d08`) |
+| Decisões | [ADR-0038](../adr/0038-agenda-hibrida-e-uma-cadeira.md) (parte 1), [ADR-0039](../adr/0039-reserva-com-pix-avisos-e-recuperacao.md) (parte 2) |
 
 Atenção ao juntar: a worktree principal (`indicadores-e-carregamento`) tem alterações de interface não commitadas em `Gestao.tsx`, `ui.tsx`, `styles.css` e várias páginas. A parte 1 também mexe em `Gestao.tsx`, `Loja.tsx`, `Painel.tsx` e `Conta.tsx`: espere conflitos de texto nesses arquivos.
 
@@ -54,6 +54,55 @@ Não executados: Edge (só Chrome nesta máquina), Windows, programa desktop (Ta
 
 ## 5. Pendências conscientes (próximas partes)
 
-- Parte 2: sinal/taxa via Pix, e-mails de confirmação/lembrete/chamada, recuperação do visitante por e-mail (hoje o visitante marca até 7 dias à frente e recupera pelo código), política de cancelamento em horas.
 - Parte 3: calendário mensal agregado, histórico da equipe paginado por cursor, indicadores no dashboard desktop, medição de carga, guia prático e PDF atualizados, ensaio do worker parado/restauração com reservas.
 - Desativar profissional com reserva futura já é recusado (`professional_has_appointments`, com a contagem); falta uma tela que liste e remaneje em lote (parte 3).
+
+---
+
+# Parte 2 — reserva com Pix, avisos e recuperação (ADR-0039)
+
+## 6. O que a parte 2 entrega
+
+- **Cobrança da reserva por loja** (Configurações → Agenda → "Cobrança da reserva"): gratuita (padrão), **sinal pelo Pix** (descontado do atendimento) ou **taxa de reserva pelo Pix** (além do atendimento), com valor, janela de cancelamento com devolução (padrão 12 h), política de falta/atraso (devolver — padrão — ou reter) e lembrete (padrão 24 h). Liberada por `FILA_AGENDA_COBRANCA` (e "reter" por `FILA_AGENDA_RETENCAO`), as duas desligadas em homologação/produção por padrão. Balcão continua gratuito.
+- **Cliente**: a revisão mostra "Agora, pelo Pix: R$ 15 · Na barbearia: R$ 45 · Total" e os termos ("Pague R$ 15 agora. Esse valor será descontado do atendimento…" / "A reserva custa R$ 15 além do atendimento. O total é R$ 75."); o horário fica retido ~18 min; "Gerar Pix" mostra QR e copia-e-cola; "Verificando pagamento" quando o resultado é desconhecido; a confirmação chega sozinha pelo banco. Minhas reservas: situação do pagamento, desconto aplicado, devolução (solicitada ≠ devolvida) e o cancelamento explica antes o que acontece com o dinheiro.
+- **Equipe**: selo na agenda ("Aguardando Pix de R$ 15", "Sinal de R$ 15 pago · na barbearia R$ 30"); comanda com a linha "Sinal pago na reserva (descontado)"; pendências novas (Pix tardio, sobra do sinal) com "Confirmar devolução" / "Não foi devolvido" (reautenticação).
+- **Avisos por e-mail** (confirmação, lembrete, chamada, remarcação, cancelamento, falta, expiração, devolução), revalidados antes de sair.
+- **Visitante**: confirma um e-mail por código (Minhas reservas) e recupera a reserva em outro aparelho por link (`/loja/<endereço>/acesso`, link "Recuperar pelo e-mail" na tela de agendar).
+- **Caixa** (painel analítico): o Pix da reserva conta quando entrou e o crédito não conta de novo (R$ 15 + R$ 45 = R$ 60); recebimentos e estornos de reserva aparecem no detalhamento (link para a Agenda).
+
+## 7. Migração
+
+`backend/migrations/00030_reserva_com_pix.sql` (expansão compatível; o Down recusa se houver obrigação gravada). Corrige também o gatilho adiado de quitação da comanda para reler a comanda atual (crédito gravado depois do total).
+
+## 8. Como testar pela interface (local)
+
+Ambiente: API + worker + Vite + simulador de Pix (`go run ./internal/pagamento/pagamentotest/simulador`, `FILA_PIX_PROVIDER=abacatepay`, `FILA_ABACATEPAY_API_KEY=abc_dev_simulador`, `FILA_ABACATEPAY_BASE_URL=http://127.0.0.1:18090/v2`), `FILA_AGENDA=true`, `FILA_AGENDA_COBRANCA=true`, `FILA_MAIL_MODE=file`.
+
+1. Pagamentos → Pix ligado. Agenda → "Os dois" e jornada (parte 1). Agenda → **Sinal pelo Pix** → R$ 15 → Salvar agenda.
+2. Página pública → Agendar → Beto → Corte → Amanhã → horário: a revisão mostra R$ 15 agora e o restante na barbearia → apelido → **Reservar … e pagar R$ 15,00** → **Gerar Pix**.
+3. Pagar no simulador: `curl -X POST "http://127.0.0.1:18090/control/set?externalId=<id do Pix>&status=PAID"` (o id aparece em `GET /v1/my-appointments`). Em até ~2 s a tela vira "Horário confirmado · Sinal de R$ 15,00 pago pelo Pix".
+4. Gestão → Agenda → Por dia → Amanhã: selo do sinal. Chamar → atender → concluir: a comanda mostra "Sinal pago na reserva (descontado) −R$ 15" e deve o restante.
+5. Pix tardio: reserve, gere o Pix, espere ~18 min (ou rode o worker depois do prazo) e pague no simulador: a reserva fica "Não paga no prazo", aparece a pendência e a devolução segue sozinha.
+6. Política: com janela de 2 h e "Reter" (precisa `FILA_AGENDA_RETENCAO=true`), cancele faltando menos de 2 h: a tela avisa que o valor fica com a barbearia e pede confirmação.
+7. Visitante: Minhas reservas → e-mail → código (na pasta de e-mails) → em outra janela anônima, `/loja/<endereço>/acesso` → e-mail → link do e-mail → a reserva aparece.
+
+## 9. Testes executados (25/11/2026, `fila-teste-v1`, PostgreSQL 18.6)
+
+| O quê | Resultado |
+|---|---|
+| `go test ./...` (backend inteiro, integração real) | ok, 27 pacotes |
+| Reserva paga (`internal/api/reserva_paga_test.go`, C-BK-01…08) | 8 de 8 ok |
+| Concorrência | 6 reservas simultâneas no horário pago → 1 retém, 5 `slot_unavailable`; webhook 2× + consulta do worker juntos → 1 recebimento |
+| Varredura de autorização (rotas novas incluídas) | sem vazamento, 0 inconclusivas |
+| `go vet`, `go tool staticcheck`, `verificar_contrato.py`, `rastrear_evidencias.py` | sem erro |
+| Frontend: `tsc -b`, `eslint`, `prettier`, `vitest` (156) | ok |
+| E2E Chrome real: `reserva-paga.spec.ts` (dona liga o sinal, cliente reserva e paga pelo simulador, equipe vê) e `agenda.spec.ts` (três modos) | ok; a foto do dono exige `FILA_MEDIA_STORAGE=filesystem` (não ligado neste ambiente) |
+
+Não executados: AbacatePay sandbox real (homologação), Edge, celular físico.
+
+## 10. Pendências conscientes
+
+- Estorno parcial pelo provedor não existe (a AbacatePay só estorna o integral): a sobra do sinal é devolvida pela loja e confirmada com evidência.
+- O filtro por profissional do painel analítico não atribui o Pix da reserva antes da chamada (ainda não há comanda).
+- Retenção do valor só depois da política comercial aprovada (`FILA_AGENDA_RETENCAO`).
+- Parte 3 continua como listado na seção 5.

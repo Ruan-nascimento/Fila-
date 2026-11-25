@@ -77,7 +77,8 @@ func TestNoPackageImportsExecutables(t *testing.T) {
 var tableOwners = map[string][]string{
 	"identidade": {"account", "account_token", "account_session", "invite", "visitor", "visitor_browser", "visitor_credential",
 		"owner_session_slot", "owner_session_challenge", "desktop_activation_code", "desktop_installation", "desktop_link_ticket",
-		"desktop_binding", "desktop_proof_seen", "external_identity", "oidc_transaction"},
+		"desktop_binding", "desktop_proof_seen", "external_identity", "oidc_transaction", "visitor_contact",
+		"appointment_access_token"},
 	"midia":           {"media_asset"},
 	"estabelecimento": {"establishment", "establishment_slug_alias", "professional", "staff_membership", "queue", "establishment_settings"},
 	"catalogo":        {"service", "service_professional", "service_revision", "catalog_category", "product", "product_revision"},
@@ -88,14 +89,14 @@ var tableOwners = map[string][]string{
 	"exclusao":   {"deletion_request", "deletion_request_block"},
 	"fidelidade": {"loyalty_program", "loyalty_account", "loyalty_ledger", "reward", "reward_stock_movement", "reward_reservation"},
 	"pagamento": {"pix_charge", "receipt", "receipt_conferral", "refund", "financial_issue", "provider_event",
-		"payment_fee_config", "receipt_fee"},
+		"payment_fee_config", "receipt_fee", "booking_payment", "booking_credit"},
 	"platform/ratelimit":   {"rate_limit"},
 	"platform/idempotency": {"idempotency_record"},
 	"platform/mail":        {"mail_outbox"},
 	"platform/outbox":      {"outbox", "event_log", "event_stream_state"},
 	"operacao":             {"operation_state"},
 	"agenda": {"agenda_schedule", "agenda_shift", "agenda_exception", "appointment", "appointment_item", "agenda_occupancy",
-		"appointment_event"},
+		"appointment_event", "appointment_notice"},
 }
 
 // Leitura analítica do dono (ADR-0027): o módulo analitico agrega, no banco, dados de vários

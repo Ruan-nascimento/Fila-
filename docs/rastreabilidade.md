@@ -168,8 +168,16 @@ motivo. Teste citado aqui não quer dizer aprovado: o resultado de cada execuç�
 | R-AG-07 | C-AG-02, C-AG-07, C-AG-08 | automatizado |
 | R-AG-08 | C-AG-09 | automatizado |
 | R-AG-09 | C-AG-13 | automatizado |
+| R-BK-01 | C-BK-01, C-BK-07 | automatizado |
+| R-BK-02 | C-BK-01, C-BK-04 | automatizado |
+| R-BK-03 | C-BK-01, C-BK-02, C-BK-06, C-BK-07 | automatizado |
+| R-BK-04 | C-BK-01, C-BK-02, C-BK-06 | automatizado |
+| R-BK-05 | C-BK-01, C-BK-04, C-BK-05 | automatizado |
+| R-BK-06 | C-BK-03 | automatizado |
+| R-BK-07 | C-BK-08 | automatizado |
+| R-BK-08 | C-BK-08 | automatizado |
 
-Resumo: automatizado: 153 · parcial: 0 · sem teste: 2 · sem cenário: 0 · automatizado (estrutural): 4
+Resumo: automatizado: 161 · parcial: 0 · sem teste: 2 · sem cenário: 0 · automatizado (estrutural): 4
 
 ## 2. Cenários e testes
 
@@ -325,6 +333,14 @@ Resumo: automatizado: 153 · parcial: 0 · sem teste: 2 · sem cenário: 0 · au
 | C-AG-12 — Motor de disponibilidade e fuso | `backend/internal/agenda/motor_test.go: TestDiaDaLojaEmOutroFuso`<br>`backend/internal/agenda/motor_test.go: TestIntersectLojaProfissional`<br>`backend/internal/agenda/motor_test.go: TestMeiaNoiteEViradaDeMes`<br>`backend/internal/agenda/motor_test.go: TestProjecaoFIFOAntesDaAgenda`<br>`backend/internal/agenda/motor_test.go: TestProjecaoSemCapacidade`<br>`backend/internal/agenda/motor_test.go: TestSlotsAntecedenciaENuncaNoPassado`<br>`backend/internal/agenda/motor_test.go: TestSlotsDuracaoMultiplicadaPausaEFechamento`<br>`backend/internal/agenda/motor_test.go: TestSlotsModalidades`<br>`backend/internal/agenda/motor_test.go: TestSlotsSemiaberto`<br>`backend/internal/agenda/motor_test.go: TestTransicaoDeFuso`<br>`frontend/src/features/agenda/horario.test.ts: converte minutos e horas, inclusive o fim do dia (24:00)` |
 | C-AG-13 — Foto do dono na gestão | `frontend/e2e/agenda.spec.ts: foto do dono aparece nos dois links Minha conta e some ao remover` |
 | C-AG-14 — Reserva de balcão com identidade recuperável | `backend/internal/api/agenda_test.go: TestAgendaReservaDeBalcao` |
+| C-BK-01 — Sinal de ponta a ponta | `backend/internal/api/reserva_paga_test.go: TestReservaComSinalDePontaAPonta`<br>`frontend/e2e/reserva-paga.spec.ts: sinal pelo Pix: dona liga, cliente reserva, paga e a equipe vê o sinal` |
+| C-BK-02 — Pix pago depois do prazo | `backend/internal/api/reserva_paga_test.go: TestReservaPixTardioViraDevolucao` |
+| C-BK-03 — Cancelamento segue a política aceita | `backend/internal/api/reserva_paga_test.go: TestReservaCancelamentoSegueAPolitica` |
+| C-BK-04 — Sinal igual ao valor e taxa de reserva | `backend/internal/api/reserva_paga_test.go: TestReservaSinalIntegralETaxa` |
+| C-BK-05 — Interrompido com valor abaixo do sinal | `backend/internal/api/reserva_paga_test.go: TestReservaSobraDoSinalDevolucaoParcial` |
+| C-BK-06 — Concorrência no horário pago e no pagamento | `backend/internal/api/reserva_paga_test.go: TestReservaPagaConcorrencia` |
+| C-BK-07 — Cobrança só com liberação; balcão gratuito | `backend/internal/api/reserva_paga_test.go: TestReservaCobrancaSoComLiberacao` |
+| C-BK-08 — Avisos e recuperação pelo e-mail | `backend/internal/api/reserva_paga_test.go: TestReservaAvisosERecuperacaoPorEmail`<br>`frontend/e2e/reserva-paga.spec.ts: sinal pelo Pix: dona liga, cliente reserva, paga e a equipe vê o sinal` |
 
 ## 3. Cenários sem teste automatizado
 

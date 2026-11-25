@@ -14,10 +14,12 @@ import (
 	"fila/internal/acesso"
 	"fila/internal/estabelecimento"
 	"fila/internal/fila"
+	"fila/internal/pagamento"
 	"fila/internal/platform/clock"
 	"fila/internal/platform/database"
 	hs "fila/internal/platform/httpserver"
 	"fila/internal/platform/idempotency"
+	"fila/internal/platform/mail"
 	"fila/internal/platform/ratelimit"
 )
 
@@ -58,6 +60,15 @@ type Deps struct {
 	CounterVisitor func(ctx context.Context, tx pgx.Tx, estID uuid.UUID, nick string, now time.Time) (visitorID uuid.UUID, code string, validUntil time.Time, err error)
 	// TrustForwardedFor: IP do cliente pelo X-Forwarded-For (só atrás de proxy próprio).
 	TrustForwardedFor bool
+	// Payments é a cobrança da reserva (módulo pagamento). nil = reservas sempre gratuitas.
+	Payments *pagamento.Service
+	// Charge: cobrança da reserva liberada neste servidor (FILA_AGENDA_COBRANCA).
+	Charge bool
+	// Mail grava os avisos da reserva na caixa de saída cifrada; NoticeEmail resolve o endereço
+	// (conta ou contato verificado do visitante; módulo identidade). nil = sem avisos.
+	Mail          *mail.Outbox
+	NoticeEmail   func(ctx context.Context, q database.Querier, accountID, visitorID *uuid.UUID) (string, bool, error)
+	PublicBaseURL string
 }
 
 // Service implementa a agenda.
@@ -99,6 +110,7 @@ func (s *Service) Routes() []hs.Route {
 		{Operation: "confirmAppointmentArrival", Method: http.MethodPost, Path: appt + "/arrival", Grants: staff, Handler: s.confirmArrival},
 		{Operation: "signalAppointmentArrival", Method: http.MethodPost, Path: appt + "/arrival-signal", Grants: bookingOwner, Handler: s.signalArrival},
 		{Operation: "callAppointment", Method: http.MethodPost, Path: appt + "/call", Grants: staff, Handler: s.callAppointment},
+		{Operation: "createAppointmentPixCharge", Method: http.MethodPost, Path: appt + "/pix-charges", Grants: bookingOwner, Handler: s.createAppointmentPixCharge},
 	}
 }
 

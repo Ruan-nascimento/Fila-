@@ -6,6 +6,9 @@ import type { components } from "../../api/schema.gen";
 import { dataPorExtenso, horaNoFuso, itensTexto, situacaoReserva } from "../../features/agenda/horario";
 import { SeletorHorario, type Slot } from "../../features/agenda/SeletorHorario";
 import { useMinhasReservas } from "../../features/agenda/reservas";
+import { PagamentoReserva } from "../../features/agenda/PagamentoReserva";
+import { ContatoVisitante } from "../../features/agenda/ContatoVisitante";
+import { useSession } from "../../session/context";
 import { formatCents } from "../../money";
 import { useStreamMessages } from "../../stream/context";
 import { Badge, Button, ConfirmPanel, EmptyState, LoadError, Loading, Notice, Section } from "../../ui/ui";
@@ -17,6 +20,11 @@ type Appointment = components["schemas"]["Appointment"];
 /** "Minhas reservas" dentro da loja: próximas (com Cheguei, remarcar e cancelar) e anteriores. */
 export function MinhasReservas({ shopId, slug }: { shopId: string; slug: string }) {
   const up = useMinhasReservas("upcoming", shopId);
+  const { state } = useSession();
+  const visitante =
+    state.status === "ready" &&
+    state.session.account === null &&
+    state.session.visitors.some((v) => v.establishment_id === shopId);
   const past = useMinhasReservas("past", shopId);
   useStreamMessages((m) => {
     if (m.type === "appointment.updated") {
@@ -28,6 +36,7 @@ export function MinhasReservas({ shopId, slug }: { shopId: string; slug: string 
   if (!up.list) return <Loading>Carregando reservas…</Loading>;
   return (
     <div className="grid gap-6">
+      {visitante && <ContatoVisitante shopId={shopId} />}
       <Section
         title="Próximos horários"
         action={
@@ -83,8 +92,24 @@ function Reserva({ a, onChanged, slug }: { a: Appointment; onChanged: () => void
   const [painel, setPainel] = useState<null | "cancelar" | "remarcar">(null);
   const [novo, setNovo] = useState<Slot | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // Instante em que o painel de cancelar abriu (a janela de cancelamento é conferida nele).
+  const [agora, setAgora] = useState(0);
   const s = situacaoReserva(a);
   const path = { establishmentId: a.establishment_id, appointmentId: a.id };
+  // O que acontece com o valor pago ao cancelar agora (a política aceita na reserva; o servidor confere).
+  const b = a.payment.booking;
+  const pago = b?.status === "paid" && b.outcome === null;
+  const foraDaJanela =
+    a.payment.free_cancel_until !== null && agora > new Date(a.payment.free_cancel_until).getTime();
+  const retem = pago && foraDaJanela && b?.late_cancel_policy === "retain";
+  const textoCancelar =
+    a.status === "held"
+      ? "O horário fica livre para outra pessoa e o Pix ainda não pago deixa de valer. Se você pagar depois, o valor é devolvido."
+      : !pago
+        ? "O horário fica livre para outra pessoa. Reserva gratuita: não há cobrança."
+        : retem
+          ? `Faltam menos de ${b?.cancel_window_hours ?? 0} h para o horário: pela política aceita na reserva, o valor de ${formatCents(b?.amount.amount_cents ?? 0)} fica com a barbearia.`
+          : `O horário fica livre e o valor de ${formatCents(b?.amount.amount_cents ?? 0)} é devolvido pelo Pix (pode levar alguns dias para aparecer).`;
   async function sinalizar() {
     const out = await cmd.run(`cheguei:${a.id}:${a.version}`, (key) =>
       api.POST("/v1/establishments/{establishmentId}/appointments/{appointmentId}/arrival-signal", {
@@ -98,7 +123,9 @@ function Reserva({ a, onChanged, slug }: { a: Appointment; onChanged: () => void
     const out = await cmd.run(`cancelar:${a.id}:${a.version}`, (key) =>
       api.POST("/v1/establishments/{establishmentId}/appointments/{appointmentId}/cancel", {
         params: { path, header: { "Idempotency-Key": key } },
-        body: { expected_version: a.version },
+        body: retem
+          ? { expected_version: a.version, accept_retention: true }
+          : { expected_version: a.version },
       }),
     );
     setPainel(null);
@@ -133,12 +160,26 @@ function Reserva({ a, onChanged, slug }: { a: Appointment; onChanged: () => void
             {dataPorExtenso(a.local_date)}, às {a.local_time}
           </span>
           <span className="text-sm text-fg-muted">
-            Com {a.professional.display_name} · {itensTexto(a)} · {formatCents(a.price.amount_cents)} na
-            barbearia
+            Com {a.professional.display_name} · {itensTexto(a)} ·{" "}
+            {formatCents(b ? a.payment.due_at_store.amount_cents : a.price.amount_cents)} na barbearia
           </span>
         </span>
         <Badge tone={s.tom}>{s.texto}</Badge>
       </div>
+      <PagamentoReserva a={a} onChanged={onChanged} />
+      {a.status === "held" && painel === null && (
+        <div>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setAgora(Date.now());
+              setPainel("cancelar");
+            }}
+          >
+            Desistir da reserva
+          </Button>
+        </div>
+      )}
       {a.status === "called" && (
         <Notice kind="aviso" title="Você foi chamado!">
           <p>
@@ -169,7 +210,13 @@ function Reserva({ a, onChanged, slug }: { a: Appointment; onChanged: () => void
                 <Button variant="secondary" onClick={() => setPainel("remarcar")}>
                   Remarcar
                 </Button>
-                <Button variant="secondary" onClick={() => setPainel("cancelar")}>
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setAgora(Date.now());
+                    setPainel("cancelar");
+                  }}
+                >
                   Cancelar
                 </Button>
               </>
@@ -189,7 +236,7 @@ function Reserva({ a, onChanged, slug }: { a: Appointment; onChanged: () => void
           onConfirm={() => void cancelar()}
           onCancel={() => setPainel(null)}
         >
-          <p>O horário fica livre para outra pessoa. Reserva gratuita: não há cobrança.</p>
+          <p>{textoCancelar}</p>
         </ConfirmPanel>
       )}
       {painel === "remarcar" && (

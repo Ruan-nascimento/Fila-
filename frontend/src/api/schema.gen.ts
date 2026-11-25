@@ -555,6 +555,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/establishments/{establishmentId}/visitor-contact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** E-mail de contato do visitante nesta loja (mascarado) ou nulo. */
+        get: operations["getVisitorContact"];
+        put?: never;
+        /** Informa o e-mail para avisos e recuperação da reserva; envia código de 6 dígitos (15 min). Trocar o e-mail volta a exigir verificação. */
+        post: operations["setVisitorContact"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/establishments/{establishmentId}/visitor-contact/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confere o código do e-mail (até 5 tentativas; uso único). */
+        post: operations["verifyVisitorContact"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/public/establishments/{establishmentId}/appointment-access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Envia o link de acesso à reserva para o e-mail verificado na loja. Sempre 202 (não revela se o e-mail existe). */
+        post: operations["requestAppointmentAccess"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/public/establishments/{establishmentId}/appointment-access/exchange": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Troca o token do link (uso único, 30 min) por uma credencial de visitante neste navegador.
+         * @description A página lê o token do fragmento (#token=…) e envia no corpo; abrir o link (GET) não muda nada.
+         */
+        post: operations["exchangeAppointmentAccess"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/visitor-sessions/current/end": {
         parameters: {
             query?: never;
@@ -1307,6 +1379,40 @@ export interface paths {
         put?: never;
         /** Dono confirma estorno em revisão com evidência documentada (presencial ou provedor sem API). */
         post: operations["confirmRefundManually"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/establishments/{establishmentId}/booking-refunds/{refundId}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Dono confirma, com evidência, a devolução de reserva em revisão (sobra do sinal ou provedor sem estorno pela API); a pendência ligada é resolvida junto. */
+        post: operations["confirmBookingRefund"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/establishments/{establishmentId}/booking-refunds/{refundId}/mark-failed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Dono registra que a devolução de reserva em revisão não ocorreu (com evidência). */
+        post: operations["markBookingRefundFailed"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2831,7 +2937,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Cancela a reserva confirmada (titular até o horário; equipe com motivo). Libera o horário na hora. */
+        /**
+         * Cancela a reserva confirmada ou aguardando pagamento (titular até o horário; equipe com motivo). Libera o horário na hora.
+         * @description Valor pago da reserva segue a política aceita: loja cancela ou cliente cancela dentro da janela →
+         *     devolução integral pedida ao provedor; cliente fora da janela com a política "reter" → 409
+         *     `cancel_retains_payment` até o cliente confirmar com `accept_retention: true`.
+         */
         post: operations["cancelAppointment"];
         delete?: never;
         options?: never;
@@ -2909,6 +3020,30 @@ export interface paths {
          *     (`appointment_too_early`) → 409 e a reserva continua valendo. Fila pausada ou fechada à entrada não impede.
          */
         post: operations["callAppointment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/establishments/{establishmentId}/appointments/{appointmentId}/pix-charges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Gera (ou retoma) o Pix da reserva que aguarda pagamento (sinal ou taxa; ADR-0039).
+         * @description Três fases (grava "criando", chama o provedor fora da transação, grava o resultado). O QR vence
+         *     antes do fim da retenção do horário. Repetir com a mesma chave devolve a mesma tentativa; outra
+         *     aba recebe o Pix já aberto. 202 = resultado do provedor desconhecido ("Verificando pagamento"):
+         *     o worker confere e o evento `appointment.updated` avisa. A reserva só é confirmada pelo provedor
+         *     (webhook ou consulta), nunca por esta resposta. Prazo vencido → 409 `booking_hold_expired`.
+         */
+        post: operations["createAppointmentPixCharge"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2996,7 +3131,7 @@ export interface components {
             message?: string;
         };
         /** @enum {string} */
-        ErrorCode: "validation_failed" | "unauthenticated" | "forbidden" | "not_found" | "csrf_failed" | "origin_not_allowed" | "reauthentication_required" | "rate_limited" | "payload_too_large" | "unsupported_media_type" | "idempotency_key_missing" | "idempotency_key_reused" | "idempotency_in_progress" | "version_conflict" | "invalid_transition" | "internal_error" | "service_unavailable" | "invalid_credentials" | "email_not_verified" | "token_invalid" | "recovery_code_invalid" | "invite_invalid" | "visitor_visit_in_progress" | "sole_owner" | "deletion_in_progress" | "queue_not_open" | "queue_has_pending_participants" | "active_participation_exists" | "pending_order_exists" | "service_not_eligible" | "service_inactive" | "no_waiting_participant" | "professional_busy" | "professional_inactive" | "professional_has_active_participations" | "tolerance_not_elapsed" | "transfer_consent_required" | "transfer_target_incompatible" | "slug_taken" | "order_requires_item" | "duplicate_service" | "change_request_pending" | "item_already_performed" | "performed_item_required" | "order_not_editable" | "order_not_payable" | "pix_charge_active" | "pix_charge_outcome_unknown" | "payment_amount_mismatch" | "payment_method_not_allowed" | "refund_exceeds_available" | "refund_not_allowed" | "provider_unavailable" | "webhook_unauthenticated" | "loyalty_program_disabled" | "account_required" | "insufficient_points" | "reward_out_of_stock" | "reward_inactive" | "reservation_already_active" | "reservation_expired" | "owner_session_active" | "owner_session_challenge_invalid" | "owner_session_replaced" | "owner_session_required" | "desktop_proof_invalid" | "desktop_activation_invalid" | "desktop_link_invalid" | "desktop_access_invalid" | "desktop_installation_invalid" | "analytics_filter_not_applicable" | "media_disabled" | "media_not_attachable" | "image_unsupported" | "image_invalid" | "image_dimensions" | "google_unavailable" | "identity_already_linked" | "last_access_method" | "no_password" | "password_available" | "reauth_code_invalid" | "agenda_unavailable" | "schedule_disabled" | "queue_entry_schedule_only" | "queue_no_capacity_today" | "queue_overlaps_own_appointment" | "chair_reserved" | "slot_unavailable" | "appointment_overlaps_own" | "appointment_limit_reached" | "outside_booking_window" | "professional_unavailable" | "appointment_too_early" | "customer_has_active_visit" | "schedule_conflicts_appointments" | "exception_conflicts_appointments" | "professional_has_appointments";
+        ErrorCode: "validation_failed" | "unauthenticated" | "forbidden" | "not_found" | "csrf_failed" | "origin_not_allowed" | "reauthentication_required" | "rate_limited" | "payload_too_large" | "unsupported_media_type" | "idempotency_key_missing" | "idempotency_key_reused" | "idempotency_in_progress" | "version_conflict" | "invalid_transition" | "internal_error" | "service_unavailable" | "invalid_credentials" | "email_not_verified" | "token_invalid" | "recovery_code_invalid" | "invite_invalid" | "visitor_visit_in_progress" | "sole_owner" | "deletion_in_progress" | "queue_not_open" | "queue_has_pending_participants" | "active_participation_exists" | "pending_order_exists" | "service_not_eligible" | "service_inactive" | "no_waiting_participant" | "professional_busy" | "professional_inactive" | "professional_has_active_participations" | "tolerance_not_elapsed" | "transfer_consent_required" | "transfer_target_incompatible" | "slug_taken" | "order_requires_item" | "duplicate_service" | "change_request_pending" | "item_already_performed" | "performed_item_required" | "order_not_editable" | "order_not_payable" | "pix_charge_active" | "pix_charge_outcome_unknown" | "payment_amount_mismatch" | "payment_method_not_allowed" | "refund_exceeds_available" | "refund_not_allowed" | "provider_unavailable" | "webhook_unauthenticated" | "loyalty_program_disabled" | "account_required" | "insufficient_points" | "reward_out_of_stock" | "reward_inactive" | "reservation_already_active" | "reservation_expired" | "owner_session_active" | "owner_session_challenge_invalid" | "owner_session_replaced" | "owner_session_required" | "desktop_proof_invalid" | "desktop_activation_invalid" | "desktop_link_invalid" | "desktop_access_invalid" | "desktop_installation_invalid" | "analytics_filter_not_applicable" | "media_disabled" | "media_not_attachable" | "image_unsupported" | "image_invalid" | "image_dimensions" | "google_unavailable" | "identity_already_linked" | "last_access_method" | "no_password" | "password_available" | "reauth_code_invalid" | "agenda_unavailable" | "schedule_disabled" | "queue_entry_schedule_only" | "queue_no_capacity_today" | "queue_overlaps_own_appointment" | "chair_reserved" | "slot_unavailable" | "appointment_overlaps_own" | "appointment_limit_reached" | "outside_booking_window" | "professional_unavailable" | "appointment_too_early" | "customer_has_active_visit" | "schedule_conflicts_appointments" | "exception_conflicts_appointments" | "professional_has_appointments" | "visitors_disabled" | "no_payment_method" | "booking_too_close" | "booking_hold_expired" | "booking_already_paid" | "booking_not_payable" | "booking_payment_unavailable" | "retention_unavailable" | "cancel_retains_payment" | "credit_exceeds_total" | "contact_code_invalid" | "contact_code_expired" | "access_link_invalid";
         /** @enum {string} */
         QueueStatus: "open" | "paused" | "closed";
         /** @enum {string} */
@@ -3023,7 +3158,7 @@ export interface components {
         /** @enum {string} */
         RefundStatus: "requested" | "processing" | "unknown" | "under_review" | "confirmed" | "failed";
         /** @enum {string} */
-        FinancialIssueKind: "duplicate_receipt" | "late_receipt" | "amount_mismatch" | "charge_outcome_unresolved" | "refund_under_review" | "active_pix_on_method_switch" | "adjustment_excess" | "restored_orphan_charge" | "restored_refund_unrecorded";
+        FinancialIssueKind: "duplicate_receipt" | "late_receipt" | "amount_mismatch" | "charge_outcome_unresolved" | "refund_under_review" | "active_pix_on_method_switch" | "adjustment_excess" | "restored_orphan_charge" | "restored_refund_unrecorded" | "booking_late_payment" | "booking_refund_due" | "booking_notice_failed";
         /** @enum {string} */
         FinancialIssueStatus: "open" | "resolved";
         /** @enum {string} */
@@ -3660,6 +3795,12 @@ export interface components {
             nick: components["schemas"]["Nick"];
             expires_at: components["schemas"]["Timestamp"];
         };
+        VisitorContact: {
+            /** @description Ex.: an***@exemplo.com (o endereço completo nunca volta). */
+            email_masked: string;
+            verified: boolean;
+            code_expires_at: components["schemas"]["Timestamp"] | null;
+        };
         VisitorSessionCreated: {
             visitor: components["schemas"]["VisitorView"];
             /** @description Exibido uma única vez; não é armazenado em claro. */
@@ -3923,6 +4064,8 @@ export interface components {
         OrderPayment: {
             method_choice: components["schemas"]["PaymentMethod"] | null;
             amounts: {
+                /** @description Sinal pago na reserva e abatido desta comanda (não é dinheiro novo); `due` já o desconta. */
+                credit?: components["schemas"]["Money"];
                 due: components["schemas"]["Money"];
                 received: components["schemas"]["Money"];
                 conferred: components["schemas"]["Money"];
@@ -3987,8 +4130,12 @@ export interface components {
         };
         FinancialIssue: {
             id: components["schemas"]["Id"];
-            /** @description Comanda da pendência. Nulo só em `restored_orphan_charge` (cobrança paga no provedor cuja comanda não existe no banco restaurado; etapa 12). */
+            /** @description Comanda da pendência. Nulo em `restored_orphan_charge` (cobrança paga no provedor cuja comanda não existe no banco restaurado; etapa 12) e nas pendências de reserva paga (`appointment_id`). */
             order_id: components["schemas"]["Id"] | null;
+            /** @description Reserva paga da pendência (Pix tardio, sobra do sinal a devolver; ADR-0039). */
+            appointment_id?: components["schemas"]["Id"] | null;
+            /** @description Devolução de reserva que o dono confirma (`confirmBookingRefund`) ou dá como falha por esta pendência. */
+            booking_refund_id?: components["schemas"]["Id"] | null;
             /** @description Id da cobrança no provedor (para localizar no painel do provedor), quando a pendência veio da conciliação pós-restauração. */
             provider_reference?: string | null;
             kind: components["schemas"]["FinancialIssueKind"];
@@ -4449,8 +4596,76 @@ export interface components {
          * @enum {string}
          */
         ShiftModality: "queue" | "schedule" | "both";
+        /**
+         * @description `held` = aguardando o Pix da reserva até `hold_expires_at`; `expired` = o prazo venceu sem pagamento.
+         * @enum {string}
+         */
+        AppointmentStatus: "held" | "confirmed" | "called" | "in_service" | "completed" | "interrupted" | "no_show" | "cancelled" | "expired";
+        /**
+         * @description Reserva gratuita, sinal (abatido do atendimento) ou taxa de reserva (cobrada além do atendimento).
+         * @enum {string}
+         */
+        BookingMode: "free" | "deposit" | "fee";
         /** @enum {string} */
-        AppointmentStatus: "confirmed" | "called" | "in_service" | "completed" | "interrupted" | "no_show" | "cancelled";
+        BookingPaymentStatus: "awaiting_payment" | "paid" | "expired" | "cancelled";
+        /**
+         * @description Cancelamento fora da janela ou falta do cliente — devolver ou reter o valor pago.
+         * @enum {string}
+         */
+        LateCancelPolicy: "refund" | "retain";
+        /** @description Cotação calculada no servidor (a confirmação refaz a conta). */
+        BookingQuote: {
+            mode: components["schemas"]["BookingMode"];
+            due_now: components["schemas"]["Money"];
+            due_at_store: components["schemas"]["Money"];
+            estimated_total: components["schemas"]["Money"];
+            cancel_window_hours: number;
+            late_cancel_policy: components["schemas"]["LateCancelPolicy"];
+            terms: string;
+        };
+        BookingCharge: {
+            id: components["schemas"]["Id"];
+            status: components["schemas"]["PixChargeStatus"];
+            amount: components["schemas"]["Money"];
+            /** @description Copia-e-cola; nulo depois de vencido ou cancelado. */
+            br_code: string | null;
+            expires_at: components["schemas"]["Timestamp"] | null;
+            created_at: components["schemas"]["Timestamp"];
+        };
+        BookingPayment: {
+            /** @enum {string} */
+            mode: "deposit" | "fee";
+            status: components["schemas"]["BookingPaymentStatus"];
+            amount: components["schemas"]["Money"];
+            hold_expires_at: components["schemas"]["Timestamp"];
+            paid_at: components["schemas"]["Timestamp"] | null;
+            /**
+             * @description Desfecho do valor pago: abatido na comanda, mantido pela barbearia ou a devolver.
+             * @enum {string|null}
+             */
+            outcome: "applied" | "kept" | "refund_due" | null;
+            cancel_window_hours: number;
+            late_cancel_policy: components["schemas"]["LateCancelPolicy"];
+            charge: components["schemas"]["BookingCharge"] | null;
+            /** @description Resultado do Pix ainda desconhecido (mostrar "Verificando pagamento"). */
+            verifying: boolean;
+            /** @description Devolução (solicitada não é devolvida: o estado vem do provedor ou da confirmação do dono). */
+            refund: null | {
+                status: components["schemas"]["RefundStatus"];
+                amount: components["schemas"]["Money"];
+                partial: boolean;
+            };
+            credit_applied: components["schemas"]["Money"];
+        };
+        BookingChargeResult: components["schemas"]["BookingCharge"] & {
+            appointment: components["schemas"]["Appointment"];
+        };
+        CancelAppointmentRequest: {
+            expected_version: components["schemas"]["Version"];
+            reason?: components["schemas"]["Reason"];
+            /** @description O cliente confirma que o valor pago fica com a barbearia (fora da janela). */
+            accept_retention?: boolean;
+        };
         AgendaSettings: {
             service_mode: components["schemas"]["ServiceMode"];
             /** @default 15 */
@@ -4471,6 +4686,21 @@ export interface components {
             professionals_can_block: boolean;
             /** @description Agenda liberada neste servidor (FILA_AGENDA). */
             available: boolean;
+            booking_payment_mode: components["schemas"]["BookingMode"];
+            /** @description Valor do sinal ou da taxa; nulo na reserva gratuita. */
+            booking_payment_cents: number | null;
+            /** @default 12 */
+            cancel_window_hours: number;
+            late_cancel_policy: components["schemas"]["LateCancelPolicy"];
+            /**
+             * @description Lembrete por e-mail antes do horário; 0 = sem lembrete.
+             * @default 24
+             */
+            reminder_hours: number;
+            /** @description Cobrança da reserva liberada (FILA_AGENDA_COBRANCA) e Pix operacional. */
+            charge_available: boolean;
+            /** @description Retenção na falta ou cancelamento tardio liberada (FILA_AGENDA_RETENCAO). */
+            retain_available: boolean;
             version: components["schemas"]["Version"];
         };
         AgendaSettingsRequest: {
@@ -4484,6 +4714,11 @@ export interface components {
             checkin_window_minutes?: number;
             max_future_appointments?: number;
             professionals_can_block?: boolean;
+            booking_payment_mode?: components["schemas"]["BookingMode"];
+            booking_payment_cents?: number | null;
+            cancel_window_hours?: number;
+            late_cancel_policy?: components["schemas"]["LateCancelPolicy"];
+            reminder_hours?: number;
         };
         AgendaImpact: {
             future_appointments: number;
@@ -4588,6 +4823,7 @@ export interface components {
             /** @description Serviços + margem de preparação (uma vez por visita). */
             total_minutes: number;
             price: components["schemas"]["Money"];
+            payment: components["schemas"]["BookingQuote"];
             professionals: components["schemas"]["AvailabilityProfessional"][];
         };
         /** @description Sem preço, duração ou identidade — tudo vem do servidor. */
@@ -4641,13 +4877,15 @@ export interface components {
             checkin_window_minutes: number;
             items: components["schemas"]["AppointmentItem"][];
             price: components["schemas"]["Money"];
-            /** @description Parte 1 — reserva gratuita (nada agora; tudo na barbearia). */
+            /** @description Valores aceitos na reserva. `booking` = obrigação paga (sinal ou taxa); nulo na reserva gratuita. */
             payment: {
-                /** @enum {string} */
-                mode: "free";
+                mode: components["schemas"]["BookingMode"];
                 due_now: components["schemas"]["Money"];
                 due_at_store: components["schemas"]["Money"];
                 estimated_total: components["schemas"]["Money"];
+                booking: components["schemas"]["BookingPayment"] | null;
+                /** @description Até este instante o cancelamento pelo cliente devolve o valor pago. Nulo na reserva gratuita. */
+                free_cancel_until: components["schemas"]["Timestamp"] | null;
             };
             terms: string;
             called_at: components["schemas"]["Timestamp"] | null;
@@ -4662,6 +4900,8 @@ export interface components {
             version: components["schemas"]["Version"];
             created_at: components["schemas"]["Timestamp"];
             finished_at: components["schemas"]["Timestamp"] | null;
+            /** @description Fim do prazo para pagar a reserva (`held`); depois disso o horário é liberado. */
+            hold_expires_at: components["schemas"]["Timestamp"] | null;
             /** @description Só equipe. */
             nick?: string;
             /**
@@ -4741,6 +4981,39 @@ export interface components {
             content: {
                 "application/json": {
                     data: components["schemas"]["Appointment"];
+                };
+            };
+        };
+        /** @description Contato do visitante. */
+        VisitorContactOk: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    data: components["schemas"]["VisitorContact"];
+                };
+            };
+        };
+        /** @description Pagamento da reserva atualizado. */
+        BookingPaymentOk: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    data: components["schemas"]["BookingPayment"];
+                };
+            };
+        };
+        /** @description Pix da reserva (201 com o QR; 202 verificando) e a reserva atualizada. */
+        BookingChargeOk: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    data: components["schemas"]["BookingChargeResult"];
                 };
             };
         };
@@ -5864,6 +6137,153 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    getVisitorContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Contato atual. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["VisitorContact"] | null;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    setVisitorContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: email */
+                    email: string;
+                };
+            };
+        };
+        responses: {
+            202: components["responses"]["VisitorContactOk"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    verifyVisitorContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    code: string;
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["VisitorContactOk"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    requestAppointmentAccess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: email */
+                    email: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Pedido aceito (o e-mail só sai se houver contato verificado). */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    exchangeAppointmentAccess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    token: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Acesso recuperado. */
+            200: {
+                headers: {
+                    "Set-Cookie": components["headers"]["SetVisitorCookie"];
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["VisitorView"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             429: components["responses"]["TooManyRequests"];
             default: components["responses"]["Unexpected"];
         };
@@ -7042,6 +7462,64 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["OrderOk"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyMismatch"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    confirmBookingRefund: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+                refundId: components["parameters"]["RefundId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmRefundRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["BookingPaymentOk"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyMismatch"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    markBookingRefundFailed: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+                refundId: components["parameters"]["RefundId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmRefundRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["BookingPaymentOk"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -9952,7 +10430,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["VersionedReasonRequest"];
+                "application/json": components["schemas"]["CancelAppointmentRequest"];
             };
         };
         responses: {
@@ -10078,6 +10556,31 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["IdempotencyMismatch"];
+            default: components["responses"]["Unexpected"];
+        };
+    };
+    createAppointmentPixCharge: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Gerada pelo cliente por intenção (clique). Reenvio da mesma intenção reutiliza a chave. Escopo = ator + operação. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                establishmentId: components["parameters"]["EstablishmentId"];
+                appointmentId: components["parameters"]["AppointmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: components["responses"]["BookingChargeOk"];
+            202: components["responses"]["BookingChargeOk"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Unexpected"];
         };
     };

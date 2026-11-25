@@ -389,16 +389,8 @@ func (s *Service) end(ctx context.Context, tx pgx.Tx, p row, who role, to, closu
 		p.ID, to, now, endReason); err != nil {
 		return idempotency.Result{}, err
 	}
-	audit := s.auditBase(ctx, p, who)
-	if err := atendimento.CloseNoCharge(ctx, tx, p.EstablishmentID, p.OrderID, closure, now, audit); err != nil && !errors.Is(err, atendimento.ErrNotOpen) {
-		return idempotency.Result{}, err
-	}
-	if p.VisitorID != nil && s.VisitClosed != nil {
-		if err := s.VisitClosed(ctx, tx, *p.VisitorID, now); err != nil {
-			return idempotency.Result{}, err
-		}
-	}
-	// Visita que veio de reserva: o resultado acompanha a reserva na mesma transação.
+	// Visita que veio de reserva: o resultado acompanha a reserva na mesma transação, antes da
+	// comanda (ordem de travas: reserva → comanda → obrigação da reserva).
 	mirror := reason
 	switch {
 	case to == Cancelled && who.customer:
@@ -408,6 +400,15 @@ func (s *Service) end(ctx context.Context, tx pgx.Tx, p row, who role, to, closu
 	}
 	if err := s.visitChanged(ctx, tx, p, to, mirror); err != nil {
 		return idempotency.Result{}, err
+	}
+	audit := s.auditBase(ctx, p, who)
+	if err := atendimento.CloseNoCharge(ctx, tx, p.EstablishmentID, p.OrderID, closure, now, audit); err != nil && !errors.Is(err, atendimento.ErrNotOpen) {
+		return idempotency.Result{}, err
+	}
+	if p.VisitorID != nil && s.VisitClosed != nil {
+		if err := s.VisitClosed(ctx, tx, *p.VisitorID, now); err != nil {
+			return idempotency.Result{}, err
+		}
 	}
 	return s.finish(ctx, tx, p.EstablishmentID, p.ID, who, action, p.Status, to, reason, http.StatusOK, p.QueueID)
 }

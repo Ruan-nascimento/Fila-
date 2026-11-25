@@ -32,6 +32,7 @@ import (
 	"fila/internal/platform/database"
 	hs "fila/internal/platform/httpserver"
 	"fila/internal/platform/keys"
+	"fila/internal/platform/mail"
 	"fila/internal/platform/objstore"
 	"fila/internal/platform/outbox"
 	"fila/internal/platform/ratelimit"
@@ -153,7 +154,8 @@ func New(d Deps, register func(mux *http.ServeMux)) (*API, error) {
 	est := estabelecimento.New(estabelecimento.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Auth: ident,
 		Occupancy: occ, Activity: fl, PendingInvites: ident.PendingInvites, AccessRevoked: ident.AccessRevoked,
 		PublicBaseURL: d.Config.Security.PublicBaseURL, Media: media, AvatarOf: identidade.AvatarAssetOf,
-		AgendaEnabled: agendaOn, AgendaImpact: agenda.FutureAppointments, FutureAppointmentsOf: agenda.FutureAppointmentsOf})
+		AgendaEnabled: agendaOn, AgendaImpact: agenda.FutureAppointments, FutureAppointmentsOf: agenda.FutureAppointmentsOf,
+		AgendaCharge: d.Config.Ops.AgendaCharge, AgendaRetain: d.Config.Ops.AgendaRetain})
 	cat := catalogo.New(catalogo.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Auth: ident})
 	atd := atendimento.New(atendimento.Deps{Pool: d.Pool, Clock: d.Clock, Log: d.Log, Auth: ident, Customers: ident,
 		Visits: fl, Charges: d.Charges, VisitClosed: ident.VisitClosed})
@@ -165,6 +167,11 @@ func New(d Deps, register func(mux *http.ServeMux)) (*API, error) {
 	if d.Charges == nil {
 		atd.Charges = pay // correção de comanda fechada respeita o Pix ativo (R-CMD-12)
 	}
+	// Reserva com Pix (ADR-0039): a agenda cobra pelo pagamento; o pagamento trava e confirma a
+	// reserva pela agenda (os dois se referenciam; ligados aqui).
+	pay.Bookings = ag
+	ag.Payments, ag.Charge = pay, agendaOn && d.Config.Ops.AgendaCharge
+	ag.Mail, ag.NoticeEmail, ag.PublicBaseURL = mail.NewOutbox(ring), ident.NoticeEmail, d.Config.Security.PublicBaseURL
 	// Pix só é oferecido com a integração ligada (configurações da loja e página pública).
 	pixOperational := func() bool { return pay.Provider != nil }
 	est.PixOperational = pixOperational

@@ -760,6 +760,147 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
         default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/visitor-contact:
+    get:
+      operationId: getVisitorContact
+      tags: [visitante, agenda]
+      summary: E-mail de contato do visitante nesta loja (mascarado) ou nulo.
+      security: [{ visitorSession: [] }]
+      x-authz: [{ actor: visitor, scope: self }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      responses:
+        '200':
+          description: Contato atual.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { oneOf: [{ $ref: '#/components/schemas/VisitorContact' }, { type: 'null' }] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+    post:
+      operationId: setVisitorContact
+      tags: [visitante, agenda]
+      summary: Informa o e-mail para avisos e recuperação da reserva; envia código de 6 dígitos (15 min). Trocar o e-mail volta a exigir verificação.
+      security: [{ visitorSession: [], csrfToken: [] }]
+      x-authz: [{ actor: visitor, scope: self }]
+      x-transitions: [T-VC-01]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email]
+              properties:
+                email: { type: string, format: email, maxLength: 254 }
+      responses:
+        '202': { $ref: '#/components/responses/VisitorContactOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/visitor-contact/verify:
+    post:
+      operationId: verifyVisitorContact
+      tags: [visitante, agenda]
+      summary: Confere o código do e-mail (até 5 tentativas; uso único).
+      security: [{ visitorSession: [], csrfToken: [] }]
+      x-authz: [{ actor: visitor, scope: self }]
+      x-transitions: [T-VC-02]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [code]
+              properties:
+                code: { type: string, pattern: '^[0-9]{6}$' }
+      responses:
+        '200': { $ref: '#/components/responses/VisitorContactOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/public/establishments/{establishmentId}/appointment-access:
+    post:
+      operationId: requestAppointmentAccess
+      tags: [visitante, agenda]
+      summary: Envia o link de acesso à reserva para o e-mail verificado na loja. Sempre 202 (não revela se o e-mail existe).
+      security: [{}]
+      x-authz: [{ actor: public, scope: none }]
+      x-transitions: [T-VC-03]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email]
+              properties:
+                email: { type: string, format: email, maxLength: 254 }
+      responses:
+        '202': { description: Pedido aceito (o e-mail só sai se houver contato verificado). }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/public/establishments/{establishmentId}/appointment-access/exchange:
+    post:
+      operationId: exchangeAppointmentAccess
+      tags: [visitante, agenda]
+      summary: Troca o token do link (uso único, 30 min) por uma credencial de visitante neste navegador.
+      description: A página lê o token do fragmento (#token=…) e envia no corpo; abrir o link (GET) não muda nada.
+      security: [{}, { visitorSession: [] }]
+      x-authz: [{ actor: public, scope: none }]
+      x-transitions: [T-VC-04]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token]
+              properties:
+                token: { type: string, minLength: 20, maxLength: 100 }
+      responses:
+        '200':
+          description: Acesso recuperado.
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/SetVisitorCookie' }
+            Cache-Control: { $ref: '#/components/headers/NoStore' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/VisitorView' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
   /v1/visitor-sessions/current/end:
     post:
       operationId: endVisitorSession
@@ -1208,7 +1349,7 @@ paths:
       summary: Em atendimento → concluído. Fecha valor, libera cadeira; pagamento continua separado.
       security: [{ accountSession: [], csrfToken: [] }]
       x-authz: [{ actor: professional, scope: own_queue }, { actor: owner, scope: establishment }]
-      x-transitions: [T-P-08, T-O-04]
+      x-transitions: [T-P-08, T-O-04, T-BK-06]
       x-events: [participation.updated, order.updated, payment.updated, queue.public.updated, queue.updated]
       parameters:
         - $ref: '#/components/parameters/EstablishmentId'
@@ -1635,7 +1776,7 @@ paths:
       summary: Dono revisa interrupção e fecha valor (só itens integralmente feitos; pode ser zero).
       security: [{ accountSession: [], csrfToken: [] }]
       x-authz: [{ actor: owner, scope: establishment }]
-      x-transitions: [T-O-07, T-O-08]
+      x-transitions: [T-O-07, T-O-08, T-BK-06]
       x-events: [order.updated, payment.updated, pendencies.updated]
       parameters:
         - $ref: '#/components/parameters/EstablishmentId'
@@ -1929,6 +2070,62 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/IdempotencyMismatch' }
         default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/booking-refunds/{refundId}/confirm:
+    post:
+      operationId: confirmBookingRefund
+      tags: [pagamento, agenda]
+      summary: Dono confirma, com evidência, a devolução de reserva em revisão (sobra do sinal ou provedor sem estorno pela API); a pendência ligada é resolvida junto.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-reauth: true
+      x-transitions: [T-RF-06, T-FI-02]
+      x-events: [appointment.updated, financial_issue.updated, pendencies.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/RefundId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ConfirmRefundRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/BookingPaymentOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/booking-refunds/{refundId}/mark-failed:
+    post:
+      operationId: markBookingRefundFailed
+      tags: [pagamento, agenda]
+      summary: Dono registra que a devolução de reserva em revisão não ocorreu (com evidência).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-reauth: true
+      x-transitions: [T-RF-07, T-FI-02]
+      x-events: [appointment.updated, financial_issue.updated, pendencies.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/RefundId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ConfirmRefundRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/BookingPaymentOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
   /v1/establishments/{establishmentId}/orders/{orderId}/refunds/{refundId}/mark-failed:
     post:
       operationId: markRefundFailed
@@ -2066,7 +2263,7 @@ paths:
         pagador não são guardados. 404 quando o webhook está desligado (sem secret configurado).
       security: []
       x-authz: [{ actor: provider, scope: provider_signature }]
-      x-transitions: [T-PX-05, T-PX-06, T-RC-02, T-RC-04, T-O-09, T-RF-03, T-RF-04, T-LG-02]
+      x-transitions: [T-PX-05, T-PX-06, T-RC-02, T-RC-04, T-O-09, T-RF-03, T-RF-04, T-LG-02, T-AP-10, T-BK-03]
       x-events: [payment.updated, order.updated, financial_issue.updated, pendencies.updated, loyalty.updated]
       requestBody:
         required: true
@@ -4371,7 +4568,7 @@ paths:
         tiver reserva ativa, nada é gravado: 409 `exception_conflicts_appointments` com a lista.
       security: [{ accountSession: [], csrfToken: [] }]
       x-authz: [{ actor: professional, scope: own_queue }, { actor: owner, scope: establishment }]
-      x-transitions: [T-AG-02]
+      x-transitions: [T-AG-02, T-AP-09]
       parameters:
         - $ref: '#/components/parameters/EstablishmentId'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -4531,7 +4728,7 @@ paths:
         `current.slots` (escolha outro sem perder os itens).
       security: [{ visitorSession: [], csrfToken: [] }, { accountSession: [], csrfToken: [] }]
       x-authz: [{ actor: visitor, scope: self }, { actor: customer, scope: self }, { actor: owner, scope: establishment }]
-      x-transitions: [T-AP-01]
+      x-transitions: [T-AP-01, T-AP-09, T-BK-01]
       x-events: [appointment.updated]
       parameters:
         - $ref: '#/components/parameters/EstablishmentId'
@@ -4613,14 +4810,18 @@ paths:
     post:
       operationId: cancelAppointment
       tags: [agenda]
-      summary: Cancela a reserva confirmada (titular até o horário; equipe com motivo). Libera o horário na hora.
+      summary: Cancela a reserva confirmada ou aguardando pagamento (titular até o horário; equipe com motivo). Libera o horário na hora.
+      description: |
+        Valor pago da reserva segue a política aceita: loja cancela ou cliente cancela dentro da janela →
+        devolução integral pedida ao provedor; cliente fora da janela com a política "reter" → 409
+        `cancel_retains_payment` até o cliente confirmar com `accept_retention: true`.
       security: [{ visitorSession: [], csrfToken: [] }, { accountSession: [], csrfToken: [] }]
       x-authz:
         - { actor: visitor, scope: visit_owner }
         - { actor: customer, scope: visit_owner }
         - { actor: professional, scope: own_queue }
         - { actor: owner, scope: establishment }
-      x-transitions: [T-AP-03]
+      x-transitions: [T-AP-03, T-BK-04, T-BK-05, T-RF-01]
       x-events: [appointment.updated]
       parameters:
         - $ref: '#/components/parameters/EstablishmentId'
@@ -4630,7 +4831,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/VersionedReasonRequest' }
+            schema: { $ref: '#/components/schemas/CancelAppointmentRequest' }
       responses:
         '200': { $ref: '#/components/responses/AppointmentOk' }
         '400': { $ref: '#/components/responses/BadRequest' }
@@ -4652,7 +4853,7 @@ paths:
         - { actor: customer, scope: visit_owner }
         - { actor: professional, scope: own_queue }
         - { actor: owner, scope: establishment }
-      x-transitions: [T-AP-02]
+      x-transitions: [T-AP-02, T-AP-09]
       x-events: [appointment.updated]
       parameters:
         - $ref: '#/components/parameters/EstablishmentId'
@@ -4755,6 +4956,36 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/appointments/{appointmentId}/pix-charges:
+    post:
+      operationId: createAppointmentPixCharge
+      tags: [agenda, pagamento]
+      summary: Gera (ou retoma) o Pix da reserva que aguarda pagamento (sinal ou taxa; ADR-0039).
+      description: |
+        Três fases (grava "criando", chama o provedor fora da transação, grava o resultado). O QR vence
+        antes do fim da retenção do horário. Repetir com a mesma chave devolve a mesma tentativa; outra
+        aba recebe o Pix já aberto. 202 = resultado do provedor desconhecido ("Verificando pagamento"):
+        o worker confere e o evento `appointment.updated` avisa. A reserva só é confirmada pelo provedor
+        (webhook ou consulta), nunca por esta resposta. Prazo vencido → 409 `booking_hold_expired`.
+      security: [{ visitorSession: [], csrfToken: [] }, { accountSession: [], csrfToken: [] }]
+      x-authz:
+        - { actor: visitor, scope: visit_owner }
+        - { actor: customer, scope: visit_owner }
+      x-transitions: [T-BK-02, T-PX-01]
+      x-events: [appointment.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/AppointmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201': { $ref: '#/components/responses/BookingChargeOk' }
+        '202': { $ref: '#/components/responses/BookingChargeOk' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
         default: { $ref: '#/components/responses/Unexpected' }
 components:
   securitySchemes:
@@ -5020,6 +5251,33 @@ components:
             required: [data]
             properties:
               data: { $ref: '#/components/schemas/Appointment' }
+    VisitorContactOk:
+      description: Contato do visitante.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: { $ref: '#/components/schemas/VisitorContact' }
+    BookingPaymentOk:
+      description: Pagamento da reserva atualizado.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: { $ref: '#/components/schemas/BookingPayment' }
+    BookingChargeOk:
+      description: Pix da reserva (201 com o QR; 202 verificando) e a reserva atualizada.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: { $ref: '#/components/schemas/BookingChargeResult' }
     AgendaHoursOk:
       description: Jornadas.
       content:
@@ -5413,6 +5671,20 @@ components:
         - schedule_conflicts_appointments
         - exception_conflicts_appointments
         - professional_has_appointments
+        - visitors_disabled
+        - no_payment_method
+        # reserva com Pix, avisos e recuperação (ADR-0039)
+        - booking_too_close
+        - booking_hold_expired
+        - booking_already_paid
+        - booking_not_payable
+        - booking_payment_unavailable
+        - retention_unavailable
+        - cancel_retains_payment
+        - credit_exceeds_total
+        - contact_code_invalid
+        - contact_code_expired
+        - access_link_invalid
 
     # ------------------------------------------------------------ enums de estado
     QueueStatus:
@@ -5451,7 +5723,7 @@ components:
       enum: [requested, processing, unknown, under_review, confirmed, failed]
     FinancialIssueKind:
       type: string
-      enum: [duplicate_receipt, late_receipt, amount_mismatch, charge_outcome_unresolved, refund_under_review, active_pix_on_method_switch, adjustment_excess, restored_orphan_charge, restored_refund_unrecorded]
+      enum: [duplicate_receipt, late_receipt, amount_mismatch, charge_outcome_unresolved, refund_under_review, active_pix_on_method_switch, adjustment_excess, restored_orphan_charge, restored_refund_unrecorded, booking_late_payment, booking_refund_due, booking_notice_failed]
     FinancialIssueStatus:
       type: string
       enum: [open, resolved]
@@ -6363,6 +6635,13 @@ components:
         establishment_id: { $ref: '#/components/schemas/Id' }
         nick: { $ref: '#/components/schemas/Nick' }
         expires_at: { $ref: '#/components/schemas/Timestamp' }
+    VisitorContact:
+      type: object
+      required: [email_masked, verified, code_expires_at]
+      properties:
+        email_masked: { type: string, description: 'Ex.: an***@exemplo.com (o endereço completo nunca volta).' }
+        verified: { type: boolean }
+        code_expires_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
     VisitorSessionCreated:
       type: object
       required: [visitor, recovery_code, recovery_code_valid_until]
@@ -6705,6 +6984,7 @@ components:
           type: object
           required: [due, received, conferred, refunded, outstanding]
           properties:
+            credit: { $ref: '#/components/schemas/Money', description: Sinal pago na reserva e abatido desta comanda (não é dinheiro novo); `due` já o desconta. }
             due: { $ref: '#/components/schemas/Money' }
             received: { $ref: '#/components/schemas/Money' }
             conferred: { $ref: '#/components/schemas/Money' }
@@ -6777,7 +7057,13 @@ components:
       properties:
         id: { $ref: '#/components/schemas/Id' }
         order_id:
-          description: Comanda da pendência. Nulo só em `restored_orphan_charge` (cobrança paga no provedor cuja comanda não existe no banco restaurado; etapa 12).
+          description: Comanda da pendência. Nulo em `restored_orphan_charge` (cobrança paga no provedor cuja comanda não existe no banco restaurado; etapa 12) e nas pendências de reserva paga (`appointment_id`).
+          oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }]
+        appointment_id:
+          description: Reserva paga da pendência (Pix tardio, sobra do sinal a devolver; ADR-0039).
+          oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }]
+        booking_refund_id:
+          description: Devolução de reserva que o dono confirma (`confirmBookingRefund`) ou dá como falha por esta pendência.
           oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }]
         provider_reference:
           description: Id da cobrança no provedor (para localizar no painel do provedor), quando a pendência veio da conciliação pós-restauração.
@@ -7374,11 +7660,90 @@ components:
       description: 'No modo "os dois": trecho só de fila, só de agenda ou compartilhado.'
     AppointmentStatus:
       type: string
-      enum: [confirmed, called, in_service, completed, interrupted, no_show, cancelled]
+      enum: [held, confirmed, called, in_service, completed, interrupted, no_show, cancelled, expired]
+      description: '`held` = aguardando o Pix da reserva até `hold_expires_at`; `expired` = o prazo venceu sem pagamento.'
+    BookingMode:
+      type: string
+      enum: [free, deposit, fee]
+      description: 'Reserva gratuita, sinal (abatido do atendimento) ou taxa de reserva (cobrada além do atendimento).'
+    BookingPaymentStatus:
+      type: string
+      enum: [awaiting_payment, paid, expired, cancelled]
+    LateCancelPolicy:
+      type: string
+      enum: [refund, retain]
+      description: Cancelamento fora da janela ou falta do cliente — devolver ou reter o valor pago.
+    BookingQuote:
+      type: object
+      required: [mode, due_now, due_at_store, estimated_total, cancel_window_hours, late_cancel_policy, terms]
+      description: Cotação calculada no servidor (a confirmação refaz a conta).
+      properties:
+        mode: { $ref: '#/components/schemas/BookingMode' }
+        due_now: { $ref: '#/components/schemas/Money' }
+        due_at_store: { $ref: '#/components/schemas/Money' }
+        estimated_total: { $ref: '#/components/schemas/Money' }
+        cancel_window_hours: { type: integer, minimum: 0 }
+        late_cancel_policy: { $ref: '#/components/schemas/LateCancelPolicy' }
+        terms: { type: string }
+    BookingCharge:
+      type: object
+      required: [id, status, amount, br_code, expires_at, created_at]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        status: { $ref: '#/components/schemas/PixChargeStatus' }
+        amount: { $ref: '#/components/schemas/Money' }
+        br_code: { type: [string, 'null'], description: Copia-e-cola; nulo depois de vencido ou cancelado. }
+        expires_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+    BookingPayment:
+      type: object
+      required: [mode, status, amount, hold_expires_at, paid_at, outcome, cancel_window_hours, late_cancel_policy, charge, verifying,
+                 refund, credit_applied]
+      properties:
+        mode: { type: string, enum: [deposit, fee] }
+        status: { $ref: '#/components/schemas/BookingPaymentStatus' }
+        amount: { $ref: '#/components/schemas/Money' }
+        hold_expires_at: { $ref: '#/components/schemas/Timestamp' }
+        paid_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+        outcome:
+          type: [string, 'null']
+          enum: [applied, kept, refund_due, null]
+          description: 'Desfecho do valor pago: abatido na comanda, mantido pela barbearia ou a devolver.'
+        cancel_window_hours: { type: integer }
+        late_cancel_policy: { $ref: '#/components/schemas/LateCancelPolicy' }
+        charge: { oneOf: [{ $ref: '#/components/schemas/BookingCharge' }, { type: 'null' }] }
+        verifying: { type: boolean, description: Resultado do Pix ainda desconhecido (mostrar "Verificando pagamento"). }
+        refund:
+          description: 'Devolução (solicitada não é devolvida: o estado vem do provedor ou da confirmação do dono).'
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [status, amount, partial]
+              properties:
+                status: { $ref: '#/components/schemas/RefundStatus' }
+                amount: { $ref: '#/components/schemas/Money' }
+                partial: { type: boolean }
+        credit_applied: { $ref: '#/components/schemas/Money' }
+    BookingChargeResult:
+      allOf:
+        - $ref: '#/components/schemas/BookingCharge'
+        - type: object
+          required: [appointment]
+          properties:
+            appointment: { $ref: '#/components/schemas/Appointment' }
+    CancelAppointmentRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      properties:
+        expected_version: { $ref: '#/components/schemas/Version' }
+        reason: { $ref: '#/components/schemas/Reason' }
+        accept_retention: { type: boolean, description: O cliente confirma que o valor pago fica com a barbearia (fora da janela). }
     AgendaSettings:
       type: object
       required: [service_mode, slot_step_minutes, buffer_minutes, min_lead_minutes, horizon_days, schedule_tolerance_minutes,
-                 checkin_window_minutes, max_future_appointments, professionals_can_block, available, version]
+                 checkin_window_minutes, max_future_appointments, professionals_can_block, available, booking_payment_mode,
+                 booking_payment_cents, cancel_window_hours, late_cancel_policy, reminder_hours, charge_available, retain_available, version]
       properties:
         service_mode: { $ref: '#/components/schemas/ServiceMode' }
         slot_step_minutes: { type: integer, minimum: 5, maximum: 120, default: 15 }
@@ -7390,6 +7755,13 @@ components:
         max_future_appointments: { type: integer, minimum: 1, maximum: 20, default: 3 }
         professionals_can_block: { type: boolean, default: false }
         available: { type: boolean, description: Agenda liberada neste servidor (FILA_AGENDA). }
+        booking_payment_mode: { $ref: '#/components/schemas/BookingMode' }
+        booking_payment_cents: { type: [integer, 'null'], minimum: 100, maximum: 100000, description: Valor do sinal ou da taxa; nulo na reserva gratuita. }
+        cancel_window_hours: { type: integer, minimum: 0, maximum: 168, default: 12 }
+        late_cancel_policy: { $ref: '#/components/schemas/LateCancelPolicy' }
+        reminder_hours: { type: integer, minimum: 0, maximum: 72, default: 24, description: Lembrete por e-mail antes do horário; 0 = sem lembrete. }
+        charge_available: { type: boolean, description: 'Cobrança da reserva liberada (FILA_AGENDA_COBRANCA) e Pix operacional.' }
+        retain_available: { type: boolean, description: Retenção na falta ou cancelamento tardio liberada (FILA_AGENDA_RETENCAO). }
         version: { $ref: '#/components/schemas/Version' }
     AgendaSettingsRequest:
       type: object
@@ -7406,6 +7778,11 @@ components:
         checkin_window_minutes: { type: integer, minimum: 0, maximum: 60 }
         max_future_appointments: { type: integer, minimum: 1, maximum: 20 }
         professionals_can_block: { type: boolean }
+        booking_payment_mode: { $ref: '#/components/schemas/BookingMode' }
+        booking_payment_cents: { type: [integer, 'null'], minimum: 100, maximum: 100000 }
+        cancel_window_hours: { type: integer, minimum: 0, maximum: 168 }
+        late_cancel_policy: { $ref: '#/components/schemas/LateCancelPolicy' }
+        reminder_hours: { type: integer, minimum: 0, maximum: 72 }
     AgendaImpact:
       type: object
       required: [future_appointments, waiting_in_queues]
@@ -7513,7 +7890,7 @@ components:
     Availability:
       type: object
       required: [date, timezone, mode, first_date, last_date, visitor_last_date, step_minutes, service_minutes, buffer_minutes,
-                 total_minutes, price, professionals]
+                 total_minutes, price, payment, professionals]
       properties:
         date: { type: string, format: date }
         timezone: { type: string }
@@ -7526,6 +7903,7 @@ components:
         buffer_minutes: { type: integer }
         total_minutes: { type: integer, description: Serviços + margem de preparação (uma vez por visita). }
         price: { $ref: '#/components/schemas/Money' }
+        payment: { $ref: '#/components/schemas/BookingQuote' }
         professionals:
           type: array
           items: { $ref: '#/components/schemas/AvailabilityProfessional' }
@@ -7570,7 +7948,7 @@ components:
       required: [id, establishment_id, professional, status, cancelled_by, origin, starts_at, ends_at, local_date, local_time,
                  timezone, service_minutes, buffer_minutes, tolerance_minutes, checkin_window_minutes, items, price, payment,
                  terms, called_at, deadline_at, arrived_at, arrival_signal_at, store_late, participation_id, revision, version,
-                 created_at, finished_at]
+                 created_at, finished_at, hold_expires_at]
       properties:
         id: { $ref: '#/components/schemas/Id' }
         establishment_id: { $ref: '#/components/schemas/Id' }
@@ -7598,13 +7976,17 @@ components:
         price: { $ref: '#/components/schemas/Money' }
         payment:
           type: object
-          required: [mode, due_now, due_at_store, estimated_total]
-          description: Parte 1 — reserva gratuita (nada agora; tudo na barbearia).
+          required: [mode, due_now, due_at_store, estimated_total, booking, free_cancel_until]
+          description: Valores aceitos na reserva. `booking` = obrigação paga (sinal ou taxa); nulo na reserva gratuita.
           properties:
-            mode: { type: string, enum: [free] }
+            mode: { $ref: '#/components/schemas/BookingMode' }
             due_now: { $ref: '#/components/schemas/Money' }
             due_at_store: { $ref: '#/components/schemas/Money' }
             estimated_total: { $ref: '#/components/schemas/Money' }
+            booking: { oneOf: [{ $ref: '#/components/schemas/BookingPayment' }, { type: 'null' }] }
+            free_cancel_until:
+              description: Até este instante o cancelamento pelo cliente devolve o valor pago. Nulo na reserva gratuita.
+              oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }]
         terms: { type: string }
         called_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
         deadline_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }], description: 'max(horário, chamada) + tolerância.' }
@@ -7616,6 +7998,9 @@ components:
         version: { $ref: '#/components/schemas/Version' }
         created_at: { $ref: '#/components/schemas/Timestamp' }
         finished_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+        hold_expires_at:
+          description: Fim do prazo para pagar a reserva (`held`); depois disso o horário é liberado.
+          oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }]
         nick: { type: string, description: Só equipe. }
         identity_kind: { type: string, enum: [account, visitor], description: Só equipe. }
         end_reason: { type: [string, 'null'], description: Só equipe. }

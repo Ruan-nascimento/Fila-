@@ -1352,6 +1352,64 @@ Dado o dono no balcão marcando 2 cortes para "Seu Jorge"
 Quando repete o comando e o cliente entra com o código em outro aparelho
 Então o código aparece só na primeira resposta, o profissional não pode fazer reserva de balcão, e o cliente vê a própria reserva.
 
+## Reserva com Pix, avisos e recuperação (Fila 2.0, parte 2, ADR-0039)
+
+Dados: os mesmos da agenda; Pix pelo simulador local (chave de teste); retenção = QR de 15 min + 3 min.
+
+### C-BK-01 — Sinal de ponta a ponta
+- Regras: R-BK-01, R-BK-02, R-BK-03, R-BK-04, R-BK-05 · Transições: T-BK-01, T-BK-02, T-BK-03, T-AP-10, T-BK-06 · Contrato: `getAvailability`, `createAppointment`, `createAppointmentPixCharge`, `receiveAbacatePayWebhook`, `completeService` · Tipo: integração + navegador
+
+Dado a loja com sinal de R$ 15 e um corte de R$ 40
+Quando o cliente reserva, gera o Pix (duas vezes com a mesma chave) e o banco confirma (aviso repetido também chega)
+Então a cotação mostra R$ 15 agora e R$ 25 na barbearia, a reserva fica retida e some da disponibilidade, há uma única cobrança no provedor, o QR vence antes da retenção, só o aviso do provedor confirma, um único recebimento é registrado, e ao concluir a comanda deve R$ 25 com um crédito de R$ 15 e fica paga com R$ 25 em dinheiro.
+
+### C-BK-02 — Pix pago depois do prazo
+- Regras: R-BK-03, R-BK-04 · Transições: T-AP-09, T-BK-04, T-BK-03, T-RF-01 · Contrato: `receiveAbacatePayWebhook` · Tipo: integração
+
+Dado uma reserva paga retida com o Pix gerado
+Quando o prazo vence (no instante exato), outra pessoa reserva o mesmo horário e só então o Pix é pago
+Então a primeira reserva expira, o horário da segunda não muda, o pagamento vira excedente com pendência `booking_late_payment`, a devolução integral é pedida e confirmada pelo provedor, e um aviso repetido não gera outra devolução.
+
+### C-BK-03 — Cancelamento segue a política aceita
+- Regras: R-BK-06 · Transições: T-AP-03, T-BK-05, T-RF-01 · Contrato: `cancelAppointment` · Tipo: integração
+
+Dado sinal com janela de 2 h e política "reter"
+Quando o cliente cancela com mais de 2 h, cancela com menos de 2 h, e a loja cancela em cima da hora
+Então o primeiro é devolvido (solicitado → confirmado pelo provedor), o segundo é recusado até o cliente confirmar e então fica com a loja, e o da loja é devolvido.
+
+### C-BK-04 — Sinal igual ao valor e taxa de reserva
+- Regras: R-BK-02, R-BK-05 · Transições: T-BK-06 · Contrato: `completeService` · Tipo: integração
+
+Dado sinal configurado acima do valor do corte, e em outra loja uma taxa de R$ 10
+Quando os atendimentos são concluídos
+Então o sinal é limitado a R$ 40 e a comanda fecha paga sem recebimento de R$ 0; a taxa mostra total de R$ 50, a comanda deve os R$ 40 do corte e a taxa fica com a loja.
+
+### C-BK-05 — Interrompido com valor abaixo do sinal
+- Regras: R-BK-05 · Transições: T-BK-06, T-RF-06 · Contrato: `closeInterruptedOrder`, `confirmBookingRefund` · Tipo: integração
+
+Dado sinal de R$ 50 para corte + barba
+Quando o atendimento é interrompido e a revisão cobra só o corte (R$ 40)
+Então o crédito é R$ 40 e a comanda fica paga, a sobra de R$ 10 vira devolução parcial em revisão (nada vai ao provedor), e o dono confirma com evidência (com reautenticação), resolvendo a pendência junto.
+
+### C-BK-06 — Concorrência no horário pago e no pagamento
+- Regras: R-BK-03, R-BK-04 · Transições: T-BK-01, T-BK-03 · Contrato: `createAppointment`, `receiveAbacatePayWebhook` · Tipo: concorrência
+
+Dado seis clientes no mesmo horário pago e, depois, o aviso do provedor duas vezes junto com a consulta do worker
+Então um retém e cinco recebem `slot_unavailable`, e o pagamento gera um único recebimento.
+
+### C-BK-07 — Cobrança só com liberação; balcão gratuito
+- Regras: R-BK-01, R-BK-03 · Transições: T-ST-04 · Contrato: `updateAgendaSettings`, `createAppointment` · Tipo: integração
+
+Dado a loja cobrando sinal
+Então a reserva de balcão é gratuita e confirmada, um horário sem tempo de pagar é recusado (`booking_too_close`), e numa instalação sem `FILA_AGENDA_COBRANCA` a dona não consegue ligar a cobrança (`booking_payment_unavailable`).
+
+### C-BK-08 — Avisos e recuperação pelo e-mail
+- Regras: R-BK-07, R-BK-08 · Transições: T-VC-01, T-VC-02, T-VC-03, T-VC-04 · Contrato: `setVisitorContact`, `verifyVisitorContact`, `requestAppointmentAccess`, `exchangeAppointmentAccess` · Tipo: integração
+
+Dado um visitante que confirma o e-mail pelo código (o errado é recusado)
+Quando reserva, remarca, e em outro aparelho pede o link e o usa
+Então sai o aviso de remarcação (não o da revisão anterior), o e-mail desconhecido não recebe nada (mesma resposta), o link abre a reserva uma única vez, o cancelamento de uma conta gera aviso, e o visitante sem e-mail tem o aviso pulado.
+
 ---
 
 ## Critérios de pronto do anexo (§15) → cenários

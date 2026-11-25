@@ -97,9 +97,12 @@ func (s *Service) reconcile(ctx context.Context, id uuid.UUID) error {
 			pc = found[0]
 		case c.Status == ChargeCreating || c.Status == ChargeUnknown:
 			// Nenhuma cobrança com este externalId: repete a criação com o MESMO externalId.
-			pc, callErr = s.Provider.CreatePix(callCtx, CreatePix{ExternalID: c.ID.String(), AmountCents: c.amount,
-				ExpiresIn: s.ExpiresIn, Description: "Atendimento na barbearia",
-				Metadata: map[string]string{"charge_id": c.ID.String(), "order_id": c.OrderID.String(), "establishment_id": c.EstablishmentID.String()}})
+			in := CreatePix{ExternalID: c.ID.String(), AmountCents: c.amount, ExpiresIn: s.ExpiresIn, Description: "Atendimento na barbearia",
+				Metadata: map[string]string{"charge_id": c.ID.String(), "order_id": c.OrderID.String(), "establishment_id": c.EstablishmentID.String()}}
+			if c.BookingID != nil {
+				in = s.bookingPixRequest(c, c.amount)
+			}
+			pc, callErr = s.Provider.CreatePix(callCtx, in)
 			if errors.Is(callErr, ErrRejected) {
 				// O provedor recusou a criação e nada existe com este externalId: falhou de vez.
 				return s.finish(ctx, c, nil, ChargeFailed)
@@ -114,6 +117,9 @@ func (s *Service) reconcile(ctx context.Context, id uuid.UUID) error {
 
 // finish aplica o estado do provedor (ou marca a falha) e agenda a próxima consulta se continuar ativa.
 func (s *Service) finish(ctx context.Context, c chargeRow, pc *Charge, failTo string) error {
+	if c.BookingID != nil {
+		return s.bookingFinish(ctx, c, pc, failTo)
+	}
 	return database.InTx(ctx, s.Pool, func(tx pgx.Tx) error {
 		lp, err := atendimento.LockForPayment(ctx, tx, c.EstablishmentID, c.OrderID)
 		if err != nil {
@@ -176,7 +182,11 @@ func (s *Service) schedule(ctx context.Context, tx pgx.Tx, c chargeRow, now time
 		s.Log.Error("cobrança Pix continua com resultado desconhecido (charge_outcome_unresolved)", "tentativa", c.ID.String(),
 			"consultas", attempts)
 		amt := c.amount
-		if _, err := s.openIssue(ctx, tx, c.EstablishmentID, c.OrderID, IssueChargeUnresolved, "pix_charge", c.ID, &amt, now); err != nil {
+		if c.BookingID != nil {
+			if _, err := s.openBookingIssue(ctx, tx, c.EstablishmentID, *c.BookingID, IssueChargeUnresolved, "pix_charge", c.ID, &amt, now); err != nil {
+				return err
+			}
+		} else if _, err := s.openIssue(ctx, tx, c.EstablishmentID, c.OrderID, IssueChargeUnresolved, "pix_charge", c.ID, &amt, now); err != nil {
 			return err
 		}
 	}

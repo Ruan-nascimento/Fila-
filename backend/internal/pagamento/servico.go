@@ -54,6 +54,9 @@ type Deps struct {
 	Loyalty Loyalty
 	// Pendencies grava pendencies.updated (contadores do painel do dono) na transação. nil = sem painel.
 	Pendencies func(ctx context.Context, tx pgx.Tx, estID uuid.UUID, now time.Time) error
+	// Bookings liga a cobrança da reserva ao módulo agenda (ADR-0039). Atribuído depois de criar
+	// os dois serviços (a agenda também chama o pagamento). nil = sem cobrança de reserva.
+	Bookings Bookings
 }
 
 // Loyalty é implementado pelo módulo fidelidade (T-LG-01/02), na transação do pagamento.
@@ -77,7 +80,9 @@ func New(d Deps) *Service {
 		d.Timeout = 10 * time.Second
 	}
 	atendimento.RegisterPaymentData(PaymentData)
-	return &Service{Deps: d, idem: idempotency.New(d.Pool, d.Clock, d.Log)}
+	svc := &Service{Deps: d, idem: idempotency.New(d.Pool, d.Clock, d.Log)}
+	atendimento.RegisterCreditHook(svc.orderCredit)
+	return svc
 }
 
 // Routes devolve as operações do contrato implementadas por este módulo.
@@ -99,6 +104,10 @@ func (s *Service) Routes() []hs.Route {
 			Handler: s.manualRefund(RefundConfirmed)},
 		{Operation: "markRefundFailed", Method: http.MethodPost, Path: one + "/refunds/{refundId}/mark-failed", Grants: owner,
 			Handler: s.manualRefund(RefundFailed)},
+		{Operation: "confirmBookingRefund", Method: http.MethodPost, Path: "/v1/establishments/{establishmentId}/booking-refunds/{refundId}/confirm",
+			Grants: owner, Handler: s.bookingManualRefund(RefundConfirmed)},
+		{Operation: "markBookingRefundFailed", Method: http.MethodPost, Path: "/v1/establishments/{establishmentId}/booking-refunds/{refundId}/mark-failed",
+			Grants: owner, Handler: s.bookingManualRefund(RefundFailed)},
 		{Operation: "listFinancialIssues", Method: http.MethodGet, Path: "/v1/establishments/{establishmentId}/financial-issues",
 			Grants: owner, Handler: s.listFinancialIssues},
 		{Operation: "resolveFinancialIssue", Method: http.MethodPost,

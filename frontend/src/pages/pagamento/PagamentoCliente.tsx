@@ -124,6 +124,11 @@ export function PagamentoCliente({
         <span>Pagamento</span>
         <span className="text-xl tabular-nums">{formatCents(due)}</span>
       </h4>
+      {pay.amounts.credit && pay.amounts.credit.amount_cents > 0 && (
+        <p className="m-0 text-sm text-fg-muted">
+          Já descontado o sinal de {formatCents(pay.amounts.credit.amount_cents)} pago na reserva.
+        </p>
+      )}
       {pay.verifying && (
         <Notice kind="info" title="Verificando pagamento com o banco…">
           <p>Não gere outro Pix nem pague de novo. Esta tela atualiza sozinha.</p>

@@ -42,8 +42,8 @@ func (s *Service) CheckChairUse(ctx context.Context, q database.Querier, estID u
 	err = q.QueryRow(ctx, `
 		SELECT lower(period), kind FROM agenda_occupancy
 		WHERE professional_id = $1 AND released_at IS NULL AND period && tstzrange($2, $3, '[)')
-		  AND ($4::uuid IS NULL OR appointment_id IS DISTINCT FROM $4)
-		ORDER BY lower(period) LIMIT 1`, use.ProfessionalID, iv.Start, iv.End, own).Scan(&start, &kind)
+		  AND ($4::uuid IS NULL OR appointment_id IS DISTINCT FROM $4) AND (hold_until IS NULL OR hold_until > $5)
+		ORDER BY lower(period) LIMIT 1`, use.ProfessionalID, iv.Start, iv.End, own, s.Clock.Now()).Scan(&start, &kind)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
@@ -113,7 +113,7 @@ func (s *Service) CheckQueueEntry(ctx context.Context, q database.Querier, estID
 	}
 	var start time.Time
 	err = q.QueryRow(ctx, `
-		SELECT starts_at FROM appointment WHERE establishment_id = $1 AND status = 'confirmed'
+		SELECT starts_at FROM appointment WHERE establishment_id = $1 AND status IN ('held', 'confirmed')
 		  AND (account_id = $2 OR visitor_id = $2) AND starts_at >= $3 AND starts_at < $4
 		ORDER BY starts_at LIMIT 1`, estID, who.ID(), now, mine.End).Scan(&start)
 	if errors.Is(err, pgx.ErrNoRows) {

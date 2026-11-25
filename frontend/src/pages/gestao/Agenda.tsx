@@ -384,6 +384,7 @@ export function CartaoReserva({
         <Badge tone={sit.tom}>{sit.texto}</Badge>
       </div>
       {a.origin === "counter" && !compact && <p className="m-0 text-xs text-fg-muted">Reserva de balcão</p>}
+      {a.payment.booking && <PagamentoEquipe a={a} />}
       <CommandError
         problem={cmd.problem?.code === "slot_unavailable" ? null : cmd.problem}
         offline={cmd.offline}
@@ -710,5 +711,35 @@ function Balcao({
         A reserva é gratuita; o cliente paga na barbearia o que for feito.
       </p>
     </Section>
+  );
+}
+
+/** Pagamento da reserva para a equipe: aguardando Pix, sinal pago e quanto falta, taxa paga, devolução. */
+function PagamentoEquipe({ a }: { a: Appointment }) {
+  const b = a.payment.booking;
+  if (!b) return null;
+  const valor = formatCents(b.amount.amount_cents);
+  let texto = "";
+  let tom: "warning" | "success" | "neutral" = "neutral";
+  if (b.status === "awaiting_payment") {
+    texto = `Aguardando Pix de ${valor}`;
+    tom = "warning";
+  } else if (b.status === "paid" && b.mode === "deposit") {
+    texto =
+      b.credit_applied.amount_cents > 0
+        ? `Sinal de ${valor} descontado na comanda`
+        : `Sinal de ${valor} pago · na barbearia ${formatCents(a.payment.due_at_store.amount_cents)}`;
+    tom = "success";
+  } else if (b.status === "paid") {
+    texto = `Taxa de reserva de ${valor} paga · atendimento ${formatCents(a.price.amount_cents)}`;
+    tom = "success";
+  } else if (b.status === "expired") texto = "Pix não pago no prazo";
+  if (b.refund) texto += ` · devolução ${b.refund.status === "confirmed" ? "confirmada" : "em andamento"}`;
+  else if (b.outcome === "kept" && b.mode === "deposit") texto += " · retido pela política";
+  if (!texto) return null;
+  return (
+    <p className="m-0">
+      <Badge tone={tom}>{texto}</Badge>
+    </p>
   );
 }

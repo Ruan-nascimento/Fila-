@@ -60,6 +60,9 @@ type Deps struct {
 	// AgendaEnabled: agenda liberada neste servidor (FILA_AGENDA). Desligada, o modo da loja não
 	// sai de "fila" (lojas reais só aderem quando a operação liberar). ADR-0038.
 	AgendaEnabled bool
+	// AgendaCharge / AgendaRetain: cobrança da reserva e política de retenção liberadas (ADR-0039).
+	AgendaCharge bool
+	AgendaRetain bool
 	// AgendaImpact conta o que a troca de forma de atendimento afeta (módulo agenda). nil = zero.
 	AgendaImpact func(ctx context.Context, q database.Querier, estID uuid.UUID, now time.Time) (futureAppointments int, err error)
 	// FutureAppointmentsOf conta as reservas ativas que ainda vão acontecer com o profissional

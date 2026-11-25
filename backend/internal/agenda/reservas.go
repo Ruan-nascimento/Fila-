@@ -21,6 +21,7 @@ import (
 	"fila/internal/catalogo"
 	"fila/internal/estabelecimento"
 	"fila/internal/fila"
+	"fila/internal/pagamento"
 	"fila/internal/platform/database"
 	hs "fila/internal/platform/httpserver"
 	"fila/internal/platform/idempotency"
@@ -50,18 +51,21 @@ type professionalSlots struct {
 }
 
 type availabilityView struct {
-	Date            string              `json:"date"`
-	Timezone        string              `json:"timezone"`
-	Mode            string              `json:"mode"`
-	FirstDate       string              `json:"first_date"`
-	LastDate        string              `json:"last_date"`
-	VisitorLastDate string              `json:"visitor_last_date"`
-	StepMinutes     int                 `json:"step_minutes"`
-	ServiceMinutes  int                 `json:"service_minutes"`
-	BufferMinutes   int                 `json:"buffer_minutes"`
-	TotalMinutes    int                 `json:"total_minutes"`
-	Price           money               `json:"price"`
-	Professionals   []professionalSlots `json:"professionals"`
+	Date            string `json:"date"`
+	Timezone        string `json:"timezone"`
+	Mode            string `json:"mode"`
+	FirstDate       string `json:"first_date"`
+	LastDate        string `json:"last_date"`
+	VisitorLastDate string `json:"visitor_last_date"`
+	StepMinutes     int    `json:"step_minutes"`
+	ServiceMinutes  int    `json:"service_minutes"`
+	BufferMinutes   int    `json:"buffer_minutes"`
+	TotalMinutes    int    `json:"total_minutes"`
+	Price           money  `json:"price"`
+	// Payment: o que se paga agora e na barbearia por esta escolha (calculado no servidor; a
+	// confirmação refaz a conta).
+	Payment       pagamento.Quote     `json:"payment"`
+	Professionals []professionalSlots `json:"professionals"`
 }
 
 // parseItemsQuery lê items=<serviço ou produto>[:quantidade] (repetido).
@@ -258,6 +262,7 @@ func (s *Service) availability(ctx context.Context, q database.Querier, estID uu
 		}
 		out.Professionals = append(out.Professionals, ps)
 	}
+	out.Payment = s.quote(st, out.Price.AmountCents)
 	return out, nil
 }
 
@@ -412,7 +417,7 @@ func (s *Service) createAppointment(w http.ResponseWriter, r *http.Request) erro
 		if err != nil {
 			return idempotency.Result{}, err
 		}
-		if err := lockChairs(ctx, tx, estID, []estabelecimento.ProfessionalRef{prof}); err != nil {
+		if err := s.lockChairs(ctx, tx, estID, []estabelecimento.ProfessionalRef{prof}); err != nil {
 			return idempotency.Result{}, err
 		}
 		lines, err := resolveForProfessional(ctx, tx, estID, prof, *req.Items, st)
@@ -422,7 +427,7 @@ func (s *Service) createAppointment(w http.ResponseWriter, r *http.Request) erro
 		mins, cents := totals(lines)
 		// Limite de reservas futuras por identidade e loja (contado sob a trava da identidade).
 		var future int
-		if err := tx.QueryRow(ctx, `SELECT count(*) FROM appointment WHERE establishment_id = $1 AND status = 'confirmed'
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM appointment WHERE establishment_id = $1 AND status IN ('held', 'confirmed')
 			AND (account_id = $2 OR visitor_id = $2) AND starts_at > $3`, estID, who.ID(), now).Scan(&future); err != nil {
 			return idempotency.Result{}, err
 		}
@@ -433,10 +438,32 @@ func (s *Service) createAppointment(w http.ResponseWriter, r *http.Request) erro
 		if err := s.checkSlot(ctx, tx, estID, loc, day, now, st, prof, mins, start, nil); err != nil {
 			return idempotency.Result{}, err
 		}
-		id, err := insertAppointment(ctx, tx, newAppointment{estID: estID, prof: prof, who: *who, origin: originOf(staff),
-			start: start, day: day, loc: loc, mins: mins, cents: cents, st: st, lines: lines, now: now})
+		// Cobrança da reserva (ADR-0039): online e com a cobrança disponível; a de balcão é
+		// gratuita (o cliente paga na barbearia). O valor e a política vêm do servidor.
+		q := pagamento.Quote{Mode: estabelecimento.BookingFree}
+		if staff == nil {
+			q = s.quote(st, cents)
+		}
+		n := newAppointment{estID: estID, prof: prof, who: *who, origin: originOf(staff),
+			start: start, day: day, loc: loc, mins: mins, cents: cents, st: st, lines: lines, now: now}
+		if q.Mode != estabelecimento.BookingFree {
+			hold := now.Add(s.holdDuration())
+			if !hold.Before(start) {
+				// Sem tempo para pagar antes do horário: a retenção nunca passa do início.
+				return idempotency.Result{}, conflict("booking_too_close", "Horário muito próximo para pagar antes",
+					"Esta barbearia cobra a reserva pelo Pix e não há tempo para pagar antes deste horário. Escolha um horário mais tarde.", nil)
+			}
+			n.hold = &hold
+		}
+		id, err := insertAppointment(ctx, tx, n)
 		if err != nil {
 			return idempotency.Result{}, err
+		}
+		if n.hold != nil {
+			if _, err := s.Payments.CreateObligation(ctx, tx, pagamento.Obligation{EstablishmentID: estID, AppointmentID: id, Quote: q,
+				HoldExpiresAt: *n.hold, PolicyVersion: st.AgendaVersion, Now: now}); err != nil {
+				return idempotency.Result{}, err
+			}
 		}
 		actor := customerActorInfo(*who)
 		if staff != nil {
@@ -523,6 +550,8 @@ type newAppointment struct {
 	st     estabelecimento.Settings
 	lines  []atendimento.Line
 	now    time.Time
+	// hold: reserva paga aguardando o Pix até este instante (nil = confirmada na hora).
+	hold *time.Time
 }
 
 func insertAppointment(ctx context.Context, tx pgx.Tx, n newAppointment) (uuid.UUID, error) {
@@ -543,10 +572,11 @@ func insertAppointment(ctx context.Context, tx pgx.Tx, n newAppointment) (uuid.U
 	_, err := tx.Exec(ctx, `
 		INSERT INTO appointment (id, establishment_id, professional_id, account_id, visitor_id, nick, origin, local_date, timezone,
 		                         starts_at, ends_at, service_minutes, buffer_minutes, tolerance_minutes, checkin_window_minutes,
-		                         policy_version, price_cents, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $18)`,
+		                         policy_version, price_cents, created_at, updated_at, status, hold_expires_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $18, $19, $20)`,
 		id, n.estID, n.prof.ID, acc, vis, nick, n.origin, n.day.Date(), n.loc.String(), n.start, ends, max(n.mins, 1),
-		n.st.BufferMinutes, n.st.AppointmentTolerance(), n.st.CheckinWindowMinutes, n.st.AgendaVersion, n.cents, n.now)
+		n.st.BufferMinutes, n.st.AppointmentTolerance(), n.st.CheckinWindowMinutes, n.st.AgendaVersion, n.cents, n.now,
+		statusFor(n.hold), n.hold)
 	if isOverlapOn(err, "appointment_account_overlap") || isOverlapOn(err, "appointment_visitor_overlap") {
 		return id, conflict("appointment_overlaps_own", "Você já tem horário nesse período",
 			"Você já tem outra reserva que se sobrepõe a este horário nesta barbearia (com qualquer profissional).", nil)
@@ -568,13 +598,20 @@ func insertAppointment(ctx context.Context, tx pgx.Tx, n newAppointment) (uuid.U
 			return id, err
 		}
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO agenda_occupancy (establishment_id, professional_id, kind, appointment_id, period)
-		VALUES ($1, $2, 'appointment', $3, tstzrange($4, $5, '[)'))`, n.estID, n.prof.ID, id, n.start, ends)
+	_, err = tx.Exec(ctx, `INSERT INTO agenda_occupancy (establishment_id, professional_id, kind, appointment_id, period, hold_until)
+		VALUES ($1, $2, 'appointment', $3, tstzrange($4, $5, '[)'), $6)`, n.estID, n.prof.ID, id, n.start, ends, n.hold)
 	if isOverlap(err) {
 		return id, conflict("slot_unavailable", "Horário indisponível",
 			"Este horário acabou de ser ocupado. Escolha outro; os serviços escolhidos continuam.", nil)
 	}
 	return id, err
+}
+
+func statusFor(hold *time.Time) string {
+	if hold != nil {
+		return StatusHeld
+	}
+	return StatusConfirmed
 }
 
 func isOverlap(err error) bool { return isOverlapOn(err, "agenda_occupancy_no_overlap") }
@@ -640,14 +677,14 @@ func (s *Service) listMyAppointments(w http.ResponseWriter, r *http.Request) err
 	sql := appointmentSelect + ` WHERE (account_id = ANY($1) OR visitor_id = ANY($1))`
 	args := []any{ids}
 	if scope == "upcoming" {
-		sql += ` AND status IN ('confirmed', 'called', 'in_service')`
+		sql += ` AND status IN ('held', 'confirmed', 'called', 'in_service')`
 		if !afterT.IsZero() {
 			sql += ` AND (starts_at, id) > ($2, $3)`
 			args = append(args, afterT, afterID)
 		}
 		sql += ` ORDER BY starts_at, id`
 	} else {
-		sql += ` AND status NOT IN ('confirmed', 'called', 'in_service')`
+		sql += ` AND status NOT IN ('held', 'confirmed', 'called', 'in_service')`
 		if !afterT.IsZero() {
 			sql += ` AND (starts_at, id) < ($2, $3)`
 			args = append(args, afterT, afterID)
@@ -830,7 +867,7 @@ func (s *Service) command(w http.ResponseWriter, r *http.Request, op string, cus
 				profs = append(profs, p)
 			}
 		}
-		if err := lockChairs(ctx, tx, estID, profs); err != nil {
+		if err := s.lockChairs(ctx, tx, estID, profs); err != nil {
 			return idempotency.Result{}, err
 		}
 		a, err := loadAppointment(ctx, tx, estID, id, true)
@@ -873,11 +910,6 @@ func (s *Service) done(ctx context.Context, q database.Querier, a appointment, b
 	return idempotency.Result{Status: http.StatusOK, Body: hs.Data[appointmentView]{Data: v}}, nil
 }
 
-type versionReason struct {
-	ExpectedVersion *int64  `json:"expected_version"`
-	Reason          *string `json:"reason"`
-}
-
 func reasonOf(b *string) (string, error) {
 	if b == nil {
 		return "", nil
@@ -891,8 +923,15 @@ func reasonOf(b *string) (string, error) {
 
 // cancelAppointment (T-AP-03): o titular cancela até o horário; a equipe, com motivo, a qualquer
 // momento antes da chamada. Libera o intervalo na hora. Depois de chamada, cancela-se a visita.
+type cancelRequest struct {
+	ExpectedVersion *int64  `json:"expected_version"`
+	Reason          *string `json:"reason"`
+	// AcceptRetention: o cliente leu que, fora da janela, o valor pago fica com a barbearia.
+	AcceptRetention *bool `json:"accept_retention"`
+}
+
 func (s *Service) cancelAppointment(w http.ResponseWriter, r *http.Request) error {
-	var body versionReason
+	var body cancelRequest
 	return s.command(w, r, "cancelAppointment", true, true, &body, func() *int64 { return body.ExpectedVersion }, nil,
 		func(tx pgx.Tx, a appointment, by who, _ *time.Location) (idempotency.Result, error) {
 			ctx := r.Context()
@@ -903,7 +942,7 @@ func (s *Service) cancelAppointment(w http.ResponseWriter, r *http.Request) erro
 			if by.staff != nil && reason == "" {
 				return idempotency.Result{}, hs.ErrValidation(hs.FieldError{Field: "/reason", Code: hs.FieldRequired, Message: "informe o motivo do cancelamento"})
 			}
-			if a.Status != StatusConfirmed {
+			if a.Status != StatusConfirmed && a.Status != StatusHeld {
 				detail := "Esta reserva não pode mais ser cancelada."
 				if a.Status == StatusCalled || a.Status == StatusInService {
 					detail = "O cliente já foi chamado: cancele ou encerre pela visita, em Filas."
@@ -914,9 +953,23 @@ func (s *Service) cancelAppointment(w http.ResponseWriter, r *http.Request) erro
 			if by.customer != nil && !now.Before(a.StartsAt) {
 				return s.invalid(ctx, tx, a, by, "O horário já começou. Fale com a barbearia.")
 			}
-			cancelledBy := "customer"
+			cancelledBy, end := "customer", pagamento.EndCancelledByCust
 			if by.staff != nil {
-				cancelledBy = "store"
+				cancelledBy, end = "store", pagamento.EndCancelledByStore
+			}
+			if by.customer != nil {
+				// Fora da janela com a política "reter": o cliente confirma que leu antes.
+				bv, err := pagamento.BookingViews(ctx, tx, []uuid.UUID{a.ID})
+				if err != nil {
+					return idempotency.Result{}, err
+				}
+				if b, ok := bv[a.ID]; ok && b.Status == pagamento.BookingPaid && b.LateCancelPolicy == "retain" &&
+					now.After(a.StartsAt.Add(-time.Duration(b.CancelWindowHours)*time.Hour)) &&
+					(body.AcceptRetention == nil || !*body.AcceptRetention) {
+					return idempotency.Result{}, conflict("cancel_retains_payment", "O valor pago não será devolvido",
+						fmt.Sprintf("Faltam menos de %d h para o horário: pela política aceita na reserva, cancelando agora o valor de %s fica com a barbearia. Confirme para cancelar mesmo assim.",
+							b.CancelWindowHours, reaisBR(b.Amount.AmountCents)), nil)
+				}
 			}
 			var why *string
 			if reason != "" {
@@ -928,6 +981,11 @@ func (s *Service) cancelAppointment(w http.ResponseWriter, r *http.Request) erro
 			}
 			if err := releaseOccupancy(ctx, tx, a.ID, now); err != nil {
 				return idempotency.Result{}, err
+			}
+			if s.Payments != nil {
+				if err := s.Payments.BookingEnded(ctx, tx, a.EstablishmentID, a.ID, end, a.StartsAt, now); err != nil {
+					return idempotency.Result{}, err
+				}
 			}
 			if err := s.afterChange(ctx, tx, a.EstablishmentID, a.ID, "T-AP-03", a.Status, by.actor(), reason, now); err != nil {
 				return idempotency.Result{}, err
@@ -1144,9 +1202,15 @@ func (s *Service) callAppointment(w http.ResponseWriter, r *http.Request) error 
 			}
 			actor := by.actor()
 			audit := auditoria.Event{ActorKind: actor.kind, ActorID: actor.id, RequestID: hs.RequestIDFrom(ctx)}
+			orderID, _ := uuid.NewV7()
 			partID, err := s.Visits.OpenScheduledVisit(ctx, tx, fila.ScheduledVisit{EstablishmentID: a.EstablishmentID, Queue: qi,
-				AccountID: a.AccountID, VisitorID: a.VisitorID, Nick: a.Nick, Lines: lines, ToleranceMinutes: tolerance, Now: now, Audit: audit})
+				AccountID: a.AccountID, VisitorID: a.VisitorID, Nick: a.Nick, Lines: lines, ToleranceMinutes: tolerance, Now: now, Audit: audit,
+				OrderID: orderID})
 			if err != nil {
+				return idempotency.Result{}, err
+			}
+			// Valor pago da reserva: fica ligado à comanda e é abatido quando o total fechar.
+			if err := pagamento.AttachOrder(ctx, tx, a.EstablishmentID, a.ID, orderID, now); err != nil {
 				return idempotency.Result{}, err
 			}
 			deadline := now.Add(time.Duration(tolerance) * time.Minute)

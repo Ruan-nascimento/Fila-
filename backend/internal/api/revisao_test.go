@@ -184,6 +184,8 @@ func TestAuthorizationSweepAllRoutes(t *testing.T) {
 			body["reason"] = "teste de autorização"
 		case "resolveFinancialIssue":
 			body = map[string]any{"resolution_note": "teste de autorização"}
+		case "confirmBookingRefund", "markBookingRefundFailed":
+			body = map[string]any{"evidence_note": "teste de autorização"}
 		case "signalAvailability":
 			body = map[string]any{"unavailable": true}
 		case "setQueueCapacity":

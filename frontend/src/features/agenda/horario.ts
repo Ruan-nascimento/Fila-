@@ -98,6 +98,10 @@ export function situacaoReserva(a: Appointment): {
   tom: "neutral" | "primary" | "success" | "warning" | "danger";
 } {
   switch (a.status) {
+    case "held":
+      return { texto: "Aguardando pagamento", tom: "warning" };
+    case "expired":
+      return { texto: "Não paga no prazo", tom: "neutral" };
     case "confirmed":
       if (a.store_late) return { texto: "Horário passou · a loja não chamou", tom: "warning" };
       if (a.arrived_at) return { texto: "Confirmada · cliente chegou", tom: "success" };
@@ -124,4 +128,25 @@ export function situacaoReserva(a: Appointment): {
 /** "3× Corte, 1× Pomada". */
 export function itensTexto(a: Appointment): string {
   return a.items.map((i) => (i.quantity > 1 ? `${i.quantity}× ${i.name}` : i.name)).join(", ");
+}
+
+type BookingPayment = components["schemas"]["BookingPayment"];
+
+/** Situação da devolução do valor pago (solicitada não é devolvida). */
+export function devolucaoTexto(b: BookingPayment): string | null {
+  const r = b.refund;
+  if (!r) return null;
+  const valor = (r.amount.amount_cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  switch (r.status) {
+    case "requested":
+    case "processing":
+    case "unknown":
+      return `Devolução de ${valor} solicitada. Pelo Pix pode levar alguns dias.`;
+    case "under_review":
+      return `Devolução de ${valor} em análise pela barbearia.`;
+    case "confirmed":
+      return `Devolução de ${valor} confirmada.`;
+    case "failed":
+      return `A devolução de ${valor} não foi concluída. Fale com a barbearia.`;
+  }
 }

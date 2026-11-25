@@ -40,12 +40,16 @@ func (s *Service) Run(ctx context.Context, every time.Duration) {
 // Tick faz uma rodada: faltas de chamadas vencidas e "atraso da loja" de horários não chamados.
 func (s *Service) Tick(ctx context.Context) (int, error) {
 	now := s.Clock.Now()
-	done := 0
+	// 0. Retenções de pagamento vencidas: o horário volta a ficar livre (T-AP-09).
+	done, err := s.expireDue(ctx, now)
+	if err != nil {
+		return done, err
+	}
 	// 1. Falta: chamada válida, prazo vencido (no instante exato do prazo já venceu), sem presença.
 	rows, err := s.Pool.Query(ctx, `SELECT establishment_id, participation_id FROM appointment
 		WHERE status = 'called' AND deadline_at <= $1 AND arrived_at IS NULL ORDER BY deadline_at LIMIT $2`, now, batch)
 	if err != nil {
-		return 0, err
+		return done, err
 	}
 	type cand struct{ est, part uuid.UUID }
 	list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (cand, error) {
@@ -114,7 +118,9 @@ func (s *Service) Tick(ctx context.Context) (int, error) {
 			return done, err
 		}
 	}
-	return done, nil
+	// 3. Avisos por e-mail vencidos (confirmação, lembrete, chamada…), revalidados antes de enviar.
+	n, err := s.deliverNotices(ctx, s.Clock.Now())
+	return done + n, err
 }
 
 // FutureAppointmentsOf conta as reservas confirmadas ou em curso de um profissional que ainda não
@@ -122,7 +128,7 @@ func (s *Service) Tick(ctx context.Context) (int, error) {
 func FutureAppointmentsOf(ctx context.Context, q database.Querier, professionalID uuid.UUID, now time.Time) (int, error) {
 	var n int
 	err := q.QueryRow(ctx, `SELECT count(*) FROM appointment WHERE professional_id = $1
-		AND status IN ('confirmed', 'called', 'in_service') AND ends_at > $2`, professionalID, now).Scan(&n)
+		AND status IN ('held', 'confirmed', 'called', 'in_service') AND ends_at > $2`, professionalID, now).Scan(&n)
 	return n, err
 }
 
@@ -130,7 +136,7 @@ func FutureAppointmentsOf(ctx context.Context, q database.Querier, professionalI
 // de mudar a forma de atendimento).
 func FutureAppointments(ctx context.Context, q database.Querier, estID uuid.UUID, now time.Time) (int, error) {
 	var n int
-	err := q.QueryRow(ctx, `SELECT count(*) FROM appointment WHERE establishment_id = $1 AND status = 'confirmed' AND ends_at > $2`,
+	err := q.QueryRow(ctx, `SELECT count(*) FROM appointment WHERE establishment_id = $1 AND status IN ('held', 'confirmed') AND ends_at > $2`,
 		estID, now).Scan(&n)
 	return n, err
 }

@@ -157,12 +157,13 @@ type occupied struct {
 	Interval     Interval
 }
 
-func occupancies(ctx context.Context, q database.Querier, profIDs []uuid.UUID, span Interval, exclude *uuid.UUID) (map[uuid.UUID][]occupied, error) {
+// occupancies lê as ocupações ativas; retenção de pagamento vencida (hold_until <= now) não conta.
+func occupancies(ctx context.Context, q database.Querier, profIDs []uuid.UUID, span Interval, exclude *uuid.UUID, now time.Time) (map[uuid.UUID][]occupied, error) {
 	rows, err := q.Query(ctx, `
 		SELECT professional_id, appointment_id, lower(period), upper(period) FROM agenda_occupancy
 		WHERE professional_id = ANY($1) AND released_at IS NULL AND period && tstzrange($2, $3, '[)')
-		  AND ($4::uuid IS NULL OR appointment_id IS DISTINCT FROM $4)
-		ORDER BY lower(period)`, profIDs, span.Start, span.End, exclude)
+		  AND ($4::uuid IS NULL OR appointment_id IS DISTINCT FROM $4) AND (hold_until IS NULL OR hold_until > $5)
+		ORDER BY lower(period)`, profIDs, span.Start, span.End, exclude, now)
 	if err != nil {
 		return nil, err
 	}
@@ -267,6 +268,6 @@ func loadPlanInput(ctx context.Context, q database.Querier, estID uuid.UUID, loc
 		return in, err
 	}
 	span := Interval{edge(day, 0, loc), edge(day, 1440, loc)}
-	in.Occ, err = occupancies(ctx, q, profIDs, span, exclude)
+	in.Occ, err = occupancies(ctx, q, profIDs, span, exclude, now)
 	return in, err
 }
