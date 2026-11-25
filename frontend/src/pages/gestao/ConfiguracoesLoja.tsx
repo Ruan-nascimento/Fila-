@@ -23,7 +23,7 @@ import { CommandError, type StaffContext } from "./comum";
 type Settings = components["schemas"]["EstablishmentSettings"];
 type Fee = components["schemas"]["PaymentFee"];
 type Costs = components["schemas"]["ReceiptCosts"];
-export type SecaoConfig = "catalogo" | "filas" | "pagamentos" | "fidelidade" | "equipe";
+export type SecaoConfig = "catalogo" | "filas" | "agenda" | "pagamentos" | "fidelidade" | "equipe";
 
 /**
  * Configurações da loja por assunto (ADR-0034, docs/configuracoes-da-loja.md). Cada seção salva
@@ -67,6 +67,7 @@ export function ConfiguracoesLoja({ ctx, secao }: { ctx: StaffContext; secao: Se
     <div className="grid max-w-3xl gap-8">
       {secao === "catalogo" && <SecaoCatalogo {...props} />}
       {secao === "filas" && <SecaoFilas {...props} />}
+      {secao === "agenda" && <SecaoAgenda {...props} />}
       {secao === "equipe" && <SecaoEquipe {...props} />}
       {secao === "pagamentos" && (
         <>
@@ -360,6 +361,380 @@ function SecaoFilas({ ctx, settings, onSaved, onConflict }: SectionProps) {
         ) : (
           <div>
             <Submit busy={cmd.busy !== null}>Salvar filas e atendimento</Submit>
+          </div>
+        )}
+      </form>
+    </Section>
+  );
+}
+
+// --------------------------------------------------------------------------------- Agenda
+
+type Mode = components["schemas"]["ServiceMode"];
+type BookingMode = components["schemas"]["BookingMode"];
+
+const cobrancas: { value: BookingMode; label: string; hint: string }[] = [
+  { value: "free", label: "Reserva gratuita", hint: "Nada a pagar ao reservar; tudo na barbearia." },
+  { value: "deposit", label: "Sinal pelo Pix", hint: "Parte paga ao reservar e descontada do atendimento." },
+  {
+    value: "fee",
+    label: "Taxa de reserva pelo Pix",
+    hint: "Valor cobrado além do atendimento para garantir o horário.",
+  },
+];
+type Impact = components["schemas"]["AgendaImpact"];
+
+const modos: { value: Mode; label: string; hint: string }[] = [
+  { value: "queue", label: "Por ordem de chegada", hint: "Só fila, como hoje. Ninguém marca horário." },
+  {
+    value: "schedule",
+    label: "Com horário marcado",
+    hint: "Só reservas. A entrada na fila fecha; quem já está nela é atendido normalmente.",
+  },
+  {
+    value: "hybrid",
+    label: "Os dois",
+    hint: "Fila e horário marcado na mesma cadeira. A fila só chama quem cabe antes do próximo horário.",
+  },
+];
+
+/**
+ * Agenda (ADR-0038): forma de atendimento e regras das reservas. Mudar a forma de atendimento
+ * mostra antes quantas reservas e pessoas na fila existem: nada já aceito é apagado.
+ */
+function SecaoAgenda({ ctx, settings, onSaved, onConflict }: SectionProps) {
+  const a = settings.agenda;
+  const tolInherited = a.schedule_tolerance_minutes == null;
+  const s = useSection({
+    mode: a.service_mode,
+    step: String(a.slot_step_minutes),
+    buffer: String(a.buffer_minutes),
+    lead: String(a.min_lead_minutes),
+    horizon: String(a.horizon_days),
+    inherit: tolInherited,
+    tolerance: String(a.schedule_tolerance_minutes ?? settings.queue.call_tolerance_minutes),
+    checkin: String(a.checkin_window_minutes),
+    max: String(a.max_future_appointments),
+    block: a.professionals_can_block,
+    bmode: a.booking_payment_mode,
+    bcents: a.booking_payment_cents != null ? centsToInput(a.booking_payment_cents) : "",
+    window: String(a.cancel_window_hours),
+    late: a.late_cancel_policy,
+    reminder: String(a.reminder_hours),
+  });
+  const cmd = useCommand();
+  const [local, setLocal] = useState<Record<string, string>>({});
+  const [impact, setImpact] = useState<Impact | null>(null);
+  async function save() {
+    const f = s.form;
+    const step = intIn(f.step, 5, 120);
+    const buffer = intIn(f.buffer, 0, 60);
+    const lead = /^\d{1,4}$/.test(f.lead) && Number(f.lead) <= 1440 ? Number(f.lead) : null;
+    const horizon = intIn(f.horizon, 1, 180);
+    const tol = f.inherit ? null : intIn(f.tolerance, 1, 60);
+    const checkin = intIn(f.checkin, 0, 60);
+    const max = intIn(f.max, 1, 20);
+    const bcents = f.bmode === "free" ? null : parseCents(f.bcents);
+    const cancelWindow = intIn(f.window, 0, 168);
+    const reminder = intIn(f.reminder, 0, 72);
+    const errs: Record<string, string> = {};
+    if (f.bmode !== "free" && (bcents === null || bcents < 100 || bcents > 100000))
+      errs.bcents = "Use de R$ 1,00 a R$ 1.000,00.";
+    if (cancelWindow === null) errs.window = "Use de 0 a 168 horas.";
+    if (reminder === null) errs.reminder = "Use de 0 a 72 horas.";
+    if (step === null) errs.step = "Use de 5 a 120 minutos.";
+    if (buffer === null) errs.buffer = "Use de 0 a 60 minutos.";
+    if (lead === null) errs.lead = "Use de 0 a 1440 minutos (24 h).";
+    if (horizon === null) errs.horizon = "Use de 1 a 180 dias.";
+    if (!f.inherit && tol === null) errs.tolerance = "Use de 1 a 60 minutos.";
+    if (checkin === null) errs.checkin = "Use de 0 a 60 minutos.";
+    if (max === null) errs.max = "Use de 1 a 20 reservas.";
+    setLocal(errs);
+    if (Object.keys(errs).length > 0) return;
+    if (
+      step === null ||
+      buffer === null ||
+      lead === null ||
+      horizon === null ||
+      checkin === null ||
+      max === null ||
+      cancelWindow === null ||
+      reminder === null
+    )
+      return;
+    const body = {
+      expected_version: a.version,
+      ...(f.mode !== a.service_mode ? { service_mode: f.mode } : {}),
+      ...(step !== a.slot_step_minutes ? { slot_step_minutes: step } : {}),
+      ...(buffer !== a.buffer_minutes ? { buffer_minutes: buffer } : {}),
+      ...(lead !== a.min_lead_minutes ? { min_lead_minutes: lead } : {}),
+      ...(horizon !== a.horizon_days ? { horizon_days: horizon } : {}),
+      ...(tol !== (a.schedule_tolerance_minutes ?? null) ? { schedule_tolerance_minutes: tol } : {}),
+      ...(checkin !== a.checkin_window_minutes ? { checkin_window_minutes: checkin } : {}),
+      ...(max !== a.max_future_appointments ? { max_future_appointments: max } : {}),
+      ...(f.block !== a.professionals_can_block ? { professionals_can_block: f.block } : {}),
+      ...(f.bmode !== a.booking_payment_mode || bcents !== (a.booking_payment_cents ?? null)
+        ? { booking_payment_mode: f.bmode, booking_payment_cents: bcents }
+        : {}),
+      ...(cancelWindow !== a.cancel_window_hours ? { cancel_window_hours: cancelWindow } : {}),
+      ...(f.late !== a.late_cancel_policy ? { late_cancel_policy: f.late } : {}),
+      ...(reminder !== a.reminder_hours ? { reminder_hours: reminder } : {}),
+    };
+    const out = await cmd.run(`cfg:agenda:${a.version}:${JSON.stringify(body)}`, (key) =>
+      api.PATCH("/v1/establishments/{establishmentId}/settings/agenda", {
+        params: { path: { establishmentId: ctx.estId }, header: { "Idempotency-Key": key } },
+        body,
+      }),
+    );
+    setImpact(null);
+    if (out.ok) {
+      // Mostra o valor como o servidor guardou ("15" → "15,00"), senão a seção pareceria não salva.
+      s.set({ bcents: bcents !== null ? centsToInput(bcents) : "" });
+      onSaved(out.data.data);
+      s.setSaved(true);
+    } else if (out.problem?.status === 409 && out.problem.code === "version_conflict") {
+      s.setConflict(true);
+      await onConflict();
+    }
+  }
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (s.form.mode === a.service_mode) {
+      void save();
+      return;
+    }
+    // Troca de forma de atendimento: mostra antes o que existe agora (nada é apagado).
+    const out = await call(() =>
+      api.GET("/v1/establishments/{establishmentId}/settings/agenda/impact", {
+        params: { path: { establishmentId: ctx.estId } },
+      }),
+    );
+    setImpact(out.ok ? out.data.data : { future_appointments: 0, waiting_in_queues: 0 });
+  }
+  const errors = fieldErrors(cmd.problem);
+  const usesSchedule = s.form.mode !== "queue";
+  return (
+    <Section
+      title="Agenda"
+      description="Como a barbearia atende: por ordem de chegada, com horário marcado ou os dois."
+    >
+      <form
+        onSubmit={(e) => void onSubmit(e)}
+        noValidate
+        aria-label="Configurações da agenda"
+        className="grid gap-4"
+      >
+        <Status s={s} onDiscard={s.reset} />
+        {!a.available && (
+          <Notice kind="info" title="Agenda ainda não liberada nesta instalação">
+            <p>
+              A loja continua por ordem de chegada. Quando a agenda for liberada, as opções abaixo passam a
+              valer.
+            </p>
+          </Notice>
+        )}
+        {!cmd.problem?.errors?.length && cmd.problem?.code !== "version_conflict" && (
+          <CommandError problem={cmd.problem} offline={cmd.offline} />
+        )}
+        <fieldset className="m-0 grid gap-2 border-0 p-0">
+          <legend className="mb-1 p-0 text-sm font-semibold">Forma de atendimento</legend>
+          {modos.map((m) => (
+            <Choice
+              key={m.value}
+              type="radio"
+              name="forma-atendimento"
+              checked={s.form.mode === m.value}
+              disabled={!a.available && m.value !== "queue"}
+              onChange={() => s.set({ mode: m.value })}
+              label={m.label}
+              description={m.hint}
+            />
+          ))}
+        </fieldset>
+        {usesSchedule && (
+          <p className="m-0 text-sm text-fg-muted">
+            Cadastre os turnos em <Link to={`/gestao/${ctx.estId}/horarios`}>Horários</Link>. Sem turno no
+            dia, a agenda não oferece horários (a fila segue abrindo e fechando como hoje).
+          </p>
+        )}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field
+            label="Oferecer horários a cada (minutos)"
+            inputMode="numeric"
+            value={s.form.step}
+            error={local.step ?? errors.slot_step_minutes}
+            hint="De 5 a 120 (sugestão: 15). Só define os inícios sugeridos; a duração vem dos serviços."
+            onChange={(e) => s.set({ step: e.target.value })}
+          />
+          <Field
+            label="Preparação/limpeza por visita (minutos)"
+            inputMode="numeric"
+            value={s.form.buffer}
+            error={local.buffer ?? errors.buffer_minutes}
+            hint="De 0 a 60 (sugestão: 0). Somada uma vez por visita: 3 cortes de 25 + 5 = 80 min."
+            onChange={(e) => s.set({ buffer: e.target.value })}
+          />
+          <Field
+            label="Antecedência mínima (minutos)"
+            inputMode="numeric"
+            value={s.form.lead}
+            error={local.lead ?? errors.min_lead_minutes}
+            hint="De 0 a 1440 (sugestão: 30). Ex.: às 14h, com 30, o primeiro horário de hoje é 14h30."
+            onChange={(e) => s.set({ lead: e.target.value })}
+          />
+          <Field
+            label="Até quantos dias à frente"
+            inputMode="numeric"
+            value={s.form.horizon}
+            error={local.horizon ?? errors.horizon_days}
+            hint="De 1 a 180 (sugestão: 30). Sem conta, o cliente marca no máximo 7 dias à frente."
+            onChange={(e) => s.set({ horizon: e.target.value })}
+          />
+          <Field
+            label="Janela de chegada antes do horário (minutos)"
+            inputMode="numeric"
+            value={s.form.checkin}
+            error={local.checkin ?? errors.checkin_window_minutes}
+            hint="De 0 a 60 (sugestão: 15). A partir daí a equipe registra a chegada e pode chamar."
+            onChange={(e) => s.set({ checkin: e.target.value })}
+          />
+          <Field
+            label="Reservas futuras por cliente"
+            inputMode="numeric"
+            value={s.form.max}
+            error={local.max ?? errors.max_future_appointments}
+            hint="De 1 a 20 (sugestão: 3). Vale por cliente nesta loja."
+            onChange={(e) => s.set({ max: e.target.value })}
+          />
+        </div>
+        <Toggle
+          label="Usar a mesma tolerância da fila para os horários marcados"
+          hint={`Hoje a tolerância da fila é de ${settings.queue.call_tolerance_minutes} min. Cada reserva guarda a tolerância do momento em que foi feita.`}
+          checked={s.form.inherit}
+          onChange={(v) => s.set({ inherit: v })}
+        />
+        {!s.form.inherit && (
+          <Field
+            label="Tolerância de chegada dos horários marcados (minutos)"
+            inputMode="numeric"
+            value={s.form.tolerance}
+            error={local.tolerance ?? errors.schedule_tolerance_minutes}
+            hint="De 1 a 60. Conta a partir do horário marcado (ou da chamada, se a loja chamar depois)."
+            onChange={(e) => s.set({ tolerance: e.target.value })}
+            wrapperClassName="max-w-xs"
+          />
+        )}
+        <Toggle
+          label="Profissionais podem bloquear trechos da própria agenda"
+          hint="Padrão: desligado. Permite marcar folga ou bloqueio só na própria agenda (nunca por cima de reserva)."
+          checked={s.form.block}
+          onChange={(v) => s.set({ block: v })}
+        />
+        {usesSchedule && (
+          <fieldset className="m-0 grid gap-3 rounded-xl border border-line p-4">
+            <legend className="px-1 text-sm font-semibold">Cobrança da reserva</legend>
+            {!a.charge_available && (
+              <Notice kind="info" title="Cobrança da reserva indisponível">
+                <p>
+                  Cobrar a reserva exige o Pix ligado e verificado (em Pagamentos) e a liberação da cobrança
+                  nesta instalação. Enquanto isso, as reservas são gratuitas.
+                </p>
+              </Notice>
+            )}
+            {cobrancas.map((m) => (
+              <Choice
+                key={m.value}
+                type="radio"
+                name="cobranca-reserva"
+                checked={s.form.bmode === m.value}
+                disabled={!a.charge_available && m.value !== "free" && a.booking_payment_mode !== m.value}
+                onChange={() => s.set({ bmode: m.value })}
+                label={m.label}
+                description={m.hint}
+              />
+            ))}
+            {s.form.bmode !== "free" && (
+              <Field
+                label={s.form.bmode === "deposit" ? "Valor do sinal (R$)" : "Valor da taxa (R$)"}
+                inputMode="decimal"
+                value={s.form.bcents}
+                error={local.bcents ?? errors.booking_payment_cents}
+                hint={
+                  s.form.bmode === "deposit"
+                    ? "Pago pelo Pix ao reservar e descontado do atendimento. Se os serviços custarem menos, cobra-se só o valor deles."
+                    : "Pago pelo Pix ao reservar, além do atendimento. Nunca vira desconto."
+                }
+                onChange={(e) => s.set({ bcents: e.target.value })}
+                wrapperClassName="max-w-xs"
+              />
+            )}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field
+                label="Cancelamento com devolução até (horas antes)"
+                inputMode="numeric"
+                value={s.form.window}
+                error={local.window ?? errors.cancel_window_hours}
+                hint="De 0 a 168 (sugestão: 12). Cancelando até aí, o cliente recebe o valor de volta. A loja que cancela sempre devolve."
+                onChange={(e) => s.set({ window: e.target.value })}
+              />
+              <Field
+                label="Lembrete por e-mail (horas antes)"
+                inputMode="numeric"
+                value={s.form.reminder}
+                error={local.reminder ?? errors.reminder_hours}
+                hint="De 0 a 72 (sugestão: 24). 0 = sem lembrete."
+                onChange={(e) => s.set({ reminder: e.target.value })}
+              />
+            </div>
+            <fieldset className="m-0 grid gap-2 border-0 p-0">
+              <legend className="mb-1 p-0 text-sm font-semibold">Cancelamento depois disso ou falta</legend>
+              <Choice
+                type="radio"
+                name="politica-atraso"
+                checked={s.form.late === "refund"}
+                onChange={() => s.set({ late: "refund" })}
+                label="Devolver o valor"
+                description="Padrão. O cliente sempre recebe de volta o que pagou se não for atendido."
+              />
+              <Choice
+                type="radio"
+                name="politica-atraso"
+                checked={s.form.late === "retain"}
+                disabled={!a.retain_available && a.late_cancel_policy !== "retain"}
+                onChange={() => s.set({ late: "retain" })}
+                label="Reter o valor"
+                description={
+                  a.retain_available
+                    ? "O cliente vê a regra antes de pagar e confirma ao cancelar fora do prazo. Vale para reservas feitas depois de salvar."
+                    : "Ainda não liberado nesta instalação (exige a política comercial aprovada)."
+                }
+              />
+            </fieldset>
+            <p className="m-0 text-sm text-fg-muted">
+              Mudanças valem para reservas novas; cada reserva guarda a regra aceita pelo cliente.
+            </p>
+          </fieldset>
+        )}
+        {impact ? (
+          <ConfirmPanel
+            title={`Mudar para “${modos.find((m) => m.value === s.form.mode)?.label ?? ""}”?`}
+            confirmLabel="Mudar a forma de atendimento"
+            busy={cmd.busy !== null}
+            onConfirm={() => void save()}
+            onCancel={() => setImpact(null)}
+          >
+            <p>
+              Agora há {impact.future_appointments} reserva(s) futura(s) e {impact.waiting_in_queues}{" "}
+              pessoa(s) na fila. Nada disso é apagado: o que já foi aceito continua e é atendido normalmente.
+            </p>
+            {s.form.mode === "schedule" && <p>A entrada na fila fecha para quem chegar a partir de agora.</p>}
+            {s.form.mode === "queue" && (
+              <p>Novas reservas deixam de ser aceitas; as já marcadas continuam valendo.</p>
+            )}
+          </ConfirmPanel>
+        ) : (
+          <div>
+            <Submit busy={cmd.busy !== null}>Salvar agenda</Submit>
           </div>
         )}
       </form>

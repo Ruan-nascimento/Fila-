@@ -59,7 +59,7 @@ export function AcessoDono() {
         </p>
       </NaoElegivel>
     );
-  if (lojas.length === 1) return <Navigate to={`/gestao/${lojas[0]?.id}/filas`} replace />;
+  if (lojas.length === 1) return <Navigate to={`/gestao/${lojas[0]?.id}`} replace />;
 
   return (
     <section aria-labelledby="titulo-dono" className="grid gap-4">
@@ -68,7 +68,7 @@ export function AcessoDono() {
         {lojas.map((l) => (
           <li key={l.id}>
             <Link
-              to={`/gestao/${l.id}/filas`}
+              to={`/gestao/${l.id}`}
               className="flex min-h-11 items-center gap-3 px-4 py-3 text-fg no-underline hover:bg-surface-2"
             >
               <Store aria-hidden="true" className="size-5 text-fg-muted" />

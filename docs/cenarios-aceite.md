@@ -1251,6 +1251,201 @@ Dado a preferência de segundo plano ligada
 Quando o dono fecha a janela
 Então o processo continua e a página escondida continua recebendo o fluxo; abrir de novo reabre a janela sem segunda instância; "Sair do Fila" encerra o processo.
 
+## Agenda e operação híbrida (Fila 2.0, parte 1, ADR-0038)
+
+Dados: loja com jornada 09:00–18:00 todos os dias, Beto (Corte 25 min R$ 40, Barba 30 min) e Caio (Corte), produto Pomada; relógio de teste às 09:00 de quinta-feira em São Paulo.
+
+### C-AG-01 — Loja que não aderiu continua só com fila
+- Regras: R-AG-01 · Transições: T-ST-04 · Contrato: `getEstablishmentSettings`, `getAvailability`, `callNext` · Tipo: integração
+
+Dado uma loja sem adesão à agenda
+Quando o cliente consulta horários e depois entra na fila
+Então a consulta responde `schedule_disabled`, a entrada funciona e "Chamar próximo" segue a regra da 1.0.
+
+### C-AG-02 — Modo "com horário marcado" de ponta a ponta
+- Regras: R-AG-01, R-AG-03, R-AG-06, R-AG-07 · Transições: T-AP-01, T-AP-04, T-AP-06, T-AP-07 · Contrato: `createAppointment`, `confirmAppointmentArrival`, `callAppointment`, `startService` · Tipo: integração
+
+Dado a loja no modo agenda com 5 min de preparação
+Quando o cliente marca 3 cortes + 1 pomada às 15h e a equipe registra a chegada às 14h50 e chama
+Então a entrada na fila é recusada (`queue_entry_schedule_only`), a reserva tem 75 + 5 min e R$ 145 congelados, o horário sai da disponibilidade, chamar cedo é recusado, o prazo fica 15h10, a visita nasce chamada com origem `appointment` e a comanda com o mesmo valor, e iniciar põe a reserva em atendimento.
+
+### C-AG-03 — Disputa do último horário
+- Regras: R-AG-04, R-AG-06 · Transições: T-AP-01 · Contrato: `createAppointment` · Tipo: concorrência
+
+Dado seis clientes que tentam o mesmo horário de Beto ao mesmo tempo
+Quando as reservas chegam juntas
+Então uma vence, cinco recebem `slot_unavailable`, e Caio continua livre no mesmo horário.
+
+### C-AG-04 — Limites do cliente, repetição e privacidade
+- Regras: R-AG-06 · Transições: T-AP-01 · Contrato: `createAppointment`, `listMyAppointments`, `getAppointment`, `getAvailability` · Tipo: integração
+
+Dado um cliente com uma reserva às 10h
+Quando repete o mesmo comando, reusa a chave com outro corpo, marca 10h15 com Caio e passa de 3 reservas
+Então recebe a mesma reserva, `422`, `appointment_overlaps_own` e `appointment_limit_reached`; outro cliente recebe 404 e o calendário público não traz nomes.
+
+### C-AG-05 — Encaixe antes do horário marcado (14h20)
+- Regras: R-AG-04 · Transições: T-P-02, T-P-03 · Contrato: `callNext`, `replaceOrderItems` · Tipo: integração
+
+Dado agora 14h20, reserva às 15h, tolerância 10 e limpeza 5
+Quando a equipe chama um corte de 25, depois uma barba de 30, depois "chamar e iniciar agora", e tenta aumentar o serviço
+Então o corte é chamado (14h20 + 10 + 25 + 5 = 15h), a barba é recusada com "Próximo horário marcado às 15h. Este serviço precisa de 35 min com a limpeza" e o cliente fica no lugar, o início imediato passa (14h55) e o aumento que invadiria as 15h é recusado.
+
+### C-AG-06 — Mesma regra em chamar e em "descer e chamar o próximo" (14h40)
+- Regras: R-AG-04 · Transições: T-P-11 · Contrato: `moveParticipation` · Tipo: integração
+
+Dado às 14h40 um cliente chamado e outro aguardando, com reserva às 15h
+Quando a equipe desce o chamado (o próximo seria chamado)
+Então recebe `chair_reserved` e nada muda.
+
+### C-AG-07 — Falta automática e atraso da loja
+- Regras: R-AG-07 · Transições: T-AP-06, T-AP-07, T-AP-08 · Contrato: `callAppointment` · Tipo: integração
+
+Dado duas reservas às 15h; a loja chama a primeira às 15h12 e nunca chama a segunda
+Quando o worker roda às 15h21 e às 15h22 (duas vezes)
+Então o prazo é 15h22; às 15h21 nada muda; a segunda fica "a loja não chamou" e continua confirmada; às 15h22 a primeira vira falta uma única vez e a visita fica ausente.
+
+### C-AG-08 — Presença confirmada impede a falta
+- Regras: R-AG-07 · Transições: T-AP-04, T-AP-05, T-AP-06 · Contrato: `signalAppointmentArrival`, `confirmAppointmentArrival`, `callAppointment` · Tipo: integração
+
+Dado um cliente que avisa "Cheguei" e a equipe confirma a presença e chama
+Quando o prazo passa e o worker roda
+Então o aviso não confirma presença sozinho, e a visita continua chamada (sem falta).
+
+### C-AG-09 — Remarcar e cancelar
+- Regras: R-AG-08 · Transições: T-AP-02, T-AP-03 · Contrato: `rescheduleAppointment`, `cancelAppointment` · Tipo: integração
+
+Dado reservas às 10h e às 11h com Beto
+Quando a das 10h tenta ir para 11h, depois vai para 12h com Caio, e é cancelada; e a equipe cancela outra sem e com motivo
+Então a primeira tentativa dá `slot_unavailable` e a origem fica intacta; a segunda muda (revisão 2) e libera as 10h; o cancelamento libera as 12h; a equipe precisa de motivo e o cancelamento fica "pela loja".
+
+### C-AG-10 — Mudanças em produção
+- Regras: R-AG-02, R-AG-05 · Transições: T-AG-01, T-AG-02 · Contrato: `setAgendaHours`, `createAgendaException`, `getAvailability`, `createParticipation` · Tipo: integração
+
+Dado uma reserva às 16h no modo "os dois"
+Quando o dono encurta a jornada para 15h, bloqueia 15h–17h, põe turno de profissional fora da loja, marca feriado amanhã, um profissional sem permissão tenta bloquear e o dono tenta desativar Beto; e às 17h45 alguém tenta entrar na fila para um corte
+Então as duas primeiras mudanças são recusadas com a lista, o turno fora é `400`, o feriado zera os horários de amanhã, o profissional recebe `403`, a desativação recebe `professional_has_appointments` e a entrada recebe `queue_no_capacity_today`.
+
+### C-AG-11 — Exclusão no banco com duas conexões
+- Regras: R-AG-04 · Transições: — · Contrato: — · Tipo: concorrência
+
+Dado duas conexões reais gravando ocupações sobrepostas do mesmo profissional, sem a trava da aplicação
+Quando a primeira confirma
+Então a segunda viola a restrição de exclusão das ocupações; [10:00, 10:25) e [10:30, 11:00) coexistem; ocupação liberada não bloqueia.
+
+### C-AG-12 — Motor de disponibilidade e fuso
+- Regras: R-AG-02, R-AG-03, R-AG-05 · Transições: — · Contrato: `getAvailability` · Tipo: unidade
+
+Para cada caso do motor: 3 cortes de 25 + produto + 5 numa grade de 15 com pausa; intervalo semiaberto; antecedência; modalidades; loja × profissional; projeção FIFO e sem capacidade; dia da loja em outro fuso; horário de verão (hora inexistente e ambígua); meia-noite e virada de mês
+Então os inícios oferecidos são exatamente os esperados.
+
+### C-AG-13 — Foto do dono na gestão
+- Regras: R-AG-09 · Transições: — · Contrato: `getMyProfile` · Tipo: E2E
+
+Dado um dono que envia a foto em Minha conta
+Quando volta à gestão, recarrega, usa o celular e depois remove a foto
+Então a foto aparece no link "Minha conta" da lateral e da barra compacta, continua após recarregar e volta às iniciais ao remover (roteiro de navegador em docs/operacao/agenda-2.0.md).
+
+### C-AG-14 — Reserva de balcão com identidade recuperável
+- Regras: R-AG-06 · Transições: T-AP-01 · Contrato: `createAppointment`, `recoverVisitorSession`, `listMyAppointments` · Tipo: integração
+
+Dado o dono no balcão marcando 2 cortes para "Seu Jorge"
+Quando repete o comando e o cliente entra com o código em outro aparelho
+Então o código aparece só na primeira resposta, o profissional não pode fazer reserva de balcão, e o cliente vê a própria reserva.
+
+## Reserva com Pix, avisos e recuperação (Fila 2.0, parte 2, ADR-0039)
+
+Dados: os mesmos da agenda; Pix pelo simulador local (chave de teste); retenção = QR de 15 min + 3 min.
+
+### C-BK-01 — Sinal de ponta a ponta
+- Regras: R-BK-01, R-BK-02, R-BK-03, R-BK-04, R-BK-05 · Transições: T-BK-01, T-BK-02, T-BK-03, T-AP-10, T-BK-06 · Contrato: `getAvailability`, `createAppointment`, `createAppointmentPixCharge`, `receiveAbacatePayWebhook`, `completeService` · Tipo: integração + navegador
+
+Dado a loja com sinal de R$ 15 e um corte de R$ 40
+Quando o cliente reserva, gera o Pix (duas vezes com a mesma chave) e o banco confirma (aviso repetido também chega)
+Então a cotação mostra R$ 15 agora e R$ 25 na barbearia, a reserva fica retida e some da disponibilidade, há uma única cobrança no provedor, o QR vence antes da retenção, só o aviso do provedor confirma, um único recebimento é registrado, e ao concluir a comanda deve R$ 25 com um crédito de R$ 15 e fica paga com R$ 25 em dinheiro.
+
+### C-BK-02 — Pix pago depois do prazo
+- Regras: R-BK-03, R-BK-04 · Transições: T-AP-09, T-BK-04, T-BK-03, T-RF-01 · Contrato: `receiveAbacatePayWebhook` · Tipo: integração
+
+Dado uma reserva paga retida com o Pix gerado
+Quando o prazo vence (no instante exato), outra pessoa reserva o mesmo horário e só então o Pix é pago
+Então a primeira reserva expira, o horário da segunda não muda, o pagamento vira excedente com pendência `booking_late_payment`, a devolução integral é pedida e confirmada pelo provedor, e um aviso repetido não gera outra devolução.
+
+### C-BK-03 — Cancelamento segue a política aceita
+- Regras: R-BK-06 · Transições: T-AP-03, T-BK-05, T-RF-01 · Contrato: `cancelAppointment` · Tipo: integração
+
+Dado sinal com janela de 2 h e política "reter"
+Quando o cliente cancela com mais de 2 h, cancela com menos de 2 h, e a loja cancela em cima da hora
+Então o primeiro é devolvido (solicitado → confirmado pelo provedor), o segundo é recusado até o cliente confirmar e então fica com a loja, e o da loja é devolvido.
+
+### C-BK-04 — Sinal igual ao valor e taxa de reserva
+- Regras: R-BK-02, R-BK-05 · Transições: T-BK-06 · Contrato: `completeService` · Tipo: integração
+
+Dado sinal configurado acima do valor do corte, e em outra loja uma taxa de R$ 10
+Quando os atendimentos são concluídos
+Então o sinal é limitado a R$ 40 e a comanda fecha paga sem recebimento de R$ 0; a taxa mostra total de R$ 50, a comanda deve os R$ 40 do corte e a taxa fica com a loja.
+
+### C-BK-05 — Interrompido com valor abaixo do sinal
+- Regras: R-BK-05 · Transições: T-BK-06, T-RF-06 · Contrato: `closeInterruptedOrder`, `confirmBookingRefund` · Tipo: integração
+
+Dado sinal de R$ 50 para corte + barba
+Quando o atendimento é interrompido e a revisão cobra só o corte (R$ 40)
+Então o crédito é R$ 40 e a comanda fica paga, a sobra de R$ 10 vira devolução parcial em revisão (nada vai ao provedor), e o dono confirma com evidência (com reautenticação), resolvendo a pendência junto.
+
+### C-BK-06 — Concorrência no horário pago e no pagamento
+- Regras: R-BK-03, R-BK-04 · Transições: T-BK-01, T-BK-03 · Contrato: `createAppointment`, `receiveAbacatePayWebhook` · Tipo: concorrência
+
+Dado seis clientes no mesmo horário pago e, depois, o aviso do provedor duas vezes junto com a consulta do worker
+Então um retém e cinco recebem `slot_unavailable`, e o pagamento gera um único recebimento.
+
+### C-BK-07 — Cobrança só com liberação; balcão gratuito
+- Regras: R-BK-01, R-BK-03 · Transições: T-ST-04 · Contrato: `updateAgendaSettings`, `createAppointment` · Tipo: integração
+
+Dado a loja cobrando sinal
+Então a reserva de balcão é gratuita e confirmada, um horário sem tempo de pagar é recusado (`booking_too_close`), e numa instalação sem `FILA_AGENDA_COBRANCA` a dona não consegue ligar a cobrança (`booking_payment_unavailable`).
+
+### C-BK-08 — Avisos e recuperação pelo e-mail
+- Regras: R-BK-07, R-BK-08 · Transições: T-VC-01, T-VC-02, T-VC-03, T-VC-04 · Contrato: `setVisitorContact`, `verifyVisitorContact`, `requestAppointmentAccess`, `exchangeAppointmentAccess` · Tipo: integração
+
+Dado um visitante que confirma o e-mail pelo código (o errado é recusado)
+Quando reserva, remarca, e em outro aparelho pede o link e o usa
+Então sai o aviso de remarcação (não o da revisão anterior), o e-mail desconhecido não recebe nada (mesma resposta), o link abre a reserva uma única vez, o cancelamento de uma conta gera aviso, e o visitante sem e-mail tem o aviso pulado.
+
+## Escala e recuperação da agenda (Fila 2.0, parte 3, ADR-0040)
+
+### C-AG-15 — Worker parado não gera falta em massa
+- Regras: R-AG-10 · Transições: T-AP-07 · Contrato: worker da agenda · Tipo: integração
+
+Dado um horário chamado às 09:55 (prazo 10:10) e outro às 11:55 (prazo 12:10), com o worker parado até 12:15
+Quando o worker volta
+Então o de 12:10 vira falta, o de 10:10 continua chamado para a equipe decidir e o aviso de chamada de 2 h atrás é pulado como vencido (nada sai por e-mail).
+
+### C-AG-16 — Calendário mensal agregado
+- Regras: R-AG-11 · Contrato: `getAvailabilityDays`, `getAvailability` · Tipo: integração
+
+Dado folga de Beto amanhã
+Quando o cliente consulta 14 dias de uma vez
+Então cada dia diz se tem vaga igual à consulta detalhada daquele dia, a folga aparece sem vaga e um intervalo maior que 62 dias é recusado.
+
+### C-AG-17 — Invalidação pública sem dado pessoal
+- Regras: R-AG-11 · Contrato: `createAppointment`, `rescheduleAppointment` · Evento: `availability.updated` · Tipo: integração
+
+Quando alguém reserva e depois remarca para amanhã
+Então saem eventos públicos com só profissional e data (o dia antigo e o novo) e nenhum traz o nome de quem reservou.
+
+### C-BK-09 — Agendamentos no Dashboard
+- Regras: R-AG-12 · Contrato: `getAnalyticsAppointments`, `listAnalyticsRecords` · Tipo: integração + componente
+
+Dado um dia com um atendimento concluído com sinal, uma falta, um cancelamento do cliente, uma reserva não paga e uma remarcação no balcão
+Então o Dashboard mostra 3 previstos, 1 concluído, 1 falta, taxa de falta 50% (1 ÷ 2), sinais de R$ 45, R$ 15 descontados, R$ 30 devolvidos, ocupação de 1,5 h em 18 h de jornada, a comparação por origem, o detalhamento das faltas com 1 registro e "não coletado" para períodos anteriores à loja.
+
+### C-AG-18 — Ensaio de carga (não é SLA)
+- Regras: R-AG-10, R-AG-11 · Tipo: carga (`FILA_PERF=1`)
+
+Dado 20 lojas × 5 profissionais e ~39 mil reservas
+Então a leitura do dia faz 11 consultas com qualquer grade, 30 tentativas pelo último horário dão 1 vencedor e 0 sobreposições, a rodada ociosa do worker faz 4 consultas e nenhuma conexão fica retida (resultados em docs/operacao/agenda-2.0.md).
+
+---
+
 ## Critérios de pronto do anexo (§15) → cenários
 
 | Critério do anexo | Cenários |

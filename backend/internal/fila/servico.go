@@ -14,6 +14,7 @@ import (
 
 	"fila/internal/acesso"
 	"fila/internal/atendimento"
+	"fila/internal/auditoria"
 	"fila/internal/estabelecimento"
 	"fila/internal/platform/clock"
 	"fila/internal/platform/database"
@@ -49,6 +50,10 @@ type Deps struct {
 	VisitClosed  func(ctx context.Context, q database.Querier, visitorID uuid.UUID, at time.Time) error
 	// Media entrega a foto pessoal do cliente à equipe da fila (nil = fotos desligadas).
 	Media *midia.Service
+	// Agenda aplica as regras de cadeira da agenda (módulo agenda). nil = sem agenda (1.0).
+	Agenda ChairGuard
+	// AgendaEnabled: agenda liberada no servidor (FILA_AGENDA). Desligada, o modo efetivo é fila.
+	AgendaEnabled bool
 }
 
 // Service implementa a fila transacional.
@@ -85,19 +90,21 @@ type row struct {
 	Version          int64
 	CreatedAt        time.Time
 	LateNoticeAt     *time.Time
+	// Origin: "queue" (entrada FIFO) ou "appointment" (reserva chamada), ADR-0038.
+	Origin string
 }
 
 const rowSelect = `
 	SELECT id, establishment_id, queue_id, order_id, account_id, visitor_id, nick, loyalty_eligible, status, position,
 	       ticket_code, called_at, tolerance_ends_at, started_at, finished_at, end_reason, version, created_at, late_notice_at,
-	       tolerance_minutes
+	       tolerance_minutes, origin
 	FROM participation`
 
 func scanRow(r pgx.Row) (row, error) {
 	var p row
 	err := r.Scan(&p.ID, &p.EstablishmentID, &p.QueueID, &p.OrderID, &p.AccountID, &p.VisitorID, &p.Nick, &p.LoyaltyEligible,
 		&p.Status, &p.Position, &p.TicketCode, &p.CalledAt, &p.ToleranceEndsAt, &p.StartedAt, &p.FinishedAt, &p.EndReason,
-		&p.Version, &p.CreatedAt, &p.LateNoticeAt, &p.ToleranceMinutes)
+		&p.Version, &p.CreatedAt, &p.LateNoticeAt, &p.ToleranceMinutes, &p.Origin)
 	return p, err
 }
 
@@ -131,6 +138,7 @@ func (p row) active() bool { return p.Status == Waiting || p.Status == Called ||
 
 // role é como o pedido age sobre a participação.
 type role struct {
+	system   bool // tarefa do servidor (ex.: falta automática do horário marcado)
 	customer bool // dono da visita (visitante ou conta)
 	staff    acesso.Actor
 	isStaff  bool
@@ -138,6 +146,8 @@ type role struct {
 
 func (r role) auditKind() string {
 	switch {
+	case r.system:
+		return auditoria.ActorSystem
 	case r.customer:
 		return ""
 	case r.staff.IsOwner():

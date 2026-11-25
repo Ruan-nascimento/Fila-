@@ -259,6 +259,40 @@ A coluna **Referências** cita operações do OpenAPI (`operationId`), eventos, 
 
 ---
 
+## 15. Agenda e operação híbrida (Fila 2.0, parte 1, ADR-0038)
+
+| ID | Regra | Referências |
+|---|---|---|
+| R-AG-01 | Forma de atendimento por loja: por ordem de chegada (padrão), com horário marcado ou os dois. Só muda por adesão explícita do dono e com a agenda liberada no servidor; mudar fecha só a admissão correspondente e nada aceito é apagado; o dono vê antes quantas reservas e pessoas na fila existem. | `updateAgendaSettings`, `getAgendaImpact`, T-ST-04 |
+| R-AG-02 | Jornada semanal da loja e de cada profissional, com vigência, vários turnos por dia (pausa = intervalo), folga, feriado e bloqueio com data e motivo interno; turnos do profissional dentro da abertura da loja; turno que passa da meia-noite em dois trechos; datas no fuso da loja. Mudança que deixe reserva ativa de fora é recusada com a lista. | `setAgendaHours`, `createAgendaException`, T-AG-01…03 |
+| R-AG-03 | Horários oferecidos: grade da loja ancorada no início do trecho; duração = Σ serviço × quantidade + preparação uma vez por visita (produto soma zero); o intervalo inteiro cabe num trecho livre; nada antes de agora + antecedência mínima nem depois do horizonte; intervalo semiaberto; hora inexistente não é oferecida e ambígua vale a primeira ocorrência. | `getAvailability` |
+| R-AG-04 | Uma cadeira por profissional: chamar, trocar de lugar com chamada, iniciar e aumentar o serviço de quem está na cadeira só passam se tolerância + duração + preparação couberem antes do próximo horário protegido (com o cliente presente e início imediato, sem a tolerância); quem não cabe fica no lugar e o motivo é explicado; o banco impede duas ocupações sobrepostas. | `callNext`, `moveParticipation`, `startService`, `replaceOrderItems` |
+| R-AG-05 | No modo "os dois", a fila é projetada em ordem nos trechos de fila: entrada nova recusada se não cabe até o fim do expediente; reserva de hoje não ocupa o que a fila já ocupa; a pessoa é avisada se a espera passa do horário marcado dela. | `createParticipation`, `getAvailability` |
+| R-AG-06 | Reserva gratuita confirmada na hora com itens, preço, duração, preparação, tolerância e janela congelados; limite de reservas futuras por cliente (padrão 3); o mesmo cliente não sobrepõe reservas na loja; visitante até 7 dias; balcão com identidade recuperável própria do cliente; horário disputado devolve os horários atuais sem perder os itens. | `createAppointment`, T-AP-01 |
+| R-AG-07 | A reserva vira visita só ao ser chamada (origem agendamento, comanda com os itens congelados); prazo de chegada = max(horário, chamada) + tolerância; presença confirmada pela equipe impede a falta; falta só com chamada válida; reserva que a loja não chamou não é falta do cliente. | `callAppointment`, T-AP-06…08 |
+| R-AG-08 | Remarcar valida o destino antes de soltar a origem (falha = nada muda); cancelar libera o horário; equipe sempre com motivo; histórico imutável de transições. | `rescheduleAppointment`, `cancelAppointment`, T-AP-02/03 |
+| R-AG-09 | A moldura da gestão mostra a foto pessoal de quem está usando nos dois links "Minha conta" (lateral e compacto), com iniciais se faltar ou falhar; atualiza ao salvar/remover e nunca mostra a foto de outra pessoa depois de trocar de conta. | `getMyProfile` |
+| R-AG-10 | Depois de uma parada do worker, nada é aplicado em massa: falta automática só até 30 min após o prazo (depois, a equipe decide), avisos vencidos não são enviados, retenções vencidas são soltas. | worker da agenda, alerta FilaChamadaDeReservaSemDesfecho |
+| R-AG-11 | Leituras de disponibilidade sem trava e com número constante de consultas (não cresce com horários nem profissionais); calendário mensal por consulta agregada limitada; invalidação pública só com profissional e data; nenhuma consulta periódica no navegador. | `getAvailability`, `getAvailabilityDays`, `availability.updated` |
+| R-AG-12 | Indicadores de agendamento no Dashboard com data de referência explícita por indicador, taxa de falta só entre reservas com desfecho, ocupação pela jornada vigente em cada data (com cobertura), visitas de reserva fora das entradas da fila e detalhamento que reconcilia com o número. | `getAnalyticsAppointments`, `listAnalyticsRecords` |
+
+---
+
+## 16. Reserva com Pix, avisos e recuperação (Fila 2.0, parte 2, ADR-0039)
+
+| ID | Regra | Referências |
+|---|---|---|
+| R-BK-01 | A loja escolhe reserva gratuita (padrão), sinal (abatido) ou taxa (além do atendimento), com valor, janela de cancelamento e política de falta/atraso; cobrar exige a liberação do servidor e o Pix ligado; reter exige liberação própria; reserva de balcão é gratuita; mudanças valem para reservas novas. | `updateAgendaSettings`, T-ST-04, T-BK-01 |
+| R-BK-02 | A cotação (agora / na barbearia / total, com a política) vem do servidor e aparece antes de pagar; sinal nunca passa do valor dos serviços. | `getAvailability`, `createAppointment` |
+| R-BK-03 | Reserva paga segura o horário até o prazo de pagamento; o QR vence antes; sem pagamento o horário é liberado; sem tempo de pagar antes do horário a reserva é recusada. | T-AP-09, T-BK-01, T-BK-04 |
+| R-BK-04 | Só o provedor confirma o pagamento (webhook ou consulta), dentro do prazo no relógio do servidor; pago depois, encerrado ou duplicado vira excedente com pendência e devolução integral; nunca toma o horário de outra pessoa. | T-BK-03, T-AP-10, T-RF-01 |
+| R-BK-05 | O sinal pago entra na comanda como um único crédito = min(sinal, total); devido = total − crédito; sinal ≥ total quita sem recebimento de R$ 0; sobra vira devolução parcial confirmada pelo dono; taxa nunca vira crédito; o caixa conta o Pix da reserva uma vez. | T-BK-06, `confirmBookingRefund` |
+| R-BK-06 | Loja cancela → devolve; cliente dentro da janela → devolve; fora da janela ou falta → conforme a política aceita (reter exige confirmação explícita do cliente ao cancelar); "a loja não chamou" não é falta; devolução solicitada não é devolvida. | `cancelAppointment`, T-BK-05 |
+| R-BK-07 | Avisos por e-mail (confirmada, lembrete, chamada, remarcada, cancelada, falta, expirada, devolução) gravados com a mudança, um por revisão e tipo, revalidados antes de sair; sem e-mail verificado o aviso é pulado. | worker da agenda |
+| R-BK-08 | Visitante confirma um e-mail por código para receber avisos e recuperar a reserva por link de uso único; o pedido não revela se o e-mail existe; abrir o link não muda nada. | `setVisitorContact`, `verifyVisitorContact`, `requestAppointmentAccess`, `exchangeAppointmentAccess`, T-VC-01…04 |
+
+---
+
 ## Decisões já tomadas (não são dúvidas)
 
 As decisões abaixo vêm do anexo e **não devem ser reabertas** nas próximas etapas, salvo nova versão do documento de regras:

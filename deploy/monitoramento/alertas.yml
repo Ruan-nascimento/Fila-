@@ -108,6 +108,21 @@ groups:
         labels: {severity: critico, responsavel: operador, rotina: worker-parado}
         annotations:
           summary: "Reserva de prêmio vencida e não liberada (pontos presos)."
+      - alert: FilaRetencaoDeHorarioPresa
+        expr: fila_agenda_holds_overdue > 0
+        labels: {severity: critico, responsavel: operador, rotina: worker-parado}
+        annotations:
+          summary: "Horário retido para Pix com o prazo vencido e não liberado (worker parado?)."
+      - alert: FilaAvisoDeReservaParado
+        expr: fila_agenda_notices_pending > 0 and fila_agenda_notices_oldest_seconds > 900
+        labels: {severity: aviso, responsavel: operador, rotina: worker-parado}
+        annotations:
+          summary: "Aviso de reserva por e-mail esperando há mais de 15 minutos."
+      - alert: FilaChamadaDeReservaSemDesfecho
+        expr: fila_agenda_called_stale > 0
+        labels: {severity: aviso, responsavel: "dono da loja", rotina: agenda-chamada-sem-desfecho}
+        annotations:
+          summary: "Horário chamado com o prazo vencido há mais de 30 min, sem desfecho (a equipe decide)."
       - alert: FilaEmailParado
         expr: fila_mail_pending > 0 and fila_mail_oldest_pending_seconds > 900
         labels: {severity: aviso, responsavel: operador, rotina: email}

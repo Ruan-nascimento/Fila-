@@ -54,6 +54,8 @@ tags:
     description: Instalações do programa do dono (ativação, vínculo à sessão de dono, prova DPoP).
   - name: analitico
     description: Dashboard analítico exclusivo do programa desktop do dono.
+  - name: agenda
+    description: Agenda (Fila 2.0) — jornadas, exceções, reservas e operação híbrida com a fila (ADR-0038).
   - name: midia
     description: Fotos de perfil, foto pública do profissional e logo da loja (ADR-0028).
 
@@ -758,6 +760,147 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
         default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/visitor-contact:
+    get:
+      operationId: getVisitorContact
+      tags: [visitante, agenda]
+      summary: E-mail de contato do visitante nesta loja (mascarado) ou nulo.
+      security: [{ visitorSession: [] }]
+      x-authz: [{ actor: visitor, scope: self }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      responses:
+        '200':
+          description: Contato atual.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { oneOf: [{ $ref: '#/components/schemas/VisitorContact' }, { type: 'null' }] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+    post:
+      operationId: setVisitorContact
+      tags: [visitante, agenda]
+      summary: Informa o e-mail para avisos e recuperação da reserva; envia código de 6 dígitos (15 min). Trocar o e-mail volta a exigir verificação.
+      security: [{ visitorSession: [], csrfToken: [] }]
+      x-authz: [{ actor: visitor, scope: self }]
+      x-transitions: [T-VC-01]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email]
+              properties:
+                email: { type: string, format: email, maxLength: 254 }
+      responses:
+        '202': { $ref: '#/components/responses/VisitorContactOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/visitor-contact/verify:
+    post:
+      operationId: verifyVisitorContact
+      tags: [visitante, agenda]
+      summary: Confere o código do e-mail (até 5 tentativas; uso único).
+      security: [{ visitorSession: [], csrfToken: [] }]
+      x-authz: [{ actor: visitor, scope: self }]
+      x-transitions: [T-VC-02]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [code]
+              properties:
+                code: { type: string, pattern: '^[0-9]{6}$' }
+      responses:
+        '200': { $ref: '#/components/responses/VisitorContactOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/public/establishments/{establishmentId}/appointment-access:
+    post:
+      operationId: requestAppointmentAccess
+      tags: [visitante, agenda]
+      summary: Envia o link de acesso à reserva para o e-mail verificado na loja. Sempre 202 (não revela se o e-mail existe).
+      security: [{}]
+      x-authz: [{ actor: public, scope: none }]
+      x-transitions: [T-VC-03]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email]
+              properties:
+                email: { type: string, format: email, maxLength: 254 }
+      responses:
+        '202': { description: Pedido aceito (o e-mail só sai se houver contato verificado). }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/public/establishments/{establishmentId}/appointment-access/exchange:
+    post:
+      operationId: exchangeAppointmentAccess
+      tags: [visitante, agenda]
+      summary: Troca o token do link (uso único, 30 min) por uma credencial de visitante neste navegador.
+      description: A página lê o token do fragmento (#token=…) e envia no corpo; abrir o link (GET) não muda nada.
+      security: [{}, { visitorSession: [] }]
+      x-authz: [{ actor: public, scope: none }]
+      x-transitions: [T-VC-04]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token]
+              properties:
+                token: { type: string, minLength: 20, maxLength: 100 }
+      responses:
+        '200':
+          description: Acesso recuperado.
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/SetVisitorCookie' }
+            Cache-Control: { $ref: '#/components/headers/NoStore' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/VisitorView' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
   /v1/visitor-sessions/current/end:
     post:
       operationId: endVisitorSession
@@ -1206,7 +1349,7 @@ paths:
       summary: Em atendimento → concluído. Fecha valor, libera cadeira; pagamento continua separado.
       security: [{ accountSession: [], csrfToken: [] }]
       x-authz: [{ actor: professional, scope: own_queue }, { actor: owner, scope: establishment }]
-      x-transitions: [T-P-08, T-O-04]
+      x-transitions: [T-P-08, T-O-04, T-BK-06]
       x-events: [participation.updated, order.updated, payment.updated, queue.public.updated, queue.updated]
       parameters:
         - $ref: '#/components/parameters/EstablishmentId'
@@ -1286,9 +1429,13 @@ paths:
       operationId: callNext
       tags: [fila]
       summary: Chama o próximo aguardando (FIFO do servidor). Exige fila aberta e cadeira livre.
+      description: |
+        Com agenda (ADR-0038), o primeiro da fila só é chamado se tolerância + duração + margem couberem antes do
+        próximo horário protegido; senão 409 `chair_reserved` com o motivo, e ele continua no mesmo lugar (nunca
+        se pula para um serviço mais curto). Com `start_immediately` (cliente presente), conta só duração + margem.
       security: [{ accountSession: [], csrfToken: [] }]
       x-authz: [{ actor: professional, scope: own_queue }, { actor: owner, scope: establishment }]
-      x-transitions: [T-P-02]
+      x-transitions: [T-P-02, T-P-03]
       x-events: [participation.updated, queue.public.updated, queue.updated]
       parameters:
         - $ref: '#/components/parameters/EstablishmentId'
@@ -1298,7 +1445,7 @@ paths:
         required: false
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/EmptyRequest' }
+            schema: { $ref: '#/components/schemas/CallNextRequest' }
       responses:
         '200': { $ref: '#/components/responses/VisitOk' }
         '400': { $ref: '#/components/responses/BadRequest' }
@@ -1629,7 +1776,7 @@ paths:
       summary: Dono revisa interrupção e fecha valor (só itens integralmente feitos; pode ser zero).
       security: [{ accountSession: [], csrfToken: [] }]
       x-authz: [{ actor: owner, scope: establishment }]
-      x-transitions: [T-O-07, T-O-08]
+      x-transitions: [T-O-07, T-O-08, T-BK-06]
       x-events: [order.updated, payment.updated, pendencies.updated]
       parameters:
         - $ref: '#/components/parameters/EstablishmentId'
@@ -1923,6 +2070,62 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/IdempotencyMismatch' }
         default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/booking-refunds/{refundId}/confirm:
+    post:
+      operationId: confirmBookingRefund
+      tags: [pagamento, agenda]
+      summary: Dono confirma, com evidência, a devolução de reserva em revisão (sobra do sinal ou provedor sem estorno pela API); a pendência ligada é resolvida junto.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-reauth: true
+      x-transitions: [T-RF-06, T-FI-02]
+      x-events: [appointment.updated, financial_issue.updated, pendencies.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/RefundId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ConfirmRefundRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/BookingPaymentOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/booking-refunds/{refundId}/mark-failed:
+    post:
+      operationId: markBookingRefundFailed
+      tags: [pagamento, agenda]
+      summary: Dono registra que a devolução de reserva em revisão não ocorreu (com evidência).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-reauth: true
+      x-transitions: [T-RF-07, T-FI-02]
+      x-events: [appointment.updated, financial_issue.updated, pendencies.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/RefundId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ConfirmRefundRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/BookingPaymentOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
   /v1/establishments/{establishmentId}/orders/{orderId}/refunds/{refundId}/mark-failed:
     post:
       operationId: markRefundFailed
@@ -2060,7 +2263,7 @@ paths:
         pagador não são guardados. 404 quando o webhook está desligado (sem secret configurado).
       security: []
       x-authz: [{ actor: provider, scope: provider_signature }]
-      x-transitions: [T-PX-05, T-PX-06, T-RC-02, T-RC-04, T-O-09, T-RF-03, T-RF-04, T-LG-02]
+      x-transitions: [T-PX-05, T-PX-06, T-RC-02, T-RC-04, T-O-09, T-RF-03, T-RF-04, T-LG-02, T-AP-10, T-BK-03]
       x-events: [payment.updated, order.updated, financial_issue.updated, pendencies.updated, loyalty.updated]
       requestBody:
         required: true
@@ -3377,6 +3580,44 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         default: { $ref: '#/components/responses/Unexpected' }
+  /v1/desktop/analytics/establishments/{establishmentId}/appointments:
+    get:
+      operationId: getAnalyticsAppointments
+      tags: [analitico, agenda]
+      summary: Área Agendamentos (Fila 2.0) — desfechos, dinheiro da reserva, ocupação e série diária.
+      description: |
+        Exclusivo do programa desktop (ADR-0027). Contagens pela data do horário marcado ("previstos" inclui o
+        resto do período); remarcações pelo instante da remarcação; dinheiro pelo instante em que entrou, foi
+        aplicado ou confirmado; pendências são fotografia de agora. Taxa de falta = faltas ÷ (faltas +
+        comparecimentos) entre reservas com desfecho; denominador zero → status `empty`. Ocupação planejada =
+        reservado ÷ jornada líquida (versão de jornada vigente em cada data); utilização real = em atendimento
+        dentro da jornada ÷ jornada decorrida (fora dela = hora extra). Dicionário: docs/desktop/metricas.md.
+      security: [{ desktopToken: [], desktopProof: [] }]
+      x-authz: [{ actor: owner_desktop, scope: establishment }]
+      parameters:
+        - { $ref: '#/components/parameters/DPoPProof' }
+        - { $ref: '#/components/parameters/EstablishmentId' }
+        - { $ref: '#/components/parameters/AnalyticsFrom' }
+        - { $ref: '#/components/parameters/AnalyticsTo' }
+        - { $ref: '#/components/parameters/AnalyticsCompare' }
+        - { $ref: '#/components/parameters/AnalyticsProfessional' }
+        - { $ref: '#/components/parameters/AnalyticsService' }
+        - { $ref: '#/components/parameters/AnalyticsMethod' }
+      responses:
+        '200':
+          description: Indicadores de agendamento com meta.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data: { $ref: '#/components/schemas/AnalyticsAppointments' }
+                  meta: { $ref: '#/components/schemas/AnalyticsMeta' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
   /v1/desktop/analytics/establishments/{establishmentId}/series/{metric}:
     get:
       operationId: getAnalyticsSeries
@@ -3477,12 +3718,12 @@ paths:
         - name: kind
           in: path
           required: true
-          schema: { type: string, enum: [receipts, refunds, orders, participations, service_items, financial_issues, loyalty_entries] }
+          schema: { type: string, enum: [receipts, refunds, orders, participations, service_items, financial_issues, loyalty_entries, appointments] }
         - { name: bucket_start, in: query, required: false, schema: { $ref: '#/components/schemas/Timestamp' } }
         - { name: bucket_end, in: query, required: false, schema: { $ref: '#/components/schemas/Timestamp' } }
         - { name: cursor, in: query, required: false, schema: { type: string, maxLength: 300 } }
         - { name: ref, in: query, required: false, description: 'participations: entered|called|finished; service_items: performed|added', schema: { type: string } }
-        - { name: state, in: query, required: false, description: 'financial_issues: open (agora) | opened | resolved (no período)', schema: { type: string, enum: [open, opened, resolved] } }
+        - { name: state, in: query, required: false, description: 'financial_issues: open (agora) | opened | resolved (no período). appointments: scheduled | completed | interrupted | no_show | cancelled | cancelled_by_customer | cancelled_by_store | expired_unpaid | store_late (pelo horário marcado)', schema: { type: string, enum: [open, opened, resolved, scheduled, completed, interrupted, no_show, cancelled, cancelled_by_customer, cancelled_by_store, expired_unpaid, store_late] } }
         - { name: kind, in: query, required: false, description: 'financial_issues: tipo; loyalty_entries: credited|used|returned|adjusted', schema: { type: string } }
         - { name: status, in: query, required: false, schema: { type: string } }
         - { name: dow, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 7 } }
@@ -4222,6 +4463,621 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/settings/agenda:
+    patch:
+      operationId: updateAgendaSettings
+      tags: [administracao, agenda]
+      summary: Seção Agenda (forma de atendimento, grade, margem, janela, tolerância, chegada, limites).
+      description: |
+        Só os campos enviados mudam; `expected_version` é a versão da SEÇÃO. Mudar `service_mode` fecha só a
+        admissão correspondente (entrada na fila ou novas reservas); o que já foi aceito continua. Sair de
+        "fila" exige a agenda liberada no servidor (`agenda.available`), senão 409 `agenda_unavailable`.
+        Regras novas valem para reservas FUTURAS (cada reserva congela tolerância, margem e janela).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-ST-04]
+      x-events: [queue.public.updated, queue.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AgendaSettingsRequest' }
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/EstablishmentSettings' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/settings/agenda/impact:
+    get:
+      operationId: getAgendaImpact
+      tags: [administracao, agenda]
+      summary: Quantas reservas futuras e quantas pessoas na fila existem agora (mostrado antes de mudar a forma de atendimento).
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/AgendaImpact' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/agenda/hours:
+    get:
+      operationId: getAgendaHours
+      tags: [agenda]
+      summary: Jornada vigente e versões futuras da loja e de cada profissional (profissional vê só a própria).
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: professional, scope: own_queue }, { actor: owner, scope: establishment }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+      responses:
+        '200': { $ref: '#/components/responses/AgendaHoursOk' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+    put:
+      operationId: setAgendaHours
+      tags: [agenda]
+      summary: Grava uma nova versão da jornada (loja ou profissional) com data de vigência.
+      description: |
+        Versões são imutáveis; na mesma data vale a gravada por último. Turnos do profissional ficam dentro da
+        abertura da loja (`outside_store_hours`). Turno que passa da meia-noite é enviado em dois trechos.
+        Se alguma reserva confirmada ficar fora do novo horário, nada é gravado: 409
+        `schedule_conflicts_appointments` com a lista em `current.appointments` (remaneje ou cancele antes).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: owner, scope: establishment }]
+      x-transitions: [T-AG-01]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetAgendaHoursRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/AgendaHoursOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/agenda/exceptions:
+    get:
+      operationId: listAgendaExceptions
+      tags: [agenda]
+      summary: Folgas, feriados e bloqueios ativos num intervalo de datas locais (até 62 dias; padrão 30 a partir de hoje).
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: professional, scope: own_queue }, { actor: owner, scope: establishment }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/AgendaException' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+    post:
+      operationId: createAgendaException
+      tags: [agenda]
+      summary: Folga/feriado (dia inteiro) ou bloqueio de um trecho, da loja inteira ou de um profissional.
+      description: |
+        Dono sempre. Profissional só na própria agenda e só com `professionals_can_block` ligado. Se o período
+        tiver reserva ativa, nada é gravado: 409 `exception_conflicts_appointments` com a lista.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: professional, scope: own_queue }, { actor: owner, scope: establishment }]
+      x-transitions: [T-AG-02, T-AP-09]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateAgendaExceptionRequest' }
+      responses:
+        '201':
+          description: Criada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/AgendaException' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/agenda/exceptions/{exceptionId}/remove:
+    post:
+      operationId: removeAgendaException
+      tags: [agenda]
+      summary: Desfaz uma folga/bloqueio (o histórico fica; a ocupação é liberada).
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: professional, scope: own_queue }, { actor: owner, scope: establishment }]
+      x-transitions: [T-AG-03]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/ExceptionId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmptyRequest' }
+      responses:
+        '200':
+          description: Removida.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [id, removed_at]
+                    properties:
+                      id: { $ref: '#/components/schemas/Id' }
+                      removed_at: { $ref: '#/components/schemas/Timestamp' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/agenda:
+    get:
+      operationId: listAgenda
+      tags: [agenda]
+      summary: Agenda da equipe por profissional e dia (1 a 7 dias), com turnos, bloqueios e reservas de todos os estados.
+      security: [{ accountSession: [] }]
+      x-authz: [{ actor: professional, scope: own_queue }, { actor: owner, scope: establishment }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+        - name: professional_id
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/Id' }
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/AgendaView' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/public/establishments/{establishmentId}/availability/days:
+    get:
+      operationId: getAvailabilityDays
+      tags: [publico, agenda]
+      summary: Quais dias de um intervalo (até 62) têm ao menos um horário para a seleção (calendário mensal).
+      description: |
+        Consulta agregada e limitada: jornada, exceções e ocupações do intervalo lidas de uma vez; cada dia é
+        calculado com a mesma regra da consulta do dia e da confirmação. Os horários detalhados vêm de
+        `getAvailability` só para o dia escolhido. Dias fora da janela de reservas não aparecem.
+      security: []
+      x-authz: [{ actor: public, scope: none }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, description: Até 62 dias depois de from., schema: { type: string, format: date } }
+        - { name: professional_id, in: query, required: true, schema: { $ref: '#/components/schemas/Id' } }
+        - name: items
+          in: query
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: array
+            minItems: 1
+            maxItems: 20
+            items: { type: string, pattern: '^[0-9a-fA-F-]{36}(:[0-9]{1,2})?$' }
+      responses:
+        '200':
+          description: Dias com e sem vaga.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [timezone, professional_id, days]
+                    properties:
+                      timezone: { type: string }
+                      professional_id: { $ref: '#/components/schemas/Id' }
+                      days:
+                        type: array
+                        items:
+                          type: object
+                          required: [date, has_slots]
+                          properties:
+                            date: { type: string, format: date }
+                            has_slots: { type: boolean }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/public/establishments/{establishmentId}/availability:
+    get:
+      operationId: getAvailability
+      tags: [publico, agenda]
+      summary: Horários livres de um dia para os itens escolhidos, por profissional (uma consulta para o dia inteiro).
+      description: |
+        Mesma conta feita ao confirmar (sob trava). Duração = Σ serviço × quantidade + margem (produto soma zero).
+        Inícios na grade da loja ancorada no início de cada trecho; o intervalo inteiro cabe num trecho livre de
+        agenda; nada antes de agora + antecedência mínima. Hoje, no modo "os dois", desconta a cadeira em uso e a
+        fila projetada (FIFO) e informa a estimativa da fila. Nunca traz quem ocupa a cadeira.
+        Limites: até 20 itens e 10 profissionais por consulta.
+      security: []
+      x-authz: [{ actor: public, scope: none }]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - name: date
+          in: query
+          required: true
+          description: Data local da loja (AAAA-MM-DD).
+          schema: { type: string, format: date }
+        - name: items
+          in: query
+          required: true
+          description: Serviço ou produto, com quantidade opcional — `<id>` ou `<id>:<quantidade>` (repetido).
+          style: form
+          explode: true
+          schema:
+            type: array
+            minItems: 1
+            maxItems: 20
+            items: { type: string, pattern: '^[0-9a-fA-F-]{36}(:[0-9]{1,2})?$' }
+        - name: professional_id
+          in: query
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 10
+            items: { $ref: '#/components/schemas/Id' }
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Availability' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/appointments:
+    post:
+      operationId: createAppointment
+      tags: [agenda]
+      summary: Reserva gratuita confirmada na hora (cliente para si ou dono no balcão).
+      description: |
+        Cliente: conta verificada ou visitante (se a loja aceita; até 7 dias à frente). Dono no balcão: envie
+        `counter_customer` — o cliente ganha a própria identidade recuperável (visitante + código mostrado UMA vez
+        em `counter_recovery_code`), nunca uma identidade compartilhada. Preço, duração, margem, tolerância e janela
+        são do servidor e ficam congelados. Horário disputado → 409 `slot_unavailable` com os horários atuais em
+        `current.slots` (escolha outro sem perder os itens).
+      security: [{ visitorSession: [], csrfToken: [] }, { accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: visitor, scope: self }, { actor: customer, scope: self }, { actor: owner, scope: establishment }]
+      x-transitions: [T-AP-01, T-AP-09, T-BK-01]
+      x-events: [appointment.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateAppointmentRequest' }
+      responses:
+        '201':
+          description: Reserva confirmada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/AppointmentCreated' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/my-appointments:
+    get:
+      operationId: listMyAppointments
+      tags: [cliente, agenda]
+      summary: Minhas reservas (conta e visitantes deste navegador), paginadas por cursor.
+      description: "`scope=upcoming`: ativas, a mais próxima primeiro. `scope=past`: encerradas, a mais recente primeiro."
+      security: [{ visitorSession: [] }, { accountSession: [] }]
+      x-authz: [{ actor: visitor, scope: self }, { actor: customer, scope: self }]
+      parameters:
+        - name: scope
+          in: query
+          required: false
+          schema: { type: string, enum: [upcoming, past], default: upcoming }
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, page]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/MyAppointment' }
+                  page: { $ref: '#/components/schemas/PageInfo' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/appointments/{appointmentId}:
+    get:
+      operationId: getAppointment
+      tags: [agenda]
+      summary: Detalhe da reserva (titular ou equipe autorizada; outro cliente → 404).
+      security: [{ visitorSession: [] }, { accountSession: [] }]
+      x-authz:
+        - { actor: visitor, scope: visit_owner }
+        - { actor: customer, scope: visit_owner }
+        - { actor: professional, scope: own_queue }
+        - { actor: owner, scope: establishment }
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/AppointmentId'
+      responses:
+        '200': { $ref: '#/components/responses/AppointmentOk' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/appointments/{appointmentId}/cancel:
+    post:
+      operationId: cancelAppointment
+      tags: [agenda]
+      summary: Cancela a reserva confirmada ou aguardando pagamento (titular até o horário; equipe com motivo). Libera o horário na hora.
+      description: |
+        Valor pago da reserva segue a política aceita: loja cancela ou cliente cancela dentro da janela →
+        devolução integral pedida ao provedor; cliente fora da janela com a política "reter" → 409
+        `cancel_retains_payment` até o cliente confirmar com `accept_retention: true`.
+      security: [{ visitorSession: [], csrfToken: [] }, { accountSession: [], csrfToken: [] }]
+      x-authz:
+        - { actor: visitor, scope: visit_owner }
+        - { actor: customer, scope: visit_owner }
+        - { actor: professional, scope: own_queue }
+        - { actor: owner, scope: establishment }
+      x-transitions: [T-AP-03, T-BK-04, T-BK-05, T-RF-01]
+      x-events: [appointment.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/AppointmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CancelAppointmentRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/AppointmentOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/appointments/{appointmentId}/reschedule:
+    post:
+      operationId: rescheduleAppointment
+      tags: [agenda]
+      summary: Remarca para outro horário (e, opcionalmente, outro profissional), mantendo itens e valores aceitos.
+      description: O destino é validado antes de soltar a origem, na mesma transação; se falhar, a reserva atual continua como estava.
+      security: [{ visitorSession: [], csrfToken: [] }, { accountSession: [], csrfToken: [] }]
+      x-authz:
+        - { actor: visitor, scope: visit_owner }
+        - { actor: customer, scope: visit_owner }
+        - { actor: professional, scope: own_queue }
+        - { actor: owner, scope: establishment }
+      x-transitions: [T-AP-02, T-AP-09]
+      x-events: [appointment.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/AppointmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RescheduleAppointmentRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/AppointmentOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/appointments/{appointmentId}/arrival:
+    post:
+      operationId: confirmAppointmentArrival
+      tags: [agenda]
+      summary: A equipe confirma a presença física (a partir da janela de chegada). Impede a falta automática.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: professional, scope: own_queue }, { actor: owner, scope: establishment }]
+      x-transitions: [T-AP-04]
+      x-events: [appointment.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/AppointmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/AppointmentOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/appointments/{appointmentId}/arrival-signal:
+    post:
+      operationId: signalAppointmentArrival
+      tags: [agenda]
+      summary: "\"Cheguei\" pelo celular: só um aviso à equipe (não confirma presença)."
+      security: [{ visitorSession: [], csrfToken: [] }, { accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: visitor, scope: visit_owner }, { actor: customer, scope: visit_owner }]
+      x-transitions: [T-AP-05]
+      x-events: [appointment.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/AppointmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/AppointmentOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/appointments/{appointmentId}/call:
+    post:
+      operationId: callAppointment
+      tags: [agenda, fila]
+      summary: Chama o horário marcado — abre a visita (participação chamada + comanda com itens congelados) na mesma transação.
+      description: |
+        Prazo de chegada = max(horário marcado, chamada) + tolerância congelada. Cadeira ocupada
+        (`professional_busy`), cliente com outra visita ativa (`customer_has_active_visit`) ou cedo demais
+        (`appointment_too_early`) → 409 e a reserva continua valendo. Fila pausada ou fechada à entrada não impede.
+      security: [{ accountSession: [], csrfToken: [] }]
+      x-authz: [{ actor: professional, scope: own_queue }, { actor: owner, scope: establishment }]
+      x-transitions: [T-AP-06, T-P-02, T-O-01]
+      x-events: [appointment.updated, participation.updated, order.updated, queue.public.updated, queue.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/AppointmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/AppointmentOk' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/IdempotencyMismatch' }
+        default: { $ref: '#/components/responses/Unexpected' }
+  /v1/establishments/{establishmentId}/appointments/{appointmentId}/pix-charges:
+    post:
+      operationId: createAppointmentPixCharge
+      tags: [agenda, pagamento]
+      summary: Gera (ou retoma) o Pix da reserva que aguarda pagamento (sinal ou taxa; ADR-0039).
+      description: |
+        Três fases (grava "criando", chama o provedor fora da transação, grava o resultado). O QR vence
+        antes do fim da retenção do horário. Repetir com a mesma chave devolve a mesma tentativa; outra
+        aba recebe o Pix já aberto. 202 = resultado do provedor desconhecido ("Verificando pagamento"):
+        o worker confere e o evento `appointment.updated` avisa. A reserva só é confirmada pelo provedor
+        (webhook ou consulta), nunca por esta resposta. Prazo vencido → 409 `booking_hold_expired`.
+      security: [{ visitorSession: [], csrfToken: [] }, { accountSession: [], csrfToken: [] }]
+      x-authz:
+        - { actor: visitor, scope: visit_owner }
+        - { actor: customer, scope: visit_owner }
+      x-transitions: [T-BK-02, T-PX-01]
+      x-events: [appointment.updated]
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentId'
+        - $ref: '#/components/parameters/AppointmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201': { $ref: '#/components/responses/BookingChargeOk' }
+        '202': { $ref: '#/components/responses/BookingChargeOk' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        default: { $ref: '#/components/responses/Unexpected' }
 components:
   securitySchemes:
     accountSession:
@@ -4321,6 +5177,28 @@ components:
       in: path
       required: true
       schema: { $ref: '#/components/schemas/Id' }
+    AppointmentId:
+      name: appointmentId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    ExceptionId:
+      name: exceptionId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    FromDate:
+      name: from
+      in: query
+      required: false
+      description: Data local da loja (AAAA-MM-DD). Padrão hoje.
+      schema: { type: string, format: date }
+    ToDate:
+      name: to
+      in: query
+      required: false
+      description: Data local final, inclusive (AAAA-MM-DD).
+      schema: { type: string, format: date }
     OrderId:
       name: orderId
       in: path
@@ -4453,6 +5331,53 @@ components:
                 required: [message]
                 properties:
                   message: { type: string }
+    AppointmentOk:
+      description: Reserva (visão do ator).
+      headers:
+        Idempotent-Replayed: { $ref: '#/components/headers/IdempotentReplayed' }
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: { $ref: '#/components/schemas/Appointment' }
+    VisitorContactOk:
+      description: Contato do visitante.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: { $ref: '#/components/schemas/VisitorContact' }
+    BookingPaymentOk:
+      description: Pagamento da reserva atualizado.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: { $ref: '#/components/schemas/BookingPayment' }
+    BookingChargeOk:
+      description: Pix da reserva (201 com o QR; 202 verificando) e a reserva atualizada.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: { $ref: '#/components/schemas/BookingChargeResult' }
+    AgendaHoursOk:
+      description: Jornadas.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data: { $ref: '#/components/schemas/AgendaHours' }
     VisitOk:
       description: Visita (participação + comanda) após o comando.
       headers:
@@ -4820,6 +5745,37 @@ components:
         - no_password
         - password_available
         - reauth_code_invalid
+        # agenda e operação híbrida (ADR-0038)
+        - agenda_unavailable
+        - schedule_disabled
+        - queue_entry_schedule_only
+        - queue_no_capacity_today
+        - queue_overlaps_own_appointment
+        - chair_reserved
+        - slot_unavailable
+        - appointment_overlaps_own
+        - appointment_limit_reached
+        - outside_booking_window
+        - professional_unavailable
+        - appointment_too_early
+        - customer_has_active_visit
+        - schedule_conflicts_appointments
+        - exception_conflicts_appointments
+        - professional_has_appointments
+        - visitors_disabled
+        - no_payment_method
+        # reserva com Pix, avisos e recuperação (ADR-0039)
+        - booking_too_close
+        - booking_hold_expired
+        - booking_already_paid
+        - booking_not_payable
+        - booking_payment_unavailable
+        - retention_unavailable
+        - cancel_retains_payment
+        - credit_exceeds_total
+        - contact_code_invalid
+        - contact_code_expired
+        - access_link_invalid
 
     # ------------------------------------------------------------ enums de estado
     QueueStatus:
@@ -4858,7 +5814,7 @@ components:
       enum: [requested, processing, unknown, under_review, confirmed, failed]
     FinancialIssueKind:
       type: string
-      enum: [duplicate_receipt, late_receipt, amount_mismatch, charge_outcome_unresolved, refund_under_review, active_pix_on_method_switch, adjustment_excess, restored_orphan_charge, restored_refund_unrecorded]
+      enum: [duplicate_receipt, late_receipt, amount_mismatch, charge_outcome_unresolved, refund_under_review, active_pix_on_method_switch, adjustment_excess, restored_orphan_charge, restored_refund_unrecorded, booking_late_payment, booking_refund_due, booking_notice_failed]
     FinancialIssueStatus:
       type: string
       enum: [open, resolved]
@@ -4905,6 +5861,7 @@ components:
         - stream.snapshot
         - stream.session_ended
         - queue.public.updated
+        - availability.updated
         - queue.updated
         - participation.updated
         - order.updated
@@ -4915,6 +5872,7 @@ components:
         - loyalty.updated
         - reward_reservation.updated
         - deletion_request.updated
+        - appointment.updated
 
     # ------------------------------------------------------------ requisições
     EmptyRequest:
@@ -5042,6 +6000,17 @@ components:
           uniqueItems: true
           items: { $ref: '#/components/schemas/Id' }
         items: { $ref: '#/components/schemas/OrderLines' }
+        acknowledge_own_appointment:
+          type: boolean
+          description: 'Modo "os dois": a pessoa viu que a espera prevista passa de um horário marcado dela nesta loja (409 `queue_overlaps_own_appointment`) e quer entrar mesmo assim; a reserva continua.'
+
+    CallNextRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        start_immediately:
+          type: boolean
+          description: O cliente já está na cadeira; chama e inicia juntos (a agenda reserva só duração + margem, sem a tolerância).
 
     OrderLineRequest:
       type: object
@@ -5080,8 +6049,9 @@ components:
     EstablishmentSettings:
       type: object
       description: Configurações da loja (privadas do dono). docs/configuracoes-da-loja.md descreve tipo, padrão, intervalo e efeito de cada uma.
-      required: [catalog, queue, payments]
+      required: [catalog, queue, payments, agenda]
       properties:
+        agenda: { $ref: '#/components/schemas/AgendaSettings' }
         catalog:
           type: object
           required: [max_service_quantity, products_enabled, version]
@@ -5757,6 +6727,13 @@ components:
         establishment_id: { $ref: '#/components/schemas/Id' }
         nick: { $ref: '#/components/schemas/Nick' }
         expires_at: { $ref: '#/components/schemas/Timestamp' }
+    VisitorContact:
+      type: object
+      required: [email_masked, verified, code_expires_at]
+      properties:
+        email_masked: { type: string, description: 'Ex.: an***@exemplo.com (o endereço completo nunca volta).' }
+        verified: { type: boolean }
+        code_expires_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
     VisitorSessionCreated:
       type: object
       required: [visitor, recovery_code, recovery_code_valid_until]
@@ -5784,8 +6761,9 @@ components:
     PublicOrdering:
       type: object
       description: Opções públicas do pedido. Nada financeiro interno (custos, chaves) aparece aqui.
-      required: [max_service_quantity, products_enabled, visitors_enabled, payment_methods]
+      required: [max_service_quantity, products_enabled, visitors_enabled, payment_methods, service_mode]
       properties:
+        service_mode: { $ref: '#/components/schemas/ServiceMode' }
         max_service_quantity: { type: integer, minimum: 1, maximum: 50 }
         products_enabled: { type: boolean }
         visitors_enabled: { type: boolean }
@@ -5922,6 +6900,7 @@ components:
       type: object
       required: [id, establishment_id, queue_id, professional_id, ticket_code, status, nick, version, order_id, created_at]
       properties:
+        origin: { $ref: '#/components/schemas/VisitOrigin' }
         id: { $ref: '#/components/schemas/Id' }
         establishment_id: { $ref: '#/components/schemas/Id' }
         queue_id: { $ref: '#/components/schemas/Id' }
@@ -6097,6 +7076,7 @@ components:
           type: object
           required: [due, received, conferred, refunded, outstanding]
           properties:
+            credit: { $ref: '#/components/schemas/Money', description: Sinal pago na reserva e abatido desta comanda (não é dinheiro novo); `due` já o desconta. }
             due: { $ref: '#/components/schemas/Money' }
             received: { $ref: '#/components/schemas/Money' }
             conferred: { $ref: '#/components/schemas/Money' }
@@ -6169,7 +7149,13 @@ components:
       properties:
         id: { $ref: '#/components/schemas/Id' }
         order_id:
-          description: Comanda da pendência. Nulo só em `restored_orphan_charge` (cobrança paga no provedor cuja comanda não existe no banco restaurado; etapa 12).
+          description: Comanda da pendência. Nulo em `restored_orphan_charge` (cobrança paga no provedor cuja comanda não existe no banco restaurado; etapa 12) e nas pendências de reserva paga (`appointment_id`).
+          oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }]
+        appointment_id:
+          description: Reserva paga da pendência (Pix tardio, sobra do sinal a devolver; ADR-0039).
+          oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }]
+        booking_refund_id:
+          description: Devolução de reserva que o dono confirma (`confirmBookingRefund`) ou dá como falha por esta pendência.
           oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }]
         provider_reference:
           description: Id da cobrança no provedor (para localizar no painel do provedor), quando a pendência veio da conciliação pós-restauração.
@@ -6241,6 +7227,7 @@ components:
               late_notice_at:
                 description: O cliente avisou pelo app que vai se atrasar (T-P-12).
                 oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }]
+              origin: { $ref: '#/components/schemas/VisitOrigin' }
               version: { $ref: '#/components/schemas/Version' }
               customer_avatar:
                 description: Foto pessoal do cliente com conta, só para a equipe e só com a participação ativa (URL reautorizada a cada pedido).
@@ -6251,6 +7238,7 @@ components:
       type: object
       required: [id, name, slug, timezone, version, palette, public_description, public_address, public_phone, logo, public_url]
       properties:
+        service_mode: { $ref: '#/components/schemas/ServiceMode' }
         id: { $ref: '#/components/schemas/Id' }
         name: { type: string }
         slug: { type: string }
@@ -6664,6 +7652,85 @@ components:
             median_seconds: { $ref: '#/components/schemas/AnalyticsValue' }
             p90_seconds: { $ref: '#/components/schemas/AnalyticsValue' }
             ignored_filters: { type: array, items: { type: string } }
+    AnalyticsAppointments:
+      type: object
+      required: [current, compare, daily, pending_now]
+      properties:
+        current: { $ref: '#/components/schemas/AnalyticsAppointmentsPart' }
+        compare: { oneOf: [{ $ref: '#/components/schemas/AnalyticsAppointmentsPart' }, { type: 'null' }] }
+        daily:
+          type: array
+          items:
+            type: object
+            required: [date, start, scheduled, completed, no_show, cancelled]
+            properties:
+              date: { type: string, format: date }
+              start: { $ref: '#/components/schemas/Timestamp' }
+              scheduled: { type: integer }
+              completed: { type: integer }
+              no_show: { type: integer }
+              cancelled: { type: integer }
+        pending_now:
+          type: object
+          required: [snapshot_at, refunds_pending, refunds_pending_cents, open_balance_cents, open_balance_orders, awaiting_payment]
+          properties:
+            snapshot_at: { $ref: '#/components/schemas/Timestamp' }
+            refunds_pending: { type: integer }
+            refunds_pending_cents: { type: integer }
+            open_balance_cents: { type: integer, description: 'Devido (total − sinal) das comandas de reserva aguardando pagamento.' }
+            open_balance_orders: { type: integer }
+            awaiting_payment: { type: integer, description: Reservas retidas aguardando o Pix agora. }
+    AnalyticsAppointmentsPart:
+      type: object
+      required: [counts, money, modality, occupancy]
+      properties:
+        counts:
+          type: object
+          required: [scheduled, completed, interrupted, no_show, cancelled_by_customer, cancelled_by_store, expired_unpaid, store_late,
+                     reschedules, no_show_rate, start_delay_median_seconds, start_delay_p90_seconds]
+          properties:
+            scheduled: { $ref: '#/components/schemas/AnalyticsValue' }
+            completed: { $ref: '#/components/schemas/AnalyticsValue' }
+            interrupted: { $ref: '#/components/schemas/AnalyticsValue' }
+            no_show: { $ref: '#/components/schemas/AnalyticsValue' }
+            cancelled_by_customer: { $ref: '#/components/schemas/AnalyticsValue' }
+            cancelled_by_store: { $ref: '#/components/schemas/AnalyticsValue' }
+            expired_unpaid: { $ref: '#/components/schemas/AnalyticsValue' }
+            store_late: { $ref: '#/components/schemas/AnalyticsValue' }
+            reschedules: { $ref: '#/components/schemas/AnalyticsValue' }
+            no_show_rate: { $ref: '#/components/schemas/AnalyticsValue' }
+            start_delay_median_seconds: { $ref: '#/components/schemas/AnalyticsValue' }
+            start_delay_p90_seconds: { $ref: '#/components/schemas/AnalyticsValue' }
+        money:
+          type: object
+          required: [deposits_received_cents, fees_received_cents, late_payments_cents, credits_applied_cents, refunds_confirmed_cents]
+          properties:
+            deposits_received_cents: { $ref: '#/components/schemas/AnalyticsValue' }
+            fees_received_cents: { $ref: '#/components/schemas/AnalyticsValue' }
+            late_payments_cents: { $ref: '#/components/schemas/AnalyticsValue' }
+            credits_applied_cents: { $ref: '#/components/schemas/AnalyticsValue' }
+            refunds_confirmed_cents: { $ref: '#/components/schemas/AnalyticsValue' }
+        modality:
+          type: array
+          items:
+            type: object
+            required: [origin, completed, no_show]
+            properties:
+              origin: { type: string, enum: [queue, appointment] }
+              completed: { type: integer }
+              no_show: { type: integer }
+        occupancy:
+          type: object
+          required: [available_seconds, committed_seconds, planned, in_service_seconds, real, overtime_seconds, days_with_schedule, days]
+          properties:
+            available_seconds: { $ref: '#/components/schemas/AnalyticsValue' }
+            committed_seconds: { $ref: '#/components/schemas/AnalyticsValue' }
+            planned: { $ref: '#/components/schemas/AnalyticsValue' }
+            in_service_seconds: { $ref: '#/components/schemas/AnalyticsValue' }
+            real: { $ref: '#/components/schemas/AnalyticsValue' }
+            overtime_seconds: { $ref: '#/components/schemas/AnalyticsValue' }
+            days_with_schedule: { type: integer }
+            days: { type: integer }
     AnalyticsSummary:
       type: object
       required: [current, compare, pending_now]
@@ -6748,3 +7815,414 @@ components:
           properties:
             start: { $ref: '#/components/schemas/Timestamp' }
             end: { $ref: '#/components/schemas/Timestamp' }
+
+    # ------------------------------------------------------------ agenda (ADR-0038)
+    VisitOrigin:
+      type: string
+      enum: [queue, appointment]
+      description: Entrada pela fila (FIFO) ou horário marcado chamado (não conta como entrada FIFO).
+    ServiceMode:
+      type: string
+      enum: [queue, schedule, hybrid]
+      description: 'Forma de atendimento: por ordem de chegada (fila), com horário marcado (agenda) ou os dois.'
+    ShiftModality:
+      type: string
+      enum: [queue, schedule, both]
+      description: 'No modo "os dois": trecho só de fila, só de agenda ou compartilhado.'
+    AppointmentStatus:
+      type: string
+      enum: [held, confirmed, called, in_service, completed, interrupted, no_show, cancelled, expired]
+      description: '`held` = aguardando o Pix da reserva até `hold_expires_at`; `expired` = o prazo venceu sem pagamento.'
+    BookingMode:
+      type: string
+      enum: [free, deposit, fee]
+      description: 'Reserva gratuita, sinal (abatido do atendimento) ou taxa de reserva (cobrada além do atendimento).'
+    BookingPaymentStatus:
+      type: string
+      enum: [awaiting_payment, paid, expired, cancelled]
+    LateCancelPolicy:
+      type: string
+      enum: [refund, retain]
+      description: Cancelamento fora da janela ou falta do cliente — devolver ou reter o valor pago.
+    BookingQuote:
+      type: object
+      required: [mode, due_now, due_at_store, estimated_total, cancel_window_hours, late_cancel_policy, terms]
+      description: Cotação calculada no servidor (a confirmação refaz a conta).
+      properties:
+        mode: { $ref: '#/components/schemas/BookingMode' }
+        due_now: { $ref: '#/components/schemas/Money' }
+        due_at_store: { $ref: '#/components/schemas/Money' }
+        estimated_total: { $ref: '#/components/schemas/Money' }
+        cancel_window_hours: { type: integer, minimum: 0 }
+        late_cancel_policy: { $ref: '#/components/schemas/LateCancelPolicy' }
+        terms: { type: string }
+    BookingCharge:
+      type: object
+      required: [id, status, amount, br_code, expires_at, created_at]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        status: { $ref: '#/components/schemas/PixChargeStatus' }
+        amount: { $ref: '#/components/schemas/Money' }
+        br_code: { type: [string, 'null'], description: Copia-e-cola; nulo depois de vencido ou cancelado. }
+        expires_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+    BookingPayment:
+      type: object
+      required: [mode, status, amount, hold_expires_at, paid_at, outcome, cancel_window_hours, late_cancel_policy, charge, verifying,
+                 refund, credit_applied]
+      properties:
+        mode: { type: string, enum: [deposit, fee] }
+        status: { $ref: '#/components/schemas/BookingPaymentStatus' }
+        amount: { $ref: '#/components/schemas/Money' }
+        hold_expires_at: { $ref: '#/components/schemas/Timestamp' }
+        paid_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+        outcome:
+          type: [string, 'null']
+          enum: [applied, kept, refund_due, null]
+          description: 'Desfecho do valor pago: abatido na comanda, mantido pela barbearia ou a devolver.'
+        cancel_window_hours: { type: integer }
+        late_cancel_policy: { $ref: '#/components/schemas/LateCancelPolicy' }
+        charge: { oneOf: [{ $ref: '#/components/schemas/BookingCharge' }, { type: 'null' }] }
+        verifying: { type: boolean, description: Resultado do Pix ainda desconhecido (mostrar "Verificando pagamento"). }
+        refund:
+          description: 'Devolução (solicitada não é devolvida: o estado vem do provedor ou da confirmação do dono).'
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [status, amount, partial]
+              properties:
+                status: { $ref: '#/components/schemas/RefundStatus' }
+                amount: { $ref: '#/components/schemas/Money' }
+                partial: { type: boolean }
+        credit_applied: { $ref: '#/components/schemas/Money' }
+    BookingChargeResult:
+      allOf:
+        - $ref: '#/components/schemas/BookingCharge'
+        - type: object
+          required: [appointment]
+          properties:
+            appointment: { $ref: '#/components/schemas/Appointment' }
+    CancelAppointmentRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      properties:
+        expected_version: { $ref: '#/components/schemas/Version' }
+        reason: { $ref: '#/components/schemas/Reason' }
+        accept_retention: { type: boolean, description: O cliente confirma que o valor pago fica com a barbearia (fora da janela). }
+    AgendaSettings:
+      type: object
+      required: [service_mode, slot_step_minutes, buffer_minutes, min_lead_minutes, horizon_days, schedule_tolerance_minutes,
+                 checkin_window_minutes, max_future_appointments, professionals_can_block, available, booking_payment_mode,
+                 booking_payment_cents, cancel_window_hours, late_cancel_policy, reminder_hours, charge_available, retain_available, version]
+      properties:
+        service_mode: { $ref: '#/components/schemas/ServiceMode' }
+        slot_step_minutes: { type: integer, minimum: 5, maximum: 120, default: 15 }
+        buffer_minutes: { type: integer, minimum: 0, maximum: 60, default: 0 }
+        min_lead_minutes: { type: integer, minimum: 0, maximum: 1440, default: 30 }
+        horizon_days: { type: integer, minimum: 1, maximum: 180, default: 30 }
+        schedule_tolerance_minutes: { type: [integer, 'null'], minimum: 1, maximum: 60, description: null = herda a tolerância de chamada da fila. }
+        checkin_window_minutes: { type: integer, minimum: 0, maximum: 60, default: 15 }
+        max_future_appointments: { type: integer, minimum: 1, maximum: 20, default: 3 }
+        professionals_can_block: { type: boolean, default: false }
+        available: { type: boolean, description: Agenda liberada neste servidor (FILA_AGENDA). }
+        booking_payment_mode: { $ref: '#/components/schemas/BookingMode' }
+        booking_payment_cents: { type: [integer, 'null'], minimum: 100, maximum: 100000, description: Valor do sinal ou da taxa; nulo na reserva gratuita. }
+        cancel_window_hours: { type: integer, minimum: 0, maximum: 168, default: 12 }
+        late_cancel_policy: { $ref: '#/components/schemas/LateCancelPolicy' }
+        reminder_hours: { type: integer, minimum: 0, maximum: 72, default: 24, description: Lembrete por e-mail antes do horário; 0 = sem lembrete. }
+        charge_available: { type: boolean, description: 'Cobrança da reserva liberada (FILA_AGENDA_COBRANCA) e Pix operacional.' }
+        retain_available: { type: boolean, description: Retenção na falta ou cancelamento tardio liberada (FILA_AGENDA_RETENCAO). }
+        version: { $ref: '#/components/schemas/Version' }
+    AgendaSettingsRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      properties:
+        expected_version: { $ref: '#/components/schemas/Version' }
+        service_mode: { $ref: '#/components/schemas/ServiceMode' }
+        slot_step_minutes: { type: integer, minimum: 5, maximum: 120 }
+        buffer_minutes: { type: integer, minimum: 0, maximum: 60 }
+        min_lead_minutes: { type: integer, minimum: 0, maximum: 1440 }
+        horizon_days: { type: integer, minimum: 1, maximum: 180 }
+        schedule_tolerance_minutes: { type: [integer, 'null'], minimum: 1, maximum: 60 }
+        checkin_window_minutes: { type: integer, minimum: 0, maximum: 60 }
+        max_future_appointments: { type: integer, minimum: 1, maximum: 20 }
+        professionals_can_block: { type: boolean }
+        booking_payment_mode: { $ref: '#/components/schemas/BookingMode' }
+        booking_payment_cents: { type: [integer, 'null'], minimum: 100, maximum: 100000 }
+        cancel_window_hours: { type: integer, minimum: 0, maximum: 168 }
+        late_cancel_policy: { $ref: '#/components/schemas/LateCancelPolicy' }
+        reminder_hours: { type: integer, minimum: 0, maximum: 72 }
+    AgendaImpact:
+      type: object
+      required: [future_appointments, waiting_in_queues]
+      properties:
+        future_appointments: { type: integer, minimum: 0 }
+        waiting_in_queues: { type: integer, minimum: 0 }
+    WeeklyShift:
+      type: object
+      additionalProperties: false
+      required: [weekday, start_minute, end_minute, modality]
+      description: Turno semanal em minutos locais [início, fim) do mesmo dia; 0 = domingo. Turno que passa da meia-noite vira dois trechos.
+      properties:
+        weekday: { type: integer, minimum: 0, maximum: 6 }
+        start_minute: { type: integer, minimum: 0, maximum: 1439 }
+        end_minute: { type: integer, minimum: 1, maximum: 1440 }
+        modality: { $ref: '#/components/schemas/ShiftModality' }
+    WeeklySchedule:
+      type: object
+      required: [id, effective_from, inherits_store, shifts]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        effective_from: { type: string, format: date }
+        inherits_store: { type: boolean }
+        shifts:
+          type: array
+          items: { $ref: '#/components/schemas/WeeklyShift' }
+    SubjectHours:
+      type: object
+      required: [professional_id, display_name, current, upcoming]
+      properties:
+        professional_id: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }], description: null = a loja. }
+        display_name: { type: string }
+        current: { oneOf: [{ $ref: '#/components/schemas/WeeklySchedule' }, { type: 'null' }], description: null = sem versão própria (profissional herda a da loja). }
+        upcoming:
+          type: array
+          items: { $ref: '#/components/schemas/WeeklySchedule' }
+    AgendaHours:
+      type: object
+      required: [timezone, today, store, professionals]
+      properties:
+        timezone: { type: string, description: Fuso IANA da loja. }
+        today: { type: string, format: date }
+        store: { $ref: '#/components/schemas/SubjectHours' }
+        professionals:
+          type: array
+          items: { $ref: '#/components/schemas/SubjectHours' }
+    SetAgendaHoursRequest:
+      type: object
+      additionalProperties: false
+      required: [effective_from]
+      properties:
+        professional_id: { $ref: '#/components/schemas/Id' }
+        effective_from: { type: string, format: date, description: Data local; hoje ou depois. }
+        inherits_store: { type: boolean, description: Só profissional; volta a seguir a jornada da loja. }
+        shifts:
+          type: array
+          maxItems: 28
+          items: { $ref: '#/components/schemas/WeeklyShift' }
+    AgendaException:
+      type: object
+      required: [id, professional_id, date, start_minute, end_minute, reason, created_at]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        professional_id: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }], description: null = loja inteira. }
+        date: { type: string, format: date }
+        start_minute: { type: [integer, 'null'], description: null = dia inteiro. }
+        end_minute: { type: [integer, 'null'] }
+        reason: { type: string, description: Motivo interno (nunca vai ao cliente). }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+    CreateAgendaExceptionRequest:
+      type: object
+      additionalProperties: false
+      required: [date, reason]
+      properties:
+        professional_id: { $ref: '#/components/schemas/Id' }
+        date: { type: string, format: date }
+        start_minute: { type: integer, minimum: 0, maximum: 1439 }
+        end_minute: { type: integer, minimum: 1, maximum: 1440 }
+        reason: { type: string, minLength: 3, maxLength: 200 }
+    AvailabilitySlot:
+      type: object
+      required: [starts_at, local_time]
+      properties:
+        starts_at: { $ref: '#/components/schemas/Timestamp' }
+        local_time: { type: string, description: HH:MM no fuso da loja. }
+    AvailabilityProfessional:
+      type: object
+      required: [professional_id, display_name, eligible, slots, queue]
+      properties:
+        professional_id: { $ref: '#/components/schemas/Id' }
+        display_name: { type: string }
+        eligible: { type: boolean, description: false = não faz algum dos serviços escolhidos. }
+        slots:
+          type: array
+          items: { $ref: '#/components/schemas/AvailabilitySlot' }
+        queue:
+          description: Hoje, no modo "os dois" — início ESTIMADO de quem entrar agora na fila.
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [next_start, has_capacity]
+              properties:
+                next_start: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+                has_capacity: { type: boolean }
+    Availability:
+      type: object
+      required: [date, timezone, mode, first_date, last_date, visitor_last_date, step_minutes, service_minutes, buffer_minutes,
+                 total_minutes, price, payment, professionals]
+      properties:
+        date: { type: string, format: date }
+        timezone: { type: string }
+        mode: { $ref: '#/components/schemas/ServiceMode' }
+        first_date: { type: string, format: date }
+        last_date: { type: string, format: date }
+        visitor_last_date: { type: string, format: date, description: Último dia que um visitante (sem conta) pode reservar. }
+        step_minutes: { type: integer }
+        service_minutes: { type: integer }
+        buffer_minutes: { type: integer }
+        total_minutes: { type: integer, description: Serviços + margem de preparação (uma vez por visita). }
+        price: { $ref: '#/components/schemas/Money' }
+        payment: { $ref: '#/components/schemas/BookingQuote' }
+        professionals:
+          type: array
+          items: { $ref: '#/components/schemas/AvailabilityProfessional' }
+    CreateAppointmentRequest:
+      type: object
+      additionalProperties: false
+      required: [professional_id, starts_at, items]
+      description: Sem preço, duração ou identidade — tudo vem do servidor.
+      properties:
+        professional_id: { $ref: '#/components/schemas/Id' }
+        starts_at: { $ref: '#/components/schemas/Timestamp' }
+        items: { $ref: '#/components/schemas/OrderLines' }
+        counter_customer:
+          type: object
+          additionalProperties: false
+          required: [nick]
+          description: Só o dono (balcão). Cria a identidade recuperável do cliente.
+          properties:
+            nick: { type: string, minLength: 1, maxLength: 30 }
+    RescheduleAppointmentRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version, starts_at]
+      properties:
+        expected_version: { $ref: '#/components/schemas/Version' }
+        starts_at: { $ref: '#/components/schemas/Timestamp' }
+        professional_id: { $ref: '#/components/schemas/Id' }
+        reason: { $ref: '#/components/schemas/Reason' }
+    AppointmentItem:
+      type: object
+      required: [kind, service_id, product_id, name, unit_price, quantity, duration_minutes]
+      properties:
+        kind: { type: string, enum: [service, product] }
+        service_id: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        product_id: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        name: { type: string }
+        unit_price: { $ref: '#/components/schemas/Money' }
+        quantity: { type: integer, minimum: 1 }
+        duration_minutes: { type: integer, minimum: 0 }
+    Appointment:
+      type: object
+      required: [id, establishment_id, professional, status, cancelled_by, origin, starts_at, ends_at, local_date, local_time,
+                 timezone, service_minutes, buffer_minutes, tolerance_minutes, checkin_window_minutes, items, price, payment,
+                 terms, called_at, deadline_at, arrived_at, arrival_signal_at, store_late, participation_id, revision, version,
+                 created_at, finished_at, hold_expires_at]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        establishment_id: { $ref: '#/components/schemas/Id' }
+        professional:
+          type: object
+          required: [id, display_name]
+          properties:
+            id: { $ref: '#/components/schemas/Id' }
+            display_name: { type: string }
+        status: { $ref: '#/components/schemas/AppointmentStatus' }
+        cancelled_by: { type: [string, 'null'], enum: [customer, store, null] }
+        origin: { type: string, enum: [online, counter] }
+        starts_at: { $ref: '#/components/schemas/Timestamp' }
+        ends_at: { $ref: '#/components/schemas/Timestamp' }
+        local_date: { type: string, format: date }
+        local_time: { type: string }
+        timezone: { type: string }
+        service_minutes: { type: integer }
+        buffer_minutes: { type: integer }
+        tolerance_minutes: { type: integer, description: Tolerância de chegada congelada na reserva. }
+        checkin_window_minutes: { type: integer }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AppointmentItem' }
+        price: { $ref: '#/components/schemas/Money' }
+        payment:
+          type: object
+          required: [mode, due_now, due_at_store, estimated_total, booking, free_cancel_until]
+          description: Valores aceitos na reserva. `booking` = obrigação paga (sinal ou taxa); nulo na reserva gratuita.
+          properties:
+            mode: { $ref: '#/components/schemas/BookingMode' }
+            due_now: { $ref: '#/components/schemas/Money' }
+            due_at_store: { $ref: '#/components/schemas/Money' }
+            estimated_total: { $ref: '#/components/schemas/Money' }
+            booking: { oneOf: [{ $ref: '#/components/schemas/BookingPayment' }, { type: 'null' }] }
+            free_cancel_until:
+              description: Até este instante o cancelamento pelo cliente devolve o valor pago. Nulo na reserva gratuita.
+              oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }]
+        terms: { type: string }
+        called_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+        deadline_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }], description: 'max(horário, chamada) + tolerância.' }
+        arrived_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+        arrival_signal_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+        store_late: { type: boolean, description: A tolerância passou e a loja não chamou (não é falta do cliente). }
+        participation_id: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        revision: { type: integer, minimum: 1 }
+        version: { $ref: '#/components/schemas/Version' }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+        finished_at: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+        hold_expires_at:
+          description: Fim do prazo para pagar a reserva (`held`); depois disso o horário é liberado.
+          oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }]
+        nick: { type: string, description: Só equipe. }
+        identity_kind: { type: string, enum: [account, visitor], description: Só equipe. }
+        end_reason: { type: [string, 'null'], description: Só equipe. }
+    AppointmentCreated:
+      allOf:
+        - $ref: '#/components/schemas/Appointment'
+        - type: object
+          properties:
+            counter_recovery_code: { type: string, description: 'Só na reserva de balcão, uma única vez.' }
+            counter_recovery_code_valid_until: { $ref: '#/components/schemas/Timestamp' }
+    MyAppointment:
+      type: object
+      required: [establishment, appointment]
+      properties:
+        establishment:
+          type: object
+          required: [id, slug, name]
+          properties:
+            id: { $ref: '#/components/schemas/Id' }
+            slug: { type: string }
+            name: { type: string }
+        appointment: { $ref: '#/components/schemas/Appointment' }
+    AgendaDay:
+      type: object
+      required: [date, professional_id, display_name, shifts, blocks, appointments]
+      properties:
+        date: { type: string, format: date }
+        professional_id: { $ref: '#/components/schemas/Id' }
+        display_name: { type: string }
+        shifts:
+          type: array
+          items:
+            type: object
+            required: [starts_at, ends_at, modality]
+            properties:
+              starts_at: { $ref: '#/components/schemas/Timestamp' }
+              ends_at: { $ref: '#/components/schemas/Timestamp' }
+              modality: { $ref: '#/components/schemas/ShiftModality' }
+        blocks:
+          type: array
+          items: { $ref: '#/components/schemas/AgendaException' }
+        appointments:
+          type: array
+          items: { $ref: '#/components/schemas/Appointment' }
+    AgendaView:
+      type: object
+      required: [timezone, mode, today, days]
+      properties:
+        timezone: { type: string }
+        mode: { $ref: '#/components/schemas/ServiceMode' }
+        today: { type: string, format: date }
+        days:
+          type: array
+          items: { $ref: '#/components/schemas/AgendaDay' }

@@ -37,17 +37,19 @@ type StreamDeps struct {
 
 // Áreas do Dashboard que um evento pode invalidar.
 var allAreas = []string{"summary", "cash", "ticket", "movement", "wait", "duration", "outcomes", "peak_hours",
-	"professionals", "services", "pending", "loyalty", "rewards", "payment_methods", "wait_bands", "recurrence"}
+	"professionals", "services", "pending", "loyalty", "rewards", "payment_methods", "wait_bands", "recurrence", "appointments"}
 
 func areasFor(eventType string) []string {
 	switch eventType {
 	case "payment.updated", "financial_issue.updated":
-		return []string{"summary", "cash", "ticket", "payment_methods", "pending"}
+		return []string{"summary", "cash", "ticket", "payment_methods", "pending", "appointments"}
+	case "appointment.updated":
+		return []string{"appointments"}
 	case "order.updated", "change_request.updated":
 		return []string{"summary", "ticket", "services", "pending", "professionals"}
 	case "participation.updated":
 		return []string{"summary", "movement", "wait", "duration", "outcomes", "peak_hours", "professionals",
-			"services", "wait_bands", "recurrence"}
+			"services", "wait_bands", "recurrence", "appointments"}
 	case "pendencies.updated":
 		return []string{"summary", "pending"}
 	case "loyalty.updated", "reward_reservation.updated":

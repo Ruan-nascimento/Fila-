@@ -50,6 +50,8 @@ type establishmentView struct {
 	PublicURL string `json:"public_url"`
 	// Location: onde fica a barbearia (opcional), para o cliente achar as mais próximas.
 	Location *Location `json:"location"`
+	// ServiceMode: forma de atendimento efetiva (ADR-0038), para a equipe abrir na tela certa.
+	ServiceMode string `json:"service_mode,omitempty"`
 
 	logoID *uuid.UUID
 }
@@ -103,6 +105,14 @@ func (s *Service) getEstablishment(w http.ResponseWriter, r *http.Request) error
 	v, err := s.loadEstablishment(r.Context(), s.Pool, estID, false)
 	if err != nil {
 		return err
+	}
+	st, err := LoadSettings(r.Context(), s.Pool, estID)
+	if err != nil {
+		return err
+	}
+	v.ServiceMode = ModeQueue
+	if s.AgendaEnabled {
+		v.ServiceMode = st.ServiceMode
 	}
 	httpserver.WriteJSON(w, http.StatusOK, httpserver.Data[establishmentView]{Data: v})
 	return nil

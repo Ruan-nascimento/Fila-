@@ -9,7 +9,7 @@ import {
   useParams,
   useSearchParams,
 } from "react-router";
-import { History, MapPin, Phone, Star, Store, UsersRound } from "lucide-react";
+import { CalendarClock, CalendarPlus, History, MapPin, Phone, Star, Store, UsersRound } from "lucide-react";
 import { useStoreBrand } from "../features/theme/tema";
 import { formatPhone } from "../features/auth/acessoLoja";
 import { api } from "../api/client";
@@ -27,6 +27,9 @@ import { useStoreData } from "./fila/dadosContexto";
 import { Historico } from "./fila/Historico";
 import { CodigoUmaVez, ContaNaLoja, Identificacao, VisitanteAtual } from "./fila/Identificacao";
 import { MinhaVisita } from "./fila/MinhaVisita";
+import { Agendar } from "./agenda/Agendar";
+import { MinhasReservas } from "./agenda/MinhasReservas";
+import { AcessoReserva } from "./agenda/AcessoReserva";
 
 type PublicEstablishment = components["schemas"]["PublicEstablishment"];
 type VisitorCreated = components["schemas"]["VisitorSessionCreated"];
@@ -115,7 +118,13 @@ export function Loja() {
             : null) ??
           "anonimo"
         }`}
-        destino={(n) => (n.aba === "pontos" ? `/loja/${shop.slug}/pontos` : `/loja/${shop.slug}`)}
+        destino={(n) =>
+          n.aba === "pontos"
+            ? `/loja/${shop.slug}/pontos`
+            : n.aba === "reservas"
+              ? `/loja/${shop.slug}/reservas`
+              : `/loja/${shop.slug}`
+        }
         icon={shop.logo?.variants[0]?.url}
       >
         <PublicShell width="wide" store={shop} actions={identified ? <Sino /> : undefined}>
@@ -132,6 +141,33 @@ function LojaConteudo({ shop }: { shop: PublicEstablishment }) {
   const { state } = useSession();
   const base = `/loja/${shop.slug}`;
   const account = state.status === "ready" ? state.session.account : null;
+  const identified =
+    state.status === "ready" &&
+    (account !== null || state.session.visitors.some((v) => v.establishment_id === shop.id));
+  // Forma de atendimento (ADR-0038): a ação principal da página se adapta.
+  const mode = shop.ordering?.service_mode ?? "queue";
+  const tabs = [
+    ...(mode !== "schedule" ? [{ to: base, label: "Fila", icon: UsersRound, end: true }] : []),
+    ...(mode !== "queue"
+      ? [
+          {
+            to: mode === "schedule" ? base : `${base}/agendar`,
+            label: "Agendar horário",
+            icon: CalendarPlus,
+            end: true,
+          },
+        ]
+      : []),
+    ...(identified && mode !== "queue"
+      ? [{ to: `${base}/reservas`, label: "Minhas reservas", icon: CalendarClock, end: false }]
+      : []),
+    ...(account
+      ? [
+          { to: `${base}/historico`, label: "Histórico", icon: History, end: false },
+          { to: `${base}/pontos`, label: "Pontos", icon: Star, end: false },
+        ]
+      : []),
+  ];
   return (
     <div className="grid gap-5">
       <header className="flex flex-wrap items-start gap-4">
@@ -169,14 +205,20 @@ function LojaConteudo({ shop }: { shop: PublicEstablishment }) {
           )}
         </div>
       </header>
-      {account && (
+      {mode === "hybrid" && (
+        <div className="flex flex-wrap gap-2">
+          <ButtonLink to={base} variant="secondary">
+            <UsersRound aria-hidden="true" className="size-5" /> Entrar na fila
+          </ButtonLink>
+          <ButtonLink to={`${base}/agendar`}>
+            <CalendarPlus aria-hidden="true" className="size-5" /> Agendar horário
+          </ButtonLink>
+        </div>
+      )}
+      {tabs.length > 1 && (
         <nav aria-label="Nesta loja" className="-mx-1 overflow-x-auto">
           <ul className="m-0 flex w-max list-none gap-1 border-b border-line p-0 px-1">
-            {[
-              { to: base, label: "Fila", icon: UsersRound, end: true },
-              { to: `${base}/historico`, label: "Histórico", icon: History, end: false },
-              { to: `${base}/pontos`, label: "Pontos", icon: Star, end: false },
-            ].map((t) => (
+            {tabs.map((t) => (
               <li key={t.to}>
                 <NavLink
                   to={t.to}
@@ -200,7 +242,19 @@ function LojaConteudo({ shop }: { shop: PublicEstablishment }) {
       )}
       <StreamStatusNotice />
       <Routes>
-        <Route index element={<FilaDaLoja shop={shop} />} />
+        <Route index element={mode === "schedule" ? <Agendar shop={shop} /> : <FilaDaLoja shop={shop} />} />
+        <Route path="visita" element={<FilaDaLoja shop={shop} />} />
+        <Route
+          path="agendar"
+          element={mode === "queue" ? <Navigate to={base} replace /> : <Agendar shop={shop} />}
+        />
+        <Route
+          path="reservas"
+          element={
+            identified ? <MinhasReservas shopId={shop.id} slug={shop.slug} /> : <Navigate to={base} replace />
+          }
+        />
+        <Route path="acesso" element={<AcessoReserva shopId={shop.id} slug={shop.slug} />} />
         <Route
           path="historico"
           element={account ? <Historico shopId={shop.id} /> : <Navigate to={base} replace />}

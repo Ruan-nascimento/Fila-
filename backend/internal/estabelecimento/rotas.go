@@ -41,6 +41,8 @@ func (s *Service) Routes() []hs.Route {
 		{Operation: "updateCatalogSettings", Method: http.MethodPatch, Path: est + "/settings/catalog", Grants: owner, Handler: s.updateCatalogSettings},
 		{Operation: "updateQueueSettings", Method: http.MethodPatch, Path: est + "/settings/queue", Grants: owner, Handler: s.updateQueueSettings},
 		{Operation: "updatePaymentSettings", Method: http.MethodPatch, Path: est + "/settings/payments", Grants: owner, Handler: s.updatePaymentSettings},
+		{Operation: "updateAgendaSettings", Method: http.MethodPatch, Path: est + "/settings/agenda", Grants: owner, Handler: s.updateAgendaSettings},
+		{Operation: "getAgendaImpact", Method: http.MethodGet, Path: est + "/settings/agenda/impact", Grants: owner, Handler: s.getAgendaImpact},
 		{Operation: "signalAvailability", Method: http.MethodPost, Path: est + "/queues/{queueId}/availability-signal",
 			Grants: []hs.Grant{{Actor: "professional", Scope: "own_queue"}}, Handler: s.signalAvailability},
 		{Operation: "listPublicEstablishments", Method: http.MethodGet, Path: "/v1/public/establishments",

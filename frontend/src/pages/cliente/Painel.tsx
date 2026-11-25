@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router";
-import { ArrowRight, Clock, MapPin, QrCode, Search, Store, UsersRound, X } from "lucide-react";
+import { ArrowRight, CalendarClock, Clock, MapPin, QrCode, Search, Store, UsersRound, X } from "lucide-react";
 import { api } from "../../api/client";
 import { call, problemMessage } from "../../api/problem";
 import type { components } from "../../api/schema.gen";
+import { dataPorExtenso, itensTexto, situacaoReserva } from "../../features/agenda/horario";
+import { useMinhasReservas } from "../../features/agenda/reservas";
 import { paletteVars } from "../../features/theme/paletas";
 import { espera } from "../../tempo";
 import { ApiStatus } from "../../features/status/ApiStatus";
@@ -53,6 +55,7 @@ export function PainelCliente() {
       )}
 
       {temIdentidade && <MinhasFilas />}
+      {temIdentidade && <MeusHorarios />}
       <Buscar />
 
       <aside className="grid gap-3 rounded-xl border border-dashed border-line p-4 sm:grid-cols-[auto_1fr] sm:items-center">
@@ -78,6 +81,46 @@ export function PainelCliente() {
       </aside>
       <ApiStatus quietWhenReady />
     </div>
+  );
+}
+
+/* ---------------------------------------------------------------- Meus horários */
+
+/** Próximos horários marcados em qualquer barbearia (só aparece quando há algum). */
+function MeusHorarios() {
+  const { list } = useMinhasReservas("upcoming");
+  if (!list || list.length === 0) return null;
+  return (
+    <section aria-labelledby="titulo-horarios" className="grid gap-3">
+      <h2 id="titulo-horarios" className="m-0 text-lg font-semibold">
+        Seus horários marcados
+      </h2>
+      <ul className="m-0 grid list-none gap-2 p-0">
+        {list.map((x) => {
+          const sit = situacaoReserva(x.appointment);
+          return (
+            <li key={x.appointment.id}>
+              <Link
+                to={`/loja/${x.establishment.slug}/reservas`}
+                className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-surface p-4 text-fg no-underline hover:bg-surface-2"
+              >
+                <CalendarClock aria-hidden="true" className="size-6 text-accent" />
+                <span className="grid flex-1 gap-0.5">
+                  <span className="font-semibold">
+                    {x.establishment.name} · {dataPorExtenso(x.appointment.local_date)}, às{" "}
+                    {x.appointment.local_time}
+                  </span>
+                  <span className="text-sm text-fg-muted">
+                    Com {x.appointment.professional.display_name} · {itensTexto(x.appointment)}
+                  </span>
+                </span>
+                <Badge tone={sit.tom}>{sit.texto}</Badge>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 

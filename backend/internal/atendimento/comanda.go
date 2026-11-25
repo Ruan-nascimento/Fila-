@@ -68,16 +68,21 @@ type orderRow struct {
 	Status          string
 	TotalCents      int64
 	Version         int64
+	CreditCents     int64
 }
 
 const orderSelect = `
-	SELECT id, establishment_id, participation_id, professional_id, account_id, visitor_id, status, total_cents, version
+	SELECT id, establishment_id, participation_id, professional_id, account_id, visitor_id, status, total_cents, version,
+	       credit_cents
 	FROM service_order`
+
+// reaisBR formata centavos para mensagens ("R$ 15,00").
+func reaisBR(c int64) string { return fmt.Sprintf("R$ %d,%02d", c/100, c%100) }
 
 func scanOrder(r pgx.Row) (orderRow, error) {
 	var o orderRow
 	err := r.Scan(&o.ID, &o.EstablishmentID, &o.ParticipationID, &o.ProfessionalID, &o.Identity.AccountID, &o.Identity.VisitorID,
-		&o.Status, &o.TotalCents, &o.Version)
+		&o.Status, &o.TotalCents, &o.Version, &o.CreditCents)
 	return o, err
 }
 
@@ -223,6 +228,10 @@ func CloseNoCharge(ctx context.Context, q database.Querier, estID, orderID uuid.
 		return err
 	}
 	if err := voidPending(ctx, q, estID, orderID, now, audit); err != nil {
+		return err
+	}
+	// Reserva paga cuja visita terminou sem atendimento: o pagamento aplica a política (devolver ou reter).
+	if err := applyCredit(ctx, q, estID, orderID, now); err != nil {
 		return err
 	}
 	return recordOrder(ctx, q, estID, orderID, now, evOrder, evPayment)

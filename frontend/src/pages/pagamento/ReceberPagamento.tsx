@@ -64,6 +64,12 @@ export function ReceberPagamento({
         {pay.method_choice && <Badge tone="primary">Meio escolhido: {methodText[pay.method_choice]}</Badge>}
       </div>
       <div className="divide-y divide-line rounded-lg bg-surface-2 px-3">
+        {pay.amounts.credit && pay.amounts.credit.amount_cents > 0 && (
+          <AmountRow
+            label="Sinal pago na reserva (descontado)"
+            value={`− ${formatCents(pay.amounts.credit.amount_cents)}`}
+          />
+        )}
         <AmountRow label="Devido" value={formatCents(pay.amounts.due.amount_cents)} />
         <AmountRow label="Recebido" value={formatCents(pay.amounts.received.amount_cents)} />
         <AmountRow strong label="Em aberto" value={formatCents(pay.amounts.outstanding.amount_cents)} />

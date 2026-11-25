@@ -97,31 +97,97 @@ func filterServicePart(sc *scope, next func(any) string) string {
 		next(*sc.q.Filters.ServiceID) + " AND i.status <> 'removed')"
 }
 
+// comandaOuAgenda: recebimento/estorno de reserva paga (sem comanda; ADR-0039) abre a agenda.
+func comandaOuAgenda(est uuid.UUID, order *uuid.UUID) string {
+	if order == nil {
+		return "/gestao/" + est.String() + "/agenda"
+	}
+	return comanda(est, *order)
+}
+
 func comanda(est, order uuid.UUID) string {
 	return "/gestao/" + est.String() + "/comandas/" + order.String()
 }
 
+var apptStates = map[string]string{
+	"scheduled":             " AND a.status NOT IN ('held', 'expired', 'cancelled')",
+	"completed":             " AND a.status = 'completed'",
+	"interrupted":           " AND a.status = 'interrupted'",
+	"no_show":               " AND a.status = 'no_show'",
+	"cancelled_by_customer": " AND a.status = 'cancelled' AND a.cancelled_by = 'customer'",
+	"cancelled_by_store":    " AND a.status = 'cancelled' AND a.cancelled_by = 'store'",
+	"cancelled":             " AND a.status = 'cancelled'",
+	"expired_unpaid":        " AND a.status = 'expired'",
+	"store_late":            " AND a.store_late_at IS NOT NULL",
+}
+
 var recordKinds = map[string]recordKind{
-	"receipts": {
-		inapplicable: []string{"service_id"},
-		ts:           "r.registered_at", idCol: "r.id", cents: "r.amount_cents",
-		from: "receipt r JOIN service_order o ON o.establishment_id = r.establishment_id AND o.id = r.order_id LEFT JOIN participation p ON p.id = o.participation_id",
-		cols: "r.id, r.registered_at, r.method, r.amount_cents, r.classification, r.cash_tendered_cents, r.change_cents, o.id, p.ticket_code",
+	// Reservas pelo horário marcado (ADR-0039). Sem dado de contato: só horário, profissional,
+	// situação, valor e o pagamento da reserva.
+	"appointments": {
+		extra: []string{"state"},
+		ts:    "a.starts_at", idCol: "a.id", cents: "a.price_cents",
+		from: "appointment a JOIN professional pr ON pr.id = a.professional_id LEFT JOIN booking_payment b ON b.appointment_id = a.id",
+		cols: "a.id, a.starts_at, a.status, a.cancelled_by, a.origin, a.price_cents, pr.display_name, a.local_date, b.mode, b.amount_cents, b.status, b.outcome",
 		scan: func(rows pgx.Rows, est uuid.UUID) (any, time.Time, uuid.UUID, error) {
 			var x struct {
 				ID             uuid.UUID `json:"id"`
 				At             time.Time `json:"at"`
-				Method         string    `json:"method"`
-				AmountCents    int64     `json:"amount_cents"`
-				Classification string    `json:"classification"`
-				TenderedCents  *int64    `json:"cash_tendered_cents"`
-				ChangeCents    *int64    `json:"change_cents"`
-				OrderID        uuid.UUID `json:"order_id"`
-				Ticket         *string   `json:"ticket_code"`
+				Status         string    `json:"status"`
+				CancelledBy    *string   `json:"cancelled_by"`
+				Origin         string    `json:"origin"`
+				PriceCents     int64     `json:"price_cents"`
+				Professional   string    `json:"professional"`
+				BookingMode    *string   `json:"booking_mode"`
+				BookingCents   *int64    `json:"booking_amount_cents"`
+				BookingStatus  *string   `json:"booking_status"`
+				BookingOutcome *string   `json:"booking_outcome"`
 				GestaoPath     string    `json:"gestao_path"`
 			}
+			var day time.Time
+			err := rows.Scan(&x.ID, &x.At, &x.Status, &x.CancelledBy, &x.Origin, &x.PriceCents, &x.Professional, &day,
+				&x.BookingMode, &x.BookingCents, &x.BookingStatus, &x.BookingOutcome)
+			x.GestaoPath = "/gestao/" + est.String() + "/agenda?data=" + day.Format(time.DateOnly)
+			return x, x.At, x.ID, err
+		},
+		where: func(v url.Values, sc *scope, next func(any) string) (string, error) {
+			w := ""
+			if st := v.Get("state"); st != "" {
+				cond, known := apptStates[st]
+				if !known {
+					return "", fieldErr("/state", hs.FieldNotAllowed, "situação desconhecida")
+				}
+				w += cond
+			}
+			if sc.q.Filters.ProfessionalID != nil {
+				w += " AND a.professional_id = " + next(*sc.q.Filters.ProfessionalID)
+			}
+			if sc.q.Filters.ServiceID != nil {
+				w += " AND EXISTS (SELECT 1 FROM appointment_item i WHERE i.appointment_id = a.id AND i.service_id = " + next(*sc.q.Filters.ServiceID) + ")"
+			}
+			return w, nil
+		},
+	},
+	"receipts": {
+		inapplicable: []string{"service_id"},
+		ts:           "r.registered_at", idCol: "r.id", cents: "r.amount_cents",
+		from: "receipt r LEFT JOIN service_order o ON o.establishment_id = r.establishment_id AND o.id = r.order_id LEFT JOIN participation p ON p.id = o.participation_id",
+		cols: "r.id, r.registered_at, r.method, r.amount_cents, r.classification, r.cash_tendered_cents, r.change_cents, o.id, p.ticket_code",
+		scan: func(rows pgx.Rows, est uuid.UUID) (any, time.Time, uuid.UUID, error) {
+			var x struct {
+				ID             uuid.UUID  `json:"id"`
+				At             time.Time  `json:"at"`
+				Method         string     `json:"method"`
+				AmountCents    int64      `json:"amount_cents"`
+				Classification string     `json:"classification"`
+				TenderedCents  *int64     `json:"cash_tendered_cents"`
+				ChangeCents    *int64     `json:"change_cents"`
+				OrderID        *uuid.UUID `json:"order_id"`
+				Ticket         *string    `json:"ticket_code"`
+				GestaoPath     string     `json:"gestao_path"`
+			}
 			err := rows.Scan(&x.ID, &x.At, &x.Method, &x.AmountCents, &x.Classification, &x.TenderedCents, &x.ChangeCents, &x.OrderID, &x.Ticket)
-			x.GestaoPath = comanda(est, x.OrderID)
+			x.GestaoPath = comandaOuAgenda(est, x.OrderID)
 			return x, x.At, x.ID, err
 		},
 		where: func(v url.Values, sc *scope, next func(any) string) (string, error) {
@@ -135,21 +201,21 @@ var recordKinds = map[string]recordKind{
 	"refunds": {
 		inapplicable: []string{"service_id"},
 		ts:           "f.resolved_at", idCol: "f.id", cents: "f.amount_cents",
-		from: "refund f JOIN service_order o ON o.establishment_id = f.establishment_id AND o.id = f.order_id LEFT JOIN participation p ON p.id = o.participation_id",
+		from: "refund f LEFT JOIN service_order o ON o.establishment_id = f.establishment_id AND o.id = f.order_id LEFT JOIN participation p ON p.id = o.participation_id",
 		cols: "f.id, f.resolved_at, f.method, f.amount_cents, f.requested_at, o.id, p.ticket_code",
 		scan: func(rows pgx.Rows, est uuid.UUID) (any, time.Time, uuid.UUID, error) {
 			var x struct {
-				ID          uuid.UUID `json:"id"`
-				At          time.Time `json:"at"`
-				Method      string    `json:"method"`
-				AmountCents int64     `json:"amount_cents"`
-				RequestedAt time.Time `json:"requested_at"`
-				OrderID     uuid.UUID `json:"order_id"`
-				Ticket      *string   `json:"ticket_code"`
-				GestaoPath  string    `json:"gestao_path"`
+				ID          uuid.UUID  `json:"id"`
+				At          time.Time  `json:"at"`
+				Method      string     `json:"method"`
+				AmountCents int64      `json:"amount_cents"`
+				RequestedAt time.Time  `json:"requested_at"`
+				OrderID     *uuid.UUID `json:"order_id"`
+				Ticket      *string    `json:"ticket_code"`
+				GestaoPath  string     `json:"gestao_path"`
 			}
 			err := rows.Scan(&x.ID, &x.At, &x.Method, &x.AmountCents, &x.RequestedAt, &x.OrderID, &x.Ticket)
-			x.GestaoPath = comanda(est, x.OrderID)
+			x.GestaoPath = comandaOuAgenda(est, x.OrderID)
 			return x, x.At, x.ID, err
 		},
 		where: func(v url.Values, sc *scope, next func(any) string) (string, error) {
@@ -359,7 +425,7 @@ func init() {
 			for _, wb := range waitBands {
 				if wb.Key == b {
 					found = true
-					w += " AND p.called_at IS NOT NULL AND p.called_at >= p.created_at AND p.called_at - p.created_at >= make_interval(mins => " + next(wb.From) + ")"
+					w += " AND p.origin = 'queue' AND p.called_at IS NOT NULL AND p.called_at >= p.created_at AND p.called_at - p.created_at >= make_interval(mins => " + next(wb.From) + ")"
 					if wb.To > 0 {
 						w += " AND p.called_at - p.created_at < make_interval(mins => " + next(wb.To) + ")"
 					}
@@ -447,6 +513,9 @@ func (s *Service) records(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	start, end := sc.q.Period.Start, sc.q.Period.EffectiveEnd
+	if kind == "appointments" {
+		end = sc.q.Period.End // "previstos" inclui o resto do período (reservas futuras)
+	}
 	if kind == "financial_issues" && (v.Get("state") == "" || v.Get("state") == "open") {
 		start, end = sc.created, sc.now.Add(time.Second) // fotografia atual: todas as abertas
 	}

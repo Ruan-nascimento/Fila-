@@ -51,6 +51,7 @@ func (s *Service) Routes() []hs.Route {
 		{Operation: "getAnalyticsSeries", Method: http.MethodGet, Path: base + "/series/{metric}", Grants: grant, Handler: s.series},
 		{Operation: "getAnalyticsBreakdown", Method: http.MethodGet, Path: base + "/breakdowns/{dimension}", Grants: grant, Handler: s.breakdown},
 		{Operation: "listAnalyticsRecords", Method: http.MethodGet, Path: base + "/records/{kind}", Grants: grant, Handler: s.records},
+		{Operation: "getAnalyticsAppointments", Method: http.MethodGet, Path: base + "/appointments", Grants: grant, Handler: s.appointments},
 		{Operation: "openAnalyticsStream", Method: http.MethodGet, Path: base + "/stream", Grants: grant, Handler: s.stream},
 	}
 }

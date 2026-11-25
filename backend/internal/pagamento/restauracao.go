@@ -160,6 +160,11 @@ func (s *Service) restoreOne(ctx context.Context, pc Charge, rep *RestoreReport)
 	case !errors.Is(err, pgx.ErrNoRows):
 		return err
 	}
+	if local == nil && errC == nil && errE == nil && pc.Metadata["booking_id"] != "" {
+		// Cobrança de reserva que o banco restaurado perdeu: não se recria a retenção (o horário
+		// pode já ser de outra pessoa). O dono vê a pendência e devolve pelo painel do provedor.
+		return s.restoreLostBookingCharge(ctx, chargeID, estID, pc, rep)
+	}
 	if local == nil && (errC != nil || errO != nil || errE != nil) {
 		// Cobrança sem os nossos metadados: não foi criada por este sistema (ou foi criada à mão).
 		rep.Unlinked = append(rep.Unlinked, pc.ProviderID)
@@ -276,9 +281,10 @@ func (s *Service) applyRestored(ctx context.Context, c chargeRow, pc Charge) (bo
 func (s *Service) refundUnrecorded(ctx context.Context, chargeID uuid.UUID, pc Charge) (bool, error) {
 	opened := false
 	err := database.InTx(ctx, s.Pool, func(tx pgx.Tx) error {
-		var estID, orderID, receiptID uuid.UUID
-		err := tx.QueryRow(ctx, `SELECT establishment_id, order_id, id FROM receipt WHERE pix_charge_id = $1`, chargeID).
-			Scan(&estID, &orderID, &receiptID)
+		var estID, receiptID uuid.UUID
+		var orderID, bookingID *uuid.UUID
+		err := tx.QueryRow(ctx, `SELECT establishment_id, order_id, id, booking_payment_id FROM receipt WHERE pix_charge_id = $1`, chargeID).
+			Scan(&estID, &orderID, &receiptID, &bookingID)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil // sem recebimento (comanda órfã): a pendência órfã já cobre
 		}
@@ -294,7 +300,11 @@ func (s *Service) refundUnrecorded(ctx context.Context, chargeID uuid.UUID, pc C
 			return nil // o worker confirma pela consulta (REFUNDED) depois de liberar
 		}
 		amount := pc.AmountCents
-		opened, err = s.openIssueRef(ctx, tx, estID, &orderID, IssueRestoredRefundUnrecorded, "pix_charge", chargeID, &amount,
+		if bookingID != nil {
+			opened, err = s.openBookingIssue(ctx, tx, estID, *bookingID, IssueRestoredRefundUnrecorded, "pix_charge", chargeID, &amount, s.Clock.Now())
+			return err
+		}
+		opened, err = s.openIssueRef(ctx, tx, estID, orderID, IssueRestoredRefundUnrecorded, "pix_charge", chargeID, &amount,
 			&pc.ProviderID, s.Clock.Now())
 		return err
 	})

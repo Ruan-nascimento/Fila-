@@ -32,6 +32,9 @@ type entryRequest struct {
 	QueueID    *uuid.UUID                 `json:"queue_id"`
 	ServiceIDs *[]uuid.UUID               `json:"service_ids"`
 	Items      *[]atendimento.LineRequest `json:"items"`
+	// AcknowledgeOwnAppointment: a pessoa viu que a espera prevista invade um horário marcado dela
+	// nesta loja e quer entrar mesmo assim (a reserva continua; ela decide se cancela).
+	AcknowledgeOwnAppointment *bool `json:"acknowledge_own_appointment"`
 }
 
 // Mensagens da entrada (ADR-0035): lotação e bloqueio manual são situações diferentes.
@@ -161,9 +164,29 @@ func (s *Service) createParticipation(w http.ResponseWriter, r *http.Request) er
 		} else if state != estabelecimento.EntryAccepting {
 			return idempotency.Result{}, entryConflict(state)
 		}
+		// Forma de atendimento (ADR-0038): "com horário marcado" fecha só a ENTRADA na fila.
+		mode := s.mode(st)
+		if mode == estabelecimento.ModeSchedule {
+			return idempotency.Result{}, conflict("queue_entry_schedule_only", "Esta barbearia atende com horário marcado",
+				"Agora a entrada é só com horário marcado. Escolha um horário na agenda.", nil)
+		}
 		lines, err := atendimento.ResolveNewLines(ctx, tx, estID, qi.ProfessionalID, qi.ProfessionalName, wants, st)
 		if err != nil {
 			return idempotency.Result{}, err
+		}
+		// "Os dois": a projeção de hoje (cadeira + fila FIFO + horários marcados) precisa atender a
+		// nova entrada dentro do expediente; serializado pela trava da fila, como a reserva.
+		if mode == estabelecimento.ModeHybrid && s.Agenda != nil {
+			mins := 0
+			for _, l := range lines {
+				if l.Snap.Kind != "product" {
+					mins += l.Snap.DurationMinutes * l.Quantity
+				}
+			}
+			ack := req.AcknowledgeOwnAppointment != nil && *req.AcknowledgeOwnAppointment
+			if err := s.Agenda.CheckQueueEntry(ctx, tx, estID, qi, st, mins, id, ack); err != nil {
+				return idempotency.Result{}, err
+			}
 		}
 
 		pos, day, number, err := nextSlot(ctx, tx, qi, now)

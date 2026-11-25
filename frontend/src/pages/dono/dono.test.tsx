@@ -104,7 +104,7 @@ describe("acesso do dono (/dono)", () => {
     fireEvent.change(await screen.findByLabelText("E-mail"), { target: { value: "ana@exemplo.com" } });
     fireEvent.change(screen.getByLabelText("Senha"), { target: { value: "senha-boa-123" } });
     fireEvent.click(screen.getByRole("button", { name: "Entrar" }));
-    await waitFor(() => expect(screen.getByTestId("endereco")).toHaveTextContent(`/gestao/${LOJA_A}/filas`));
+    await waitFor(() => expect(screen.getByTestId("endereco")).toHaveTextContent(`/gestao/${LOJA_A}`));
     expect(requests.find((r) => r.path === "/v1/auth/login")?.body).toMatchObject({ context: "staff" });
   });
 
@@ -114,7 +114,7 @@ describe("acesso do dono (/dono)", () => {
       ...gestaoVazia(LOJA_A),
     });
     abrir("/dono");
-    await waitFor(() => expect(screen.getByTestId("endereco")).toHaveTextContent(`/gestao/${LOJA_A}/filas`));
+    await waitFor(() => expect(screen.getByTestId("endereco")).toHaveTextContent(`/gestao/${LOJA_A}`));
     expect(screen.queryByText("Trocar de loja")).not.toBeInTheDocument();
   });
 
@@ -127,10 +127,7 @@ describe("acesso do dono (/dono)", () => {
     };
     fakeApi({ "GET /v1/session": () => Response.json(sessao("staff", [donoA, donoB, loja3])) });
     abrir("/dono");
-    expect(await screen.findByRole("link", { name: /Loja A/ })).toHaveAttribute(
-      "href",
-      `/gestao/${LOJA_A}/filas`,
-    );
+    expect(await screen.findByRole("link", { name: /Loja A/ })).toHaveAttribute("href", `/gestao/${LOJA_A}`);
     expect(screen.getByRole("link", { name: /Loja B/ })).toBeInTheDocument();
     expect(screen.queryByText("Loja C")).not.toBeInTheDocument();
   });
@@ -193,7 +190,7 @@ describe("modo dono na gestão", () => {
       ...gestaoVazia(LOJA_A),
     });
     abrir("/gestao");
-    await waitFor(() => expect(screen.getByTestId("endereco")).toHaveTextContent(`/gestao/${LOJA_A}/filas`));
+    await waitFor(() => expect(screen.getByTestId("endereco")).toHaveTextContent(`/gestao/${LOJA_A}`));
   });
 
   it("fora do modo dono, a profissional de B continua acessando B pelo navegador", async () => {

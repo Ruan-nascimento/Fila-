@@ -52,6 +52,8 @@ type orderTotals struct {
 }
 
 type amounts struct {
+	// Credit: sinal pago na reserva e abatido desta comanda (não é dinheiro novo); Due já o desconta.
+	Credit      Money `json:"credit"`
 	Due         Money `json:"due"`
 	Received    Money `json:"received"`
 	Conferred   Money `json:"conferred"`
@@ -150,12 +152,13 @@ func LoadOrder(ctx context.Context, q database.Querier, estID, orderID uuid.UUID
 	var total int64
 	var eligible bool
 	var method *string
+	var credit int64
 	err := q.QueryRow(ctx, `
 		SELECT id, establishment_id, participation_id, status, version, total_cents, total_frozen_at,
-		       closure_reason, interrupted_at, review_note, loyalty_eligible, created_at, closed_at, payment_method
+		       closure_reason, interrupted_at, review_note, loyalty_eligible, created_at, closed_at, payment_method, credit_cents
 		FROM service_order WHERE establishment_id = $1 AND id = $2`, estID, orderID).
 		Scan(&v.ID, &v.EstablishmentID, &v.ParticipationID, &v.Status, &v.Version, &total, &v.TotalFrozenAt,
-			&v.ClosureReason, &v.InterruptedAt, &v.ReviewNote, &eligible, &v.CreatedAt, &v.ClosedAt, &method)
+			&v.ClosureReason, &v.InterruptedAt, &v.ReviewNote, &eligible, &v.CreatedAt, &v.ClosedAt, &method, &credit)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return v, err
 	}
@@ -165,10 +168,10 @@ func LoadOrder(ctx context.Context, q database.Querier, estID, orderID uuid.UUID
 	v.Total = brl(total)
 	due := int64(0)
 	if payable(v.Status) {
-		due = total
+		due = max(total-credit, 0)
 	}
 	zero := brl(0)
-	v.Payment = PaymentView{MethodChoice: method, Amounts: amounts{Due: brl(due), Received: zero, Conferred: zero, Refunded: zero,
+	v.Payment = PaymentView{MethodChoice: method, Amounts: amounts{Credit: brl(credit), Due: brl(due), Received: zero, Conferred: zero, Refunded: zero,
 		Outstanding: brl(due)}, Charges: []any{}, Receipts: []any{}, Refunds: []any{}, OpenIssueKinds: []string{}}
 	if paymentData != nil {
 		pd, err := paymentData(ctx, q, orderID)

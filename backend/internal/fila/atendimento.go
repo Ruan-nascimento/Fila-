@@ -78,6 +78,10 @@ func (s *Service) completeService(w http.ResponseWriter, r *http.Request) error 
 				return s.invalid(ctx, tx, p, who, "Só é possível concluir um atendimento em andamento.")
 			}
 			now := s.Clock.Now()
+			// Reserva antes da comanda (ordem de travas: reserva → comanda → obrigação da reserva).
+			if err := s.visitChanged(ctx, tx, p, Completed, ""); err != nil {
+				return idempotency.Result{}, err
+			}
 			if err := atendimento.Complete(ctx, tx, atendimento.Closing{EstablishmentID: p.EstablishmentID, OrderID: p.OrderID,
 				ExpectedVersion: *body.OrderExpectedVersion, Items: *body.Items, Now: now}, s.auditBase(ctx, p, who)); err != nil {
 				return s.withVisit(ctx, tx, p, who, err)
@@ -102,6 +106,9 @@ func (s *Service) interruptService(w http.ResponseWriter, r *http.Request) error
 			}
 			reason, _ := validate.Text("/reason", *body.Reason, 3, 500)
 			now := s.Clock.Now()
+			if err := s.visitChanged(ctx, tx, p, Interrupted, reason); err != nil {
+				return idempotency.Result{}, err
+			}
 			if err := atendimento.Interrupt(ctx, tx, atendimento.Closing{EstablishmentID: p.EstablishmentID, OrderID: p.OrderID,
 				ExpectedVersion: *body.OrderExpectedVersion, Items: *body.Items, Reason: reason, Now: now}, s.auditBase(ctx, p, who)); err != nil {
 				return s.withVisit(ctx, tx, p, who, err)

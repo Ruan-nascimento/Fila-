@@ -32,8 +32,12 @@ const (
 
 // issueView segue FinancialIssue.
 type issueView struct {
-	ID                uuid.UUID  `json:"id"`
-	OrderID           *uuid.UUID `json:"order_id"`
+	ID      uuid.UUID  `json:"id"`
+	OrderID *uuid.UUID `json:"order_id"`
+	// AppointmentID: pendência de valor pago numa reserva (ADR-0039).
+	AppointmentID *uuid.UUID `json:"appointment_id"`
+	// BookingRefundID: devolução de reserva que o dono confirma (ou dá como falha) pela pendência.
+	BookingRefundID   *uuid.UUID `json:"booking_refund_id"`
 	ProviderReference *string    `json:"provider_reference"`
 	Kind              string     `json:"kind"`
 	Status            string     `json:"status"`
@@ -45,13 +49,15 @@ type issueView struct {
 }
 
 const issueSelect = `SELECT id, order_id, kind, status, amount_cents, created_at, resolved_at, resolution_note, establishment_id,
-	provider_reference FROM financial_issue`
+	provider_reference, (SELECT b.appointment_id FROM booking_payment b WHERE b.id = financial_issue.booking_payment_id),
+	CASE WHEN booking_payment_id IS NOT NULL AND source_type = 'refund' THEN source_id END
+	FROM financial_issue`
 
 func scanIssue(r pgx.Row) (issueView, error) {
 	var v issueView
 	var amount *int64
 	err := r.Scan(&v.ID, &v.OrderID, &v.Kind, &v.Status, &amount, &v.CreatedAt, &v.ResolvedAt, &v.ResolutionNote, &v.establishment,
-		&v.ProviderReference)
+		&v.ProviderReference, &v.AppointmentID, &v.BookingRefundID)
 	if amount != nil {
 		v.Amount = brl(*amount)
 	}

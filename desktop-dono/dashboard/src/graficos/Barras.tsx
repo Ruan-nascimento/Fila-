@@ -1,6 +1,11 @@
 import { formatar, type Unidade } from "../formato";
 
-export type Linha = { chave: string; rotulo: string; valor: number; secundario?: string };
+export type Linha = {
+  chave: string;
+  rotulo: string;
+  valor: number;
+  secundario?: string;
+};
 
 /**
  * Ranking/comparação: barras horizontais (comprimento a partir de zero), rótulo e valor em texto
@@ -31,11 +36,21 @@ export function Barras({
           >
             <span className="truncate">{l.rotulo}</span>
             <span aria-hidden="true" className="h-3 rounded-r bg-surface-2">
-              <span className="block h-3 rounded-r" style={{ width: `${max > 0 ? (l.valor / max) * 100 : 0}%`, background: cor }} />
+              <span
+                className="block h-3 rounded-r"
+                style={{
+                  width: `${max > 0 ? (l.valor / max) * 100 : 0}%`,
+                  background: cor,
+                }}
+              />
             </span>
             <span className="text-right tabular-nums">
               {formatar(l.valor, unidade)}
-              {l.secundario && <span className="block text-xs text-fg-muted">{l.secundario}</span>}
+              {l.secundario && (
+                <span className="block text-xs text-fg-muted">
+                  {l.secundario}
+                </span>
+              )}
             </span>
           </button>
         </li>

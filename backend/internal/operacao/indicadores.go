@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"fila/internal/agenda"
 	"fila/internal/exclusao"
 	"fila/internal/fidelidade"
 	"fila/internal/pagamento"
@@ -25,6 +26,7 @@ type Indicators struct {
 	Deletions    exclusao.Health
 	Reservations fidelidade.Health
 	Mail         mail.Health
+	Agenda       agenda.Health
 }
 
 // Collect lê todos os indicadores numa leitura consistente o bastante para alertas.
@@ -48,6 +50,9 @@ func Collect(ctx context.Context, pool *pgxpool.Pool, now time.Time) (Indicators
 	}
 	if ind.Mail, err = mail.ReadHealth(ctx, pool, now); err != nil {
 		return ind, fmt.Errorf("e-mail: %w", err)
+	}
+	if ind.Agenda, err = agenda.ReadHealth(ctx, pool, now); err != nil {
+		return ind, fmt.Errorf("agenda: %w", err)
 	}
 	return ind, nil
 }
@@ -134,6 +139,18 @@ func Evaluate(ind Indicators) []Alert {
 		add("FilaReservaVencidaPresa", Critical, OwnerOperator, "worker-parado",
 			"%d reserva(s) de prêmio vencida(s) e não liberada(s) (pontos presos)", r.OverdueReservations)
 	}
+	if ag := ind.Agenda; ag.HoldsOverdue > 0 {
+		add("FilaRetencaoDeHorarioPresa", Critical, OwnerOperator, "worker-parado",
+			"%d horário(s) retido(s) para Pix com o prazo vencido e não liberado(s) (worker parado?)", ag.HoldsOverdue)
+	}
+	if ag := ind.Agenda; ag.NoticesPending > 0 && ag.NoticesOldest > MailPendingMax {
+		add("FilaAvisoDeReservaParado", Warning, OwnerOperator, "worker-parado",
+			"%d aviso(s) de reserva esperando, o mais antigo há %s", ag.NoticesPending, round(ag.NoticesOldest))
+	}
+	if ag := ind.Agenda; ag.CalledStale > 0 {
+		add("FilaChamadaDeReservaSemDesfecho", Warning, OwnerShop, "agenda-chamada-sem-desfecho",
+			"%d horário(s) chamado(s) com o prazo vencido há mais de 30 min: registre ausência, inicie ou cancele", ag.CalledStale)
+	}
 	m := ind.Mail
 	if m.Pending > 0 && m.OldestPending > MailPendingMax {
 		add("FilaEmailParado", Warning, OwnerOperator, "email",
@@ -203,6 +220,14 @@ func NewGauges(reg *metrics.Registry) *Gauges {
 		"fila_pix_charges_failed_1h":           "Tentativas Pix que falharam na última hora.",
 		"fila_alerts_active":                   "Alertas ativos pela avaliação interna (fila-admin verificar).",
 		"fila_reservations_overdue_oldest_sec": "Há quanto tempo venceu a reserva mais atrasada.",
+		"fila_agenda_holds_active":             "Reservas aguardando o Pix agora.",
+		"fila_agenda_holds_overdue":            "Retenções de horário vencidas há mais de 2 min e não soltas.",
+		"fila_agenda_called_stale":             "Chamadas de reserva vencidas além da falta automática (equipe decide).",
+		"fila_agenda_notices_pending":          "Avisos de reserva vencidos esperando o worker.",
+		"fila_agenda_notices_oldest_seconds":   "Idade do aviso de reserva pendente mais antigo.",
+		"fila_agenda_notices_stale_24h":        "Avisos de reserva pulados por vencimento nas últimas 24 h.",
+		"fila_agenda_notices_queued_24h":       "Avisos de reserva gravados para envio nas últimas 24 h.",
+		"fila_agenda_store_late_open":          "Horários que a loja não chamou e seguem confirmados.",
 	}
 	g := &Gauges{g: map[string]*metrics.Gauge{}}
 	for n, help := range names {
@@ -251,6 +276,15 @@ func (g *Gauges) Update(ind Indicators) {
 	set("fila_mail_pending", float64(m.Pending))
 	set("fila_mail_oldest_pending_seconds", m.OldestPending.Seconds())
 	set("fila_mail_failed_24h", float64(m.FailedLast24h))
+	a := ind.Agenda
+	set("fila_agenda_holds_active", float64(a.HoldsActive))
+	set("fila_agenda_holds_overdue", float64(a.HoldsOverdue))
+	set("fila_agenda_called_stale", float64(a.CalledStale))
+	set("fila_agenda_notices_pending", float64(a.NoticesPending))
+	set("fila_agenda_notices_oldest_seconds", a.NoticesOldest.Seconds())
+	set("fila_agenda_notices_stale_24h", float64(a.NoticesStale24h))
+	set("fila_agenda_notices_queued_24h", float64(a.NoticesQueued24h))
+	set("fila_agenda_store_late_open", float64(a.StoreLateOpen))
 	st := ind.State
 	set("fila_worker_hold", b(st.Held()))
 	set("fila_worker_restore_hold", b(st.RestoreHold()))
@@ -274,4 +308,4 @@ func (g *Gauges) Failed() { g.collectErr.Inc() }
 // issueKinds: todos os tipos de pendência (séries sempre presentes, mesmo zeradas).
 var issueKinds = []string{"duplicate_receipt", "late_receipt", "amount_mismatch", "charge_outcome_unresolved",
 	"refund_under_review", "active_pix_on_method_switch", "adjustment_excess", pagamento.IssueRestoredOrphan,
-	pagamento.IssueRestoredRefundUnrecorded}
+	pagamento.IssueRestoredRefundUnrecorded, pagamento.IssueBookingLate, pagamento.IssueBookingRefundDue, pagamento.IssueBookingNotice}

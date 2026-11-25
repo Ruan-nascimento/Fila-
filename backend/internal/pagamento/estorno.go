@@ -60,15 +60,19 @@ type refundRow struct {
 	Method          string
 	Attempts        int
 	amount          int64
+	// BookingID: devolução de valor pago na reserva (ADR-0039); OrderID fica zerado.
+	BookingID *uuid.UUID
+	Partial   bool
 }
 
 const refundSelect = `SELECT id, receipt_id, amount_cents, status, reason, requested_at, resolved_at, evidence,
-	establishment_id, order_id, method, check_attempts FROM refund`
+	establishment_id, coalesce(order_id, '00000000-0000-0000-0000-000000000000'), method, check_attempts, booking_payment_id,
+	partial FROM refund`
 
 func scanRefund(r pgx.Row) (refundRow, error) {
 	var v refundRow
 	err := r.Scan(&v.ID, &v.ReceiptID, &v.amount, &v.Status, &v.Reason, &v.RequestedAt, &v.ResolvedAt, &v.Evidence,
-		&v.EstablishmentID, &v.OrderID, &v.Method, &v.Attempts)
+		&v.EstablishmentID, &v.OrderID, &v.Method, &v.Attempts, &v.BookingID, &v.Partial)
 	v.Amount = brl(v.amount)
 	return v, err
 }
@@ -433,6 +437,9 @@ func (s *Service) reconcileRefund(ctx context.Context, id uuid.UUID) error {
 
 // finishRefund aplica uma transição decidida pelo worker (com a comanda e o estorno travados).
 func (s *Service) finishRefund(ctx context.Context, rf refundRow, to, action, providerRefundID string) error {
+	if rf.BookingID != nil {
+		return s.finishBookingRefund(ctx, rf, to, action, providerRefundID)
+	}
 	return database.InTx(ctx, s.Pool, func(tx pgx.Tx) error {
 		lp, err := atendimento.LockForPayment(ctx, tx, rf.EstablishmentID, rf.OrderID)
 		if err != nil {

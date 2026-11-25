@@ -134,6 +134,7 @@ func (s *Service) StaffEntries(ctx context.Context, q database.Querier, queueIDs
 				HasPendingChangeRequest: e.summary.HasPendingChangeRequest,
 				CustomerAvatar:          avatars[e.ID],
 				LateNoticeAt:            e.LateNoticeAt,
+				Origin:                  e.Origin,
 			})
 		}
 	}
@@ -273,6 +274,8 @@ type participationView struct {
 	CreatedAt        time.Time      `json:"created_at"`
 	// LateNoticeAt: o cliente avisou pelo app que vai se atrasar (T-P-12); nova chamada limpa.
 	LateNoticeAt *time.Time `json:"late_notice_at"`
+	// Origin: fila ou horário marcado (ADR-0038).
+	Origin string `json:"origin"`
 }
 
 type visitView struct {
@@ -289,7 +292,8 @@ func (s *Service) visit(ctx context.Context, q database.Querier, p row, forStaff
 	pv := participationView{ID: p.ID, EstablishmentID: p.EstablishmentID, QueueID: p.QueueID, ProfessionalID: qi.ProfessionalID,
 		TicketCode: p.TicketCode, Status: p.Status, Nick: p.Nick, LoyaltyEligible: p.LoyaltyEligible, CalledAt: p.CalledAt,
 		ToleranceEndsAt: p.ToleranceEndsAt, ToleranceMinutes: p.ToleranceMinutes, StartedAt: p.StartedAt, FinishedAt: p.FinishedAt, EndReason: p.EndReason,
-		Version: p.Version, OrderID: p.OrderID, CreatedAt: p.CreatedAt, Transfers: []transferView{}, LateNoticeAt: p.LateNoticeAt}
+		Version: p.Version, OrderID: p.OrderID, CreatedAt: p.CreatedAt, Transfers: []transferView{}, LateNoticeAt: p.LateNoticeAt,
+		Origin: p.Origin}
 	if forStaff {
 		pv.IdentityKind = acesso.IdentityVisitor
 		if p.AccountID != nil {

@@ -3,6 +3,7 @@ package estabelecimento
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"regexp"
 
@@ -368,6 +369,19 @@ func (s *Service) changeProfessionalStatus(w http.ResponseWriter, r *http.Reques
 			return idempotency.Result{}, &httpserver.Error{Status: 409, Code: "professional_has_active_participations",
 				Title:  "Há clientes na fila deste profissional",
 				Detail: "Transfira, conclua ou cancele os atendimentos da fila antes de desativar.", Current: cur}
+		}
+		// Agenda (ADR-0038): reservas futuras não ficam órfãs — remanejar ou cancelar antes.
+		if s.FutureAppointmentsOf != nil {
+			n, err := s.FutureAppointmentsOf(ctx, tx, profID, now)
+			if err != nil {
+				return idempotency.Result{}, err
+			}
+			if n > 0 {
+				return idempotency.Result{}, &httpserver.Error{Status: 409, Code: "professional_has_appointments",
+					Title:   "Há horários marcados com este profissional",
+					Detail:  fmt.Sprintf("%d reserva(s) futura(s). Remarque com outro profissional ou cancele com motivo na Agenda antes de desativar; o histórico é mantido.", n),
+					Current: cur}
+			}
 		}
 		if _, err := tx.Exec(ctx, `UPDATE professional SET status = 'inactive', version = version + 1, updated_at = $2 WHERE id = $1`, profID, now); err != nil {
 			return idempotency.Result{}, err

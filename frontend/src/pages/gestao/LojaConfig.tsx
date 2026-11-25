@@ -121,6 +121,7 @@ const secoes: { value: "identidade" | SecaoConfig; label: string }[] = [
   { value: "identidade", label: "Identidade e contato" },
   { value: "catalogo", label: "Catálogo" },
   { value: "filas", label: "Filas e atendimento" },
+  { value: "agenda", label: "Agenda" },
   { value: "pagamentos", label: "Pagamentos e custos" },
   { value: "fidelidade", label: "Fidelidade" },
   { value: "equipe", label: "Equipe e permissões" },

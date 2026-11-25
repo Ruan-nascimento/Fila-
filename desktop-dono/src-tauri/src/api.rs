@@ -315,6 +315,7 @@ pub enum TipoRegistro {
     ServiceItems,
     FinancialIssues,
     LoyaltyEntries,
+    Appointments,
 }
 
 #[derive(Debug, Deserialize, Clone, Copy)]
@@ -367,6 +368,8 @@ pub enum Consulta {
     Serie { loja: uuid::Uuid, metrica: Metrica, granularidade: Option<Granularidade>, filtros: Filtros },
     Detalhamento { loja: uuid::Uuid, dimensao: Dimensao, filtros: Filtros },
     Registros { loja: uuid::Uuid, registro: TipoRegistro, filtros: Filtros, recorte: Recorte },
+    /// Área Agendamentos (Fila 2.0).
+    Agendamentos { loja: uuid::Uuid, filtros: Filtros },
 }
 
 fn nome<T: std::fmt::Debug>(v: T) -> String {
@@ -405,6 +408,7 @@ impl Consulta {
             Consulta::Serie { loja, metrica, filtros, .. } => (loja, format!("/series/{}", nome(metrica)), filtros),
             Consulta::Detalhamento { loja, dimensao, filtros } => (loja, format!("/breakdowns/{}", nome(dimensao)), filtros),
             Consulta::Registros { loja, registro, filtros, .. } => (loja, format!("/records/{}", nome(registro)), filtros),
+            Consulta::Agendamentos { loja, filtros } => (loja, "/appointments".to_string(), filtros),
         };
         if !data_valida(&filtros.from) || !data_valida(&filtros.to) {
             return Err(ErroApi::local("validation_failed", "período inválido"));
@@ -495,6 +499,14 @@ mod testes {
             recorte: Recorte { kind: Some("a&b=/v1/auth".into()), ..Default::default() },
         };
         assert!(injecao.caminho().is_err());
+        // Agendamentos (Fila 2.0): área própria e registros de reservas.
+        let ag = Consulta::Agendamentos { loja, filtros: Filtros { from: "2026-11-01".into(), to: "2026-11-30".into(), ..Default::default() } };
+        assert_eq!(ag.caminho().unwrap(), "/v1/desktop/analytics/establishments/00000000-0000-0000-0000-000000000000/appointments?from=2026-11-01&to=2026-11-30");
+        let reg: Consulta = serde_json::from_str(
+            r#"{"tipo":"registros","loja":"00000000-0000-0000-0000-000000000000","registro":"appointments","filtros":{"from":"2026-11-01","to":"2026-11-02"},"recorte":{"state":"no_show"}}"#,
+        )
+        .unwrap();
+        assert!(reg.caminho().unwrap().contains("/records/appointments?") && reg.caminho().unwrap().contains("state=no_show"));
         // Enums só aceitam os valores do contrato.
         assert!(serde_json::from_str::<Consulta>(r#"{"tipo":"serie","loja":"00000000-0000-0000-0000-000000000000","metrica":"x","filtros":{"from":"2026-11-01","to":"2026-11-02"}}"#).is_err());
     }

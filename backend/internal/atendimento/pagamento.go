@@ -31,12 +31,15 @@ type PaymentInfo struct {
 	TotalCents      int64
 	Version         int64
 	Method          *string
+	// CreditCents: sinal da reserva já abatido nesta comanda (ADR-0039); não é recebimento novo.
+	CreditCents   int64
+	ClosureReason *string
 }
 
-// DueCents é o valor devido: o total fechado, só quando a comanda está a pagar.
+// DueCents é o valor devido: o total fechado menos o sinal abatido, só quando a comanda está a pagar.
 func (p PaymentInfo) DueCents() int64 {
 	if payable(p.Status) {
-		return p.TotalCents
+		return max(p.TotalCents-p.CreditCents, 0)
 	}
 	return 0
 }
@@ -45,14 +48,15 @@ func (p PaymentInfo) DueCents() int64 {
 var ErrOrderNotFound = errors.New("comanda não encontrada")
 
 func paymentInfo(ctx context.Context, q database.Querier, estID, orderID uuid.UUID, lock bool) (PaymentInfo, error) {
-	sql := `SELECT id, establishment_id, professional_id, account_id, visitor_id, status, total_cents, version, payment_method
+	sql := `SELECT id, establishment_id, professional_id, account_id, visitor_id, status, total_cents, version, payment_method,
+		       credit_cents, closure_reason
 		FROM service_order WHERE establishment_id = $1 AND id = $2`
 	if lock {
 		sql += ` FOR UPDATE`
 	}
 	var p PaymentInfo
 	err := q.QueryRow(ctx, sql, estID, orderID).Scan(&p.ID, &p.EstablishmentID, &p.ProfessionalID, &p.Identity.AccountID,
-		&p.Identity.VisitorID, &p.Status, &p.TotalCents, &p.Version, &p.Method)
+		&p.Identity.VisitorID, &p.Status, &p.TotalCents, &p.Version, &p.Method, &p.CreditCents, &p.ClosureReason)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return p, ErrOrderNotFound
 	}
@@ -74,6 +78,28 @@ func bumpWith(ctx context.Context, q database.Querier, orderID uuid.UUID, set st
 	all := append([]any{orderID, now}, args...)
 	err := q.QueryRow(ctx, `UPDATE service_order SET `+set+`version = version + 1, updated_at = $2 WHERE id = $1 RETURNING version`, all...).Scan(&version)
 	return version, err
+}
+
+// CreditHook aplica à comanda o sinal pago na reserva (módulo pagamento, ADR-0039). É chamado na
+// mesma transação quando o total fecha (conclusão, revisão de interrupção, correção) e quando a
+// comanda encerra sem cobrança (desistência, ausência). nil = sem cobrança de reserva.
+type CreditHook func(ctx context.Context, q database.Querier, estID, orderID uuid.UUID, now time.Time) error
+
+var creditHook CreditHook
+
+// RegisterCreditHook liga o crédito do sinal (feito pelo módulo pagamento ao iniciar).
+func RegisterCreditHook(h CreditHook) { creditHook = h }
+
+func applyCredit(ctx context.Context, q database.Querier, estID, orderID uuid.UUID, now time.Time) error {
+	if creditHook == nil {
+		return nil
+	}
+	return creditHook(ctx, q, estID, orderID, now)
+}
+
+// SetCredit grava o sinal abatido (o banco confere com booking_credit no COMMIT) e sobe a versão.
+func SetCredit(ctx context.Context, q database.Querier, orderID uuid.UUID, cents int64, now time.Time) (int64, error) {
+	return bumpWith(ctx, q, orderID, `credit_cents = $3, `, now, cents)
 }
 
 // SetPaymentMethod registra o meio escolhido (T-O-12).

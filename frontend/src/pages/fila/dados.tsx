@@ -15,6 +15,7 @@ import {
 
 /** Sem `ordering` (API anterior): limite padrão de 10 e produtos só se houver algum ativo. */
 const defaultOrdering: Ordering = {
+  service_mode: "queue",
   max_service_quantity: 10,
   products_enabled: true,
   visitors_enabled: true,

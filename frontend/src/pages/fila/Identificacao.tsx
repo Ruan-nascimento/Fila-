@@ -26,6 +26,7 @@ export function Identificacao({
   needed,
   nickRef,
   onIdentified,
+  motivo = "fila",
 }: {
   shopId: string;
   shopName: string;
@@ -33,6 +34,8 @@ export function Identificacao({
   needed: boolean;
   nickRef: Ref<HTMLInputElement>;
   onIdentified: (c: VisitorCreated) => Promise<void>;
+  /** Para que a identificação serve (muda só o texto): entrar na fila ou marcar horário. */
+  motivo?: "fila" | "reserva";
 }) {
   const [recovering, setRecovering] = useState(false);
   return (
@@ -46,6 +49,7 @@ export function Identificacao({
           needed={needed}
           nickRef={nickRef}
           onCreated={onIdentified}
+          motivo={motivo}
           onRecover={() => setRecovering(true)}
         />
       )}
@@ -66,6 +70,7 @@ function NovoVisitante({
   nickRef,
   onCreated,
   onRecover,
+  motivo,
 }: {
   shopId: string;
   shopName: string;
@@ -73,6 +78,7 @@ function NovoVisitante({
   nickRef: Ref<HTMLInputElement>;
   onCreated: (c: VisitorCreated) => Promise<void>;
   onRecover: () => void;
+  motivo: "fila" | "reserva";
 }) {
   const form = useForm();
   const [nick, setNick] = useState("");
@@ -114,9 +120,11 @@ function NovoVisitante({
           Como quer ser chamado?
         </h2>
         <p className="m-0 text-sm text-fg-muted">
-          {needed
-            ? "Para entrar na fila, informe um apelido. Sua escolha de profissional e serviços fica guardada."
-            : `Informe um apelido para entrar na fila de ${shopName}.`}
+          {motivo === "reserva"
+            ? "Para confirmar o horário sem conta, informe um apelido. O que você escolheu fica guardado."
+            : needed
+              ? "Para entrar na fila, informe um apelido. Sua escolha de profissional e serviços fica guardada."
+              : `Informe um apelido para entrar na fila de ${shopName}.`}
         </p>
       </div>
       {form.generalError}

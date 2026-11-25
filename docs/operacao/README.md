@@ -3,6 +3,7 @@
 | Documento | Para quê |
 |---|---|
 | [publicacao-v1.md](publicacao-v1.md) | **V1 na nuvem** (Vercel + Render + Neon + R2 + Resend): estado, checkpoint, custos a autorizar e roteiro por provedor |
+| [agenda-2.0.md](agenda-2.0.md) | **Fila 2.0** (agenda, fila e atendimento híbrido): checkpoint por parte, como testar os três modos, testes executados e pendências |
 | [variaveis-v1.md](variaveis-v1.md) | Variáveis da V1 por serviço: finalidade, onde configurar e se é segredo |
 | [backup-e-recuperacao-v1.md](backup-e-recuperacao-v1.md) | Backup externo cifrado, ensaio de restauração e como recuperar a produção na V1 |
 | [implantacao.md](implantacao.md) | Ambientes (homologação e produção), compose, TLS, segredos, banco com menor privilégio, atualizar sem perder fila, reversão, limites e logs |

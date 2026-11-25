@@ -362,7 +362,7 @@ func (s *Service) publicEstablishment(w http.ResponseWriter, r *http.Request) er
 	if err != nil {
 		return err
 	}
-	view.Ordering = estabelecimento.PublicOrderingOf(st, s.pixOperational != nil && s.pixOperational())
+	view.Ordering = estabelecimento.PublicOrderingOf(st, s.pixOperational != nil && s.pixOperational(), s.agendaEnabled)
 	// Dados públicos: cache curto (troca de logo/paleta aparece em até 1 minuto).
 	w.Header().Set("Cache-Control", "public, max-age=60")
 	httpserver.WriteJSON(w, http.StatusOK, httpserver.Data[publicEstablishmentView]{Data: view})

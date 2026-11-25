@@ -2,6 +2,7 @@ package atendimento
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -120,6 +121,14 @@ func ParseLines(v *validate.Collector, field string, lines *[]LineRequest, minSe
 
 // snapshotsFor lê do catálogo (FOR SHARE) os serviços e produtos citados.
 func snapshotsFor(ctx context.Context, q database.Querier, estID uuid.UUID, keys []lineKey) (map[lineKey]catalogo.Snapshot, error) {
+	return snapshots(ctx, q, estID, keys, true)
+}
+
+func snapshots(ctx context.Context, q database.Querier, estID uuid.UUID, keys []lineKey, lock bool) (map[lineKey]catalogo.Snapshot, error) {
+	svcFn, prodFn := catalogo.ServicesForEntry, catalogo.ProductsForEntry
+	if !lock {
+		svcFn, prodFn = catalogo.ServicesForRead, catalogo.ProductsForRead
+	}
 	var sIDs, pIDs []uuid.UUID
 	for _, k := range keys {
 		if k.Kind == catalogo.KindService {
@@ -130,7 +139,7 @@ func snapshotsFor(ctx context.Context, q database.Querier, estID uuid.UUID, keys
 	}
 	out := map[lineKey]catalogo.Snapshot{}
 	if len(sIDs) > 0 {
-		m, err := catalogo.ServicesForEntry(ctx, q, estID, sIDs)
+		m, err := svcFn(ctx, q, estID, sIDs)
 		if err != nil {
 			return nil, err
 		}
@@ -139,7 +148,7 @@ func snapshotsFor(ctx context.Context, q database.Querier, estID uuid.UUID, keys
 		}
 	}
 	if len(pIDs) > 0 {
-		m, err := catalogo.ProductsForEntry(ctx, q, estID, pIDs)
+		m, err := prodFn(ctx, q, estID, pIDs)
 		if err != nil {
 			return nil, err
 		}
@@ -334,4 +343,46 @@ func itemPerformedConflict(it itemRow, to int) error {
 		detail = fmt.Sprintf("%q já tem %d unidade(s) %s: a quantidade não pode ficar abaixo disso.", it.Name, it.PerformedQty, unit)
 	}
 	return conflict("item_already_performed", "Unidades já realizadas", detail, nil)
+}
+
+// Pro é um profissional para ResolveEach.
+type Pro struct {
+	ID   uuid.UUID
+	Name string
+}
+
+// ResolveEach resolve as linhas UMA vez (sem trava: leitura de disponibilidade) e confere cada
+// profissional em memória. Devolve as linhas por profissional que faz todos os serviços; erros que
+// não dependem do profissional (item inexistente, inativo, limite) voltam como erro único.
+func ResolveEach(ctx context.Context, q database.Querier, estID uuid.UUID, profs []Pro, wants []LineWant,
+	st estabelecimento.Settings) (map[uuid.UUID][]Line, error) {
+	keys := make([]lineKey, len(wants))
+	for i, w := range wants {
+		keys[i] = w.Key
+	}
+	snaps, err := snapshots(ctx, q, estID, keys, false)
+	if err != nil {
+		return nil, err
+	}
+	out := map[uuid.UUID][]Line{}
+	for _, p := range profs {
+		lines := make([]Line, 0, len(wants))
+		eligible := true
+		for _, w := range wants {
+			sn, ok := snaps[w.Key]
+			if err := checkGrowth(sn, ok, w, 0, p.ID, p.Name, st); err != nil {
+				var he *hs.Error
+				if errors.As(err, &he) && he.Code == "service_not_eligible" {
+					eligible = false
+					break
+				}
+				return nil, err
+			}
+			lines = append(lines, Line{Snap: sn, Quantity: w.Quantity})
+		}
+		if eligible {
+			out[p.ID] = lines
+		}
+	}
+	return out, nil
 }

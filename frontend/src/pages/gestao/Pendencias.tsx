@@ -8,6 +8,7 @@ import { formatCents } from "../../money";
 import { useStreamMessages } from "../../stream/context";
 import {
   Badge,
+  Button,
   EmptyState,
   LoadError,
   Loading,
@@ -205,6 +206,11 @@ export function Pendencias({ ctx }: { ctx: StaffContext }) {
                         {" · "}
                         <Link to={`${base}/comandas/${i.order_id}`}>comanda {i.order_id.slice(-6)}</Link>
                       </>
+                    ) : i.appointment_id ? (
+                      <>
+                        {" · "}
+                        <Link to={`${base}/agenda`}>reserva paga</Link>
+                      </>
                     ) : (
                       <> · sem comanda</>
                     )}
@@ -220,6 +226,25 @@ export function Pendencias({ ctx }: { ctx: StaffContext }) {
                   Resolvida{i.resolved_at && <> em {when.format(new Date(i.resolved_at))}</>}:{" "}
                   {i.resolution_note}
                 </p>
+              ) : i.booking_refund_id ? (
+                <DevolucaoReserva
+                  ctx={ctx}
+                  issue={i}
+                  onDone={(note) =>
+                    setIssues((l) =>
+                      (l ?? []).map((x) =>
+                        x.id === i.id
+                          ? {
+                              ...x,
+                              status: "resolved",
+                              resolved_at: new Date().toISOString(),
+                              resolution_note: note,
+                            }
+                          : x,
+                      ),
+                    )
+                  }
+                />
               ) : (
                 <Resolver
                   ctx={ctx}
@@ -287,5 +312,70 @@ function Resolver({
         <Submit busy={cmd.busy !== null}>Marcar como resolvida</Submit>
       </div>
     </form>
+  );
+}
+
+/**
+ * Devolução de reserva em revisão (ADR-0039): a sobra do sinal (ou um estorno que o provedor não faz)
+ * é devolvida fora do sistema; o dono confirma com a evidência — ou registra que não ocorreu.
+ */
+function DevolucaoReserva({
+  ctx,
+  issue,
+  onDone,
+}: {
+  ctx: StaffContext;
+  issue: FinancialIssue;
+  onDone: (note: string) => void;
+}) {
+  const [note, setNote] = useState("");
+  const cmd = useCommand();
+  const [last, setLast] = useState<"confirm" | "mark-failed">("confirm");
+  const refundId = issue.booking_refund_id ?? "";
+  async function resolve(kind: "confirm" | "mark-failed") {
+    setLast(kind);
+    const params = {
+      path: { establishmentId: ctx.estId, refundId },
+    };
+    const body = { evidence_note: note };
+    const out = await cmd.run(`devolucao-reserva:${refundId}:${kind}`, (key) =>
+      kind === "confirm"
+        ? api.POST("/v1/establishments/{establishmentId}/booking-refunds/{refundId}/confirm", {
+            params: { ...params, header: { "Idempotency-Key": key } },
+            body,
+          })
+        : api.POST("/v1/establishments/{establishmentId}/booking-refunds/{refundId}/mark-failed", {
+            params: { ...params, header: { "Idempotency-Key": key } },
+            body,
+          }),
+    );
+    if (out.ok) onDone(note);
+  }
+  const ready = note.trim().length >= 3;
+  return (
+    <div className="grid gap-3 border-t border-line pt-3">
+      <CommandError problem={cmd.problem} offline={cmd.offline} onRetry={() => void resolve(last)} />
+      <TextArea
+        label="Como foi devolvido"
+        hint="Ex.: Pix de R$ 10,00 pelo app do banco às 15h, comprovante guardado."
+        minLength={3}
+        maxLength={500}
+        rows={2}
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+      />
+      <div className="flex flex-wrap gap-2">
+        <Button disabled={!ready || cmd.busy !== null} onClick={() => void resolve("confirm")}>
+          Confirmar devolução
+        </Button>
+        <Button
+          variant="secondary"
+          disabled={!ready || cmd.busy !== null}
+          onClick={() => void resolve("mark-failed")}
+        >
+          Não foi devolvido
+        </Button>
+      </div>
+    </div>
   );
 }

@@ -251,6 +251,10 @@ func Complete(ctx context.Context, tx pgx.Tx, in Closing, audit auditoria.Event)
 	if err := auditoria.Record(ctx, tx, audit); err != nil {
 		return err
 	}
+	// Sinal da reserva: abate do total agora (ou devolve a sobra); pode já quitar a comanda.
+	if err := applyCredit(ctx, tx, o.EstablishmentID, o.ID, in.Now); err != nil {
+		return err
+	}
 	return recordOrder(ctx, tx, o.EstablishmentID, o.ID, in.Now, evOrder, evPayment)
 }
 
@@ -444,6 +448,9 @@ func (s *Service) closeInterruptedOrder(w http.ResponseWriter, r *http.Request) 
 			if err := auditoria.Record(ctx, tx, a); err != nil {
 				return idempotency.Result{}, err
 			}
+			if err := applyCredit(ctx, tx, cur.EstablishmentID, cur.ID, now); err != nil {
+				return idempotency.Result{}, err
+			}
 			if to == StatusClosedNoCharge {
 				if err := s.closeVisit(ctx, tx, cur, now); err != nil {
 					return idempotency.Result{}, err
@@ -633,6 +640,12 @@ func (s *Service) adjustClosedOrder(w http.ResponseWriter, r *http.Request) erro
 			to, closure := StatusAwaitingPayment, ""
 			if newTotal == 0 { // nada recebido e nada devido: encerra sem cobrança (R-CMD-14)
 				to, closure = StatusClosedNoCharge, ClosedAdjustedZero
+			}
+			// O sinal já abatido não pode ficar maior que o novo total (ADR-0039).
+			if cur.CreditCents > newTotal {
+				return idempotency.Result{}, orderConflictQ(ctx, tx, cur, "credit_exceeds_total", "Valor abaixo do sinal já descontado",
+					fmt.Sprintf("O sinal pago na reserva (%s) já foi descontado desta comanda; o novo valor não pode ficar abaixo dele. Resolva a diferença como devolução em Pendências.",
+						reaisBR(cur.CreditCents)))
 			}
 			version, err := freeze(ctx, tx, cur.ID, to, closure, now)
 			if err != nil {

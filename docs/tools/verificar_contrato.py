@@ -47,8 +47,11 @@ SCOPES = {
 }
 MUTATING = {"post", "put", "patch", "delete"}
 # /v1/desktop/: cada comando é de uso único por construção (código, ticket e jti da prova DPoP).
-IDEMPOTENCY_EXEMPT = ("/v1/auth/", "/visitor-sessions", "/v1/webhooks/", "/v1/deletion-requests/status", "/v1/desktop/")
-PUBLIC_MUTATION_ALLOWED = ("/v1/auth/", "/visitor-sessions", "/v1/deletion-requests/status", "/healthz/")
+# /visitor-contact e /appointment-access (ADR-0039): código de 6 dígitos e link de uso único, como
+# a recuperação do visitante; o pedido do link é pré-sessão (o visitante perdeu o acesso).
+IDEMPOTENCY_EXEMPT = ("/v1/auth/", "/visitor-sessions", "/v1/webhooks/", "/v1/deletion-requests/status", "/v1/desktop/",
+                      "/visitor-contact", "/appointment-access")
+PUBLIC_MUTATION_ALLOWED = ("/v1/auth/", "/visitor-sessions", "/v1/deletion-requests/status", "/healthz/", "/appointment-access")
 MARK_START = "<!-- gerado:permissoes:inicio -->"
 MARK_END = "<!-- gerado:permissoes:fim -->"
 

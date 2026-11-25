@@ -67,6 +67,8 @@ Cada mudança grava **um registro de evento por audiência afetada**, já com o 
 | `loyalty.updated` | account | loyalty_account | Crédito, reversão, reserva, liberação, consumo |
 | `reward_reservation.updated` | account, professional, owner | reward_reservation | T-RW-* |
 | `deletion_request.updated` | owner | deletion_request | Exclusão com bloqueio na loja |
+| `appointment.updated` | visit, professional, owner | appointment | T-AP-* (reserva, remarcação, cancelamento, chegada, chamada, visita que acompanha, falta e atraso da loja). A visão do titular não traz o apelido; a da equipe traz. As telas releem só o dia visível (ADR-0038) |
+| `availability.updated` | public | availability | Reserva criada, remarcada (dia antigo e novo), cancelada, vencida sem pagamento ou encerrada; jornada e exceções (loja inteira). Leva só `professional_id` e `date` (ambos podem ser nulos = loja inteira), nunca quem reservou. A página de agendamento relê só o dia visível, agrupando eventos em sequência (parte 3)
 
 O catálogo de prêmios e o catálogo de serviços **não** são enviados por SSE: são lidos ao abrir a tela. Disputa de estoque é resolvida no comando (`409 reward_out_of_stock`).
 

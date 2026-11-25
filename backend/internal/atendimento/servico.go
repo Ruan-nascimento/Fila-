@@ -46,6 +46,10 @@ type Visits interface {
 	// Matching devolve as participações da loja cuja senha ou nick contém o padrão (LIKE já
 	// normalizado por platform/busca), as mais recentes primeiro, até limit (busca de comandas).
 	Matching(ctx context.Context, q database.Querier, estID uuid.UUID, pattern string, limit int) ([]uuid.UUID, error)
+	// DurationChanged confere, depois de mudar os itens de quem já foi chamado ou está na cadeira,
+	// se a nova duração ainda cabe antes do próximo horário protegido da agenda (ADR-0038). Erro =
+	// a mudança é recusada inteira (a transação desfaz).
+	DurationChanged(ctx context.Context, tx pgx.Tx, estID, participationID uuid.UUID) error
 }
 
 // Situações de cobrança Pix que impedem corrigir uma comanda fechada (R-CMD-12).

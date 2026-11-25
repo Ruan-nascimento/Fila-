@@ -57,6 +57,17 @@ type Deps struct {
 	AvatarOf func(ctx context.Context, q database.Querier, accountID uuid.UUID) (*uuid.UUID, error)
 	// PixOperational informa se a integração Pix está ligada neste servidor (módulo pagamento).
 	PixOperational func() bool
+	// AgendaEnabled: agenda liberada neste servidor (FILA_AGENDA). Desligada, o modo da loja não
+	// sai de "fila" (lojas reais só aderem quando a operação liberar). ADR-0038.
+	AgendaEnabled bool
+	// AgendaCharge / AgendaRetain: cobrança da reserva e política de retenção liberadas (ADR-0039).
+	AgendaCharge bool
+	AgendaRetain bool
+	// AgendaImpact conta o que a troca de forma de atendimento afeta (módulo agenda). nil = zero.
+	AgendaImpact func(ctx context.Context, q database.Querier, estID uuid.UUID, now time.Time) (futureAppointments int, err error)
+	// FutureAppointmentsOf conta as reservas ativas que ainda vão acontecer com o profissional
+	// (módulo agenda): desativar exige remanejar antes. nil = zero.
+	FutureAppointmentsOf func(ctx context.Context, q database.Querier, professionalID uuid.UUID, now time.Time) (int, error)
 }
 
 // Service implementa loja, equipe e filas.
