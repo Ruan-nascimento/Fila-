@@ -16,21 +16,25 @@ export type EventSourceLike = {
   onopen: ((ev: Event) => void) | null;
 };
 
-const eventTypes: EventType[] = [
-  "stream.snapshot",
-  "stream.session_ended",
-  "queue.public.updated",
-  "queue.updated",
-  "participation.updated",
-  "order.updated",
-  "change_request.updated",
-  "payment.updated",
-  "financial_issue.updated",
-  "pendencies.updated",
-  "loyalty.updated",
-  "reward_reservation.updated",
-  "deletion_request.updated",
-];
+// Todos os tipos do contrato: o EventSource só entrega os tipos com ouvinte registrado. O
+// objeto exige cada EventType (o TypeScript recusa a compilação se um tipo novo ficar de fora).
+const allEventTypes: Record<EventType, true> = {
+  "stream.snapshot": true,
+  "stream.session_ended": true,
+  "queue.public.updated": true,
+  "queue.updated": true,
+  "participation.updated": true,
+  "order.updated": true,
+  "change_request.updated": true,
+  "payment.updated": true,
+  "financial_issue.updated": true,
+  "pendencies.updated": true,
+  "loyalty.updated": true,
+  "reward_reservation.updated": true,
+  "deletion_request.updated": true,
+  "appointment.updated": true,
+};
+const eventTypes = Object.keys(allEventTypes) as EventType[];
 
 export type StreamOptions = {
   estId: string;
